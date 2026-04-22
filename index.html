@@ -155,7 +155,7 @@
       </div>
     </div>
     <div class="photo-strip">
-      <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_17.jpg"><img src="assets/img/nw_17.jpg" alt=""></a>
+      <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_20.jpg"><img src="assets/img/nw_20.jpg" alt=""></a>
       <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_29.jpg"><img src="assets/img/nw_29.jpg" alt=""></a>
       <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_45.jpg"><img src="assets/img/nw_45.jpg" alt=""></a>
       <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_60.jpg"><img src="assets/img/nw_60.jpg" alt=""></a>
@@ -374,7 +374,7 @@
     <h2 class="display-lg" data-i18n="cta.title">Come in. <em>Stay a while.</em></h2>
     <p data-i18n="cta.desc">Message us any time — we'll hold a room, a table, or a pint of whatever's cold.</p>
     <div class="hero-actions" style="justify-content:center;">
-      <a href="#enquire" class="btn-primary" data-i18n="cta.btn1">Book a Room</a>
+      <a href="rooms.html" class="btn-primary" data-i18n="cta.btn1">Book a Room</a>
       <a href="drinks.html" class="btn-ghost" data-i18n="cta.btn2">See the drinks list</a>
     </div>
   </div>
@@ -426,66 +426,6 @@
       </div>
     </div>
 
-    <!-- ENQUIRY FORM -->
-    <div class="enquire-wrap reveal" id="enquire" style="margin-top:5rem;">
-      <div class="enquire-head">
-        <span class="eyebrow" data-i18n="enquire.eyebrow">Enquire</span>
-        <h2 class="display-lg" data-i18n="enquire.title">Ask about a <em>room.</em></h2>
-        <p data-i18n="enquire.sub">Tell us when you're coming and what you need. We reply within a day — usually much sooner.</p>
-      </div>
-      <form class="enquire-form" method="post" action="enquire.php" novalidate>
-        <input type="hidden" name="ts" value="">
-        <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-
-        <div class="enquire-row">
-          <label><span data-i18n="enquire.name">Name</span>
-            <input type="text" name="name" required maxlength="120" autocomplete="name">
-          </label>
-          <label><span data-i18n="enquire.email">Email</span>
-            <input type="email" name="email" required maxlength="200" autocomplete="email">
-          </label>
-        </div>
-        <div class="enquire-row">
-          <label><span data-i18n="enquire.phone">Phone / WhatsApp (optional)</span>
-            <input type="tel" name="phone" maxlength="40" autocomplete="tel">
-          </label>
-          <label><span data-i18n="enquire.room">Room type</span>
-            <select name="room">
-              <option value="">—</option>
-              <option>Queen Standard</option>
-              <option>Queen Deluxe</option>
-              <option>Double Room</option>
-              <option>Deluxe Double</option>
-              <option>Boutique King</option>
-              <option>City View Room</option>
-              <option>Deluxe with Lounge</option>
-              <option>VIP — Private Bathtub</option>
-              <option>Suite</option>
-              <option>Premium Room</option>
-              <option>Not sure yet</option>
-            </select>
-          </label>
-        </div>
-        <div class="enquire-row">
-          <label><span data-i18n="enquire.checkin">Check-in</span>
-            <input type="date" name="checkin">
-          </label>
-          <label><span data-i18n="enquire.checkout">Check-out</span>
-            <input type="date" name="checkout">
-          </label>
-          <label><span data-i18n="enquire.guests">Guests</span>
-            <input type="number" name="guests" min="1" max="10" step="1">
-          </label>
-        </div>
-        <label><span data-i18n="enquire.message">Message</span>
-          <textarea name="message" required rows="4" maxlength="4000" placeholder="Tell us about your stay — dates, preferences, anything we should know."></textarea>
-        </label>
-        <div class="enquire-submit">
-          <button type="submit" class="btn-primary" data-i18n="enquire.btn">Send enquiry</button>
-          <span class="enquire-note" data-i18n="enquire.note">We'll reply to your email. No spam, promise.</span>
-        </div>
-      </form>
-    </div>
   </div>
 </section>
 

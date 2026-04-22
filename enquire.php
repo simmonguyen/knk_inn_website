@@ -9,7 +9,7 @@
 header("Content-Type: text/html; charset=UTF-8");
 
 // --- config --------------------------------------------------------------
-$TO_EMAIL    = "knkinnsaigon@gmail.com";
+$TO_EMAIL    = "dev@dataknot.com";   // TESTING — switch back to knkinnsaigon@gmail.com before Simmo goes live
 $FROM_EMAIL  = "enquiries@knkinn.com";   // must be on this domain for most shared-host SMTPs
 $SITE_URL    = "https://knkinn.com";
 $MIN_SECONDS = 3;                        // humans take > 3s to fill a form

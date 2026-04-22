@@ -48,13 +48,13 @@
   <div class="container">
     <span class="eyebrow" data-i18n="rooms.eyebrow">Accommodation</span>
     <h1 class="display-lg" data-i18n="rooms.pageTitle">Our <em>Rooms.</em></h1>
-    <p data-i18n="rooms.pageSub">Ten boutique rooms across six floors. Quiet, cool, comfortable — the basics done properly.</p>
+    <p data-i18n="rooms.pageSub">Seven boutique rooms across four floors. Quiet, cool, comfortable — the basics done properly.</p>
   </div>
 </header>
 
 <section class="section" style="padding-top:2rem;">
   <div class="container">
-    <p class="rooms-intro" data-i18n="rooms.intro">Every KnK Inn room has blackout curtains, strong AC, a rain shower, in-room safe, fast Wi-Fi and a proper mattress. Choose from standard queens, deluxe doubles and VIP rooms with private bathtubs. Ask about long-stay rates.</p>
+    <p class="rooms-intro" data-i18n="rooms.intro">Every KnK Inn room has blackout curtains, strong AC, a rain shower, in-room safe, fast Wi-Fi and a proper mattress. Choose between Standard rooms (with balcony) and VIP rooms (with private bathtub). Ask about long-stay rates.</p>
 
     <div class="rooms-features">
       <div class="room-feat reveal">
@@ -87,46 +87,89 @@
       </div>
     </div>
 
-    <div class="rooms-grid" style="margin-top:4rem;">
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_02.jpg">
-        <img src="assets/img/rm_02.jpg" alt="Queen Standard room">
-        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room1">Queen Standard</span></div>
+    <!-- Floor-by-floor room cards. Each links to a per-room page (rooms/<id>.html) with photos, calendar & booking flow. -->
+    <div class="rooms-grid rooms-grid-booking" style="margin-top:4rem;">
+
+      <!-- FLOOR 1 -->
+      <a class="room-card room-card-link" href="rooms/f1-standard.html">
+        <img src="assets/img/rm_02.jpg" alt="Floor 1 Standard room">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 1</span>
+          <span class="room-card-name">Standard · No Window</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+
+      <!-- FLOOR 2 -->
+      <a class="room-card room-card-link" href="rooms/f2-standard.html">
+        <img src="assets/img/rm_09.jpg" alt="Floor 2 Standard room with balcony">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 2</span>
+          <span class="room-card-name">Standard · Balcony</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+      <a class="room-card room-card-link" href="rooms/f2-vip.html">
+        <img src="assets/img/rm_03.jpg" alt="Floor 2 VIP room with private bathtub">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 2</span>
+          <span class="room-card-name">VIP · Private Bathtub</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+
+      <!-- FLOOR 3 -->
+      <a class="room-card room-card-link" href="rooms/f3-standard.html">
+        <img src="assets/img/rm_11.jpg" alt="Floor 3 Standard room with balcony">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 3</span>
+          <span class="room-card-name">Standard · Balcony</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+      <a class="room-card room-card-link" href="rooms/f3-vip.html">
+        <img src="assets/img/rm_13.jpg" alt="Floor 3 VIP room with private bathtub">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 3</span>
+          <span class="room-card-name">VIP · Private Bathtub</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+
+      <!-- FLOOR 4 -->
+      <a class="room-card room-card-link" href="rooms/f4-standard.html">
+        <img src="assets/img/rm_14.jpg" alt="Floor 4 Standard room with balcony">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 4</span>
+          <span class="room-card-name">Standard · Balcony</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+      <a class="room-card room-card-link" href="rooms/f4-vip.html">
+        <img src="assets/img/rm_16.jpg" alt="Floor 4 VIP room with private bathtub">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">Floor 4</span>
+          <span class="room-card-name">VIP · Private Bathtub</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
+    </div>
+
+    <!-- Floors 5 & 6 (not bookable) -->
+    <div class="rooms-floors-info">
+      <div class="floor-info-item">
+        <span class="floor-info-num">5</span>
+        <div>
+          <h4>Darts Room</h4>
+          <p>Darts at the back, with a small covered breeze bar — a quiet hide-away above the street.</p>
+        </div>
       </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_03.jpg">
-        <img src="assets/img/rm_03.jpg" alt="Queen Deluxe room">
-        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room2">Queen Deluxe</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_09.jpg">
-        <img src="assets/img/rm_09.jpg" alt="Double Room">
-        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room3">Double Room</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_14.jpg">
-        <img src="assets/img/rm_14.jpg" alt="Deluxe Double room">
-        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room5">Deluxe Double</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_11.jpg">
-        <img src="assets/img/rm_11.jpg" alt="Boutique King room">
-        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room9">Boutique King</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_15.jpg">
-        <img src="assets/img/rm_15.jpg" alt="City View room">
-        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room7">City View Room</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_13.jpg">
-        <img src="assets/img/rm_13.jpg" alt="Deluxe with lounge">
-        <div class="room-card-overlay"><span class="room-card-name">Deluxe with Lounge</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_16.jpg">
-        <img src="assets/img/rm_16.jpg" alt="VIP Room with bathtub">
-        <div class="room-card-overlay"><span class="room-card-name">VIP Room — Private Bathtub</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_23.jpg">
-        <img src="assets/img/rm_23.jpg" alt="Suite room">
-        <div class="room-card-overlay"><span class="room-card-name">Suite</span></div>
-      </div>
-      <div class="room-card" data-lb data-lb-src="assets/img/rm_24.jpg">
-        <img src="assets/img/rm_24.jpg" alt="Premium room">
-        <div class="room-card-overlay"><span class="room-card-name">Premium Room</span></div>
+      <div class="floor-info-item">
+        <span class="floor-info-num">6</span>
+        <div>
+          <h4>Rooftop Sky Garden</h4>
+          <p>Our wraparound rooftop garden — plants, string lights and a view over District 1. Open to all guests.</p>
+        </div>
       </div>
     </div>
 
@@ -161,68 +204,6 @@
         <img src="assets/img/nw_71.jpg" alt="Entry">
         <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonEntry">Entry</span></div>
       </div>
-    </div>
-
-    <!-- ENQUIRY FORM -->
-    <div class="enquire-wrap reveal" id="enquire" style="margin-top:5rem;">
-      <div class="enquire-head">
-        <span class="eyebrow" data-i18n="enquire.eyebrow">Enquire</span>
-        <h2 class="display-lg" data-i18n="enquire.title">Ask about a <em>room.</em></h2>
-        <p data-i18n="enquire.sub">Tell us when you're coming and what you need. We reply within a day — usually much sooner.</p>
-      </div>
-      <form class="enquire-form" method="post" action="enquire.php" novalidate>
-        <input type="hidden" name="ts" value="">
-        <!-- honeypot -->
-        <div class="hp-field" aria-hidden="true"><label>Website<input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
-
-        <div class="enquire-row">
-          <label><span data-i18n="enquire.name">Name</span>
-            <input type="text" name="name" required maxlength="120" autocomplete="name">
-          </label>
-          <label><span data-i18n="enquire.email">Email</span>
-            <input type="email" name="email" required maxlength="200" autocomplete="email">
-          </label>
-        </div>
-        <div class="enquire-row">
-          <label><span data-i18n="enquire.phone">Phone / WhatsApp (optional)</span>
-            <input type="tel" name="phone" maxlength="40" autocomplete="tel">
-          </label>
-          <label><span data-i18n="enquire.room">Room type</span>
-            <select name="room">
-              <option value="">—</option>
-              <option>Queen Standard</option>
-              <option>Queen Deluxe</option>
-              <option>Double Room</option>
-              <option>Deluxe Double</option>
-              <option>Boutique King</option>
-              <option>City View Room</option>
-              <option>Deluxe with Lounge</option>
-              <option>VIP — Private Bathtub</option>
-              <option>Suite</option>
-              <option>Premium Room</option>
-              <option>Not sure yet</option>
-            </select>
-          </label>
-        </div>
-        <div class="enquire-row">
-          <label><span data-i18n="enquire.checkin">Check-in</span>
-            <input type="date" name="checkin">
-          </label>
-          <label><span data-i18n="enquire.checkout">Check-out</span>
-            <input type="date" name="checkout">
-          </label>
-          <label><span data-i18n="enquire.guests">Guests</span>
-            <input type="number" name="guests" min="1" max="10" step="1">
-          </label>
-        </div>
-        <label><span data-i18n="enquire.message">Message</span>
-          <textarea name="message" required rows="4" maxlength="4000" placeholder="Tell us about your stay — dates, preferences, anything we should know."></textarea>
-        </label>
-        <div class="enquire-submit">
-          <button type="submit" class="btn-primary" data-i18n="enquire.btn">Send enquiry</button>
-          <span class="enquire-note" data-i18n="enquire.note">We'll reply to your email. No spam, promise.</span>
-        </div>
-      </form>
     </div>
 
   </div>
