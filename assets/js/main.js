@@ -324,3 +324,10 @@
     })
     .catch(() => render(fallbackFixtures()));
 })();
+
+/* ═══════════════════════════════════════════
+   Enquiry form — stamp timestamp for anti-spam check
+═══════════════════════════════════════════ */
+document.querySelectorAll('.enquire-form input[name="ts"]').forEach(el => {
+  el.value = Math.floor(Date.now() / 1000);
+});
