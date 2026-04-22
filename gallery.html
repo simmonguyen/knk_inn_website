@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Gallery — KnK Inn</title>
+<meta name="description" content="Photographs from KnK Inn — rooms, rooftop, bar, and street life on De Tham, Saigon.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo">KnK Inn</a>
+    <ul class="nav-links">
+      <li><a href="index.html" data-i18n="nav.home">Home</a></li>
+      <li><a href="rooms.html" data-i18n="nav.rooms">Rooms</a></li>
+      <li><a href="drinks.html" data-i18n="nav.drinks">Drinks</a></li>
+      <li><a href="gallery.html" class="active" data-i18n="nav.gallery">Gallery</a></li>
+      <li><a href="index.html#sports" data-i18n="nav.sports">Sports</a></li>
+      <li><a href="index.html#contact" data-i18n="nav.contact">Contact</a></li>
+    </ul>
+    <div class="nav-right">
+      <div data-lang-switch></div>
+      <a href="index.html#contact" class="nav-cta" data-i18n="nav.book">Book</a>
+    </div>
+    <button class="hamburger" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<div class="mobile-menu">
+  <a href="index.html" data-i18n="nav.home">Home</a>
+  <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+  <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+  <a href="gallery.html" data-i18n="nav.gallery">Gallery</a>
+  <a href="index.html#sports" data-i18n="nav.sports">Sports</a>
+  <a href="index.html#contact" data-i18n="nav.contact">Contact</a>
+</div>
+
+<!-- PAGE HEADER -->
+<header class="page-header">
+  <div class="container">
+    <span class="eyebrow" data-i18n="gallery.eyebrow">Inside KnK</span>
+    <h1 class="display-lg" data-i18n="gallery.pageTitle">The <em>Gallery.</em></h1>
+    <p data-i18n="gallery.pageSub">A walk through KnK Inn — the rooms, the rooftop, the bar, the street.</p>
+  </div>
+</header>
+
+<section class="section" id="gallery" style="padding-top:2rem;">
+  <div class="container">
+    <div class="gallery-head">
+      <span class="gallery-count"><span id="gallery-count">108</span> <span data-i18n="gallery.photosLabel">photos</span></span>
+    </div>
+
+    <div class="gallery-filter filter-bar">
+      <button class="gallery-chip chip active" data-filter="all" data-i18n="gallery.filter.all">All</button>
+      <button class="gallery-chip chip" data-filter="rooms" data-i18n="gallery.filter.rooms">Rooms</button>
+      <button class="gallery-chip chip" data-filter="rooftop" data-i18n="gallery.filter.rooftop">Rooftop</button>
+      <button class="gallery-chip chip" data-filter="bar" data-i18n="gallery.filter.bar">Bar &amp; Sports</button>
+      <button class="gallery-chip chip" data-filter="exterior" data-i18n="gallery.filter.exterior">Street &amp; Exterior</button>
+      <button class="gallery-chip chip" data-filter="interior" data-i18n="gallery.filter.interior">Interiors</button>
+      <button class="gallery-chip chip" data-filter="people" data-i18n="gallery.filter.people">People</button>
+    </div>
+
+    <div class="masonry" id="masonry">
+      <!-- existing photos (ex_) -->
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_01.jpg"><img src="assets/img/ex_01.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_03.jpg"><img src="assets/img/ex_03.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_04.jpg"><img src="assets/img/ex_04.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_05.jpg"><img src="assets/img/ex_05.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_06.jpg"><img src="assets/img/ex_06.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_07.jpg"><img src="assets/img/ex_07.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_08.jpg"><img src="assets/img/ex_08.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_09.jpg"><img src="assets/img/ex_09.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_10.jpg"><img src="assets/img/ex_10.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_11.jpg"><img src="assets/img/ex_11.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_12.jpg"><img src="assets/img/ex_12.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_13.jpg"><img src="assets/img/ex_13.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_14.jpg"><img src="assets/img/ex_14.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_15.jpg"><img src="assets/img/ex_15.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_16.jpg"><img src="assets/img/ex_16.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_17.jpg"><img src="assets/img/ex_17.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_18.jpg"><img src="assets/img/ex_18.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_19.jpg"><img src="assets/img/ex_19.jpg" alt=""></div>
+
+      <!-- new photos (nw_) -->
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_00.jpg"><img src="assets/img/nw_00.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_01.jpg"><img src="assets/img/nw_01.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_02.jpg"><img src="assets/img/nw_02.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_03.jpg"><img src="assets/img/nw_03.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_04.jpg"><img src="assets/img/nw_04.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_05.jpg"><img src="assets/img/nw_05.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_06.jpg"><img src="assets/img/nw_06.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_07.jpg"><img src="assets/img/nw_07.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_08.jpg"><img src="assets/img/nw_08.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_09.jpg"><img src="assets/img/nw_09.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_10.jpg"><img src="assets/img/nw_10.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_11.jpg"><img src="assets/img/nw_11.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_12.jpg"><img src="assets/img/nw_12.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_13.jpg"><img src="assets/img/nw_13.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_14.jpg"><img src="assets/img/nw_14.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_15.jpg"><img src="assets/img/nw_15.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_16.jpg"><img src="assets/img/nw_16.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_17.jpg"><img src="assets/img/nw_17.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_18.jpg"><img src="assets/img/nw_18.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_19.jpg"><img src="assets/img/nw_19.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_20.jpg"><img src="assets/img/nw_20.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_21.jpg"><img src="assets/img/nw_21.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_22.jpg"><img src="assets/img/nw_22.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_23.jpg"><img src="assets/img/nw_23.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_24.jpg"><img src="assets/img/nw_24.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_25.jpg"><img src="assets/img/nw_25.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_26.jpg"><img src="assets/img/nw_26.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_27.jpg"><img src="assets/img/nw_27.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_28.jpg"><img src="assets/img/nw_28.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_29.jpg"><img src="assets/img/nw_29.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_30.jpg"><img src="assets/img/nw_30.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_31.jpg"><img src="assets/img/nw_31.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_32.jpg"><img src="assets/img/nw_32.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_33.jpg"><img src="assets/img/nw_33.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_34.jpg"><img src="assets/img/nw_34.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_35.jpg"><img src="assets/img/nw_35.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_36.jpg"><img src="assets/img/nw_36.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_37.jpg"><img src="assets/img/nw_37.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_38.jpg"><img src="assets/img/nw_38.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_39.jpg"><img src="assets/img/nw_39.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_40.jpg"><img src="assets/img/nw_40.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_41.jpg"><img src="assets/img/nw_41.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_42.jpg"><img src="assets/img/nw_42.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_43.jpg"><img src="assets/img/nw_43.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_44.jpg"><img src="assets/img/nw_44.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_45.jpg"><img src="assets/img/nw_45.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_46.jpg"><img src="assets/img/nw_46.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_47.jpg"><img src="assets/img/nw_47.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_48.jpg"><img src="assets/img/nw_48.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_49.jpg"><img src="assets/img/nw_49.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_50.jpg"><img src="assets/img/nw_50.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_51.jpg"><img src="assets/img/nw_51.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_52.jpg"><img src="assets/img/nw_52.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_53.jpg"><img src="assets/img/nw_53.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_54.jpg"><img src="assets/img/nw_54.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_55.jpg"><img src="assets/img/nw_55.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_56.jpg"><img src="assets/img/nw_56.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_57.jpg"><img src="assets/img/nw_57.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_58.jpg"><img src="assets/img/nw_58.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_59.jpg"><img src="assets/img/nw_59.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_60.jpg"><img src="assets/img/nw_60.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_61.jpg"><img src="assets/img/nw_61.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_62.jpg"><img src="assets/img/nw_62.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_63.jpg"><img src="assets/img/nw_63.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_64.jpg"><img src="assets/img/nw_64.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_65.jpg"><img src="assets/img/nw_65.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_66.jpg"><img src="assets/img/nw_66.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_67.jpg"><img src="assets/img/nw_67.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_68.jpg"><img src="assets/img/nw_68.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_69.jpg"><img src="assets/img/nw_69.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_70.jpg"><img src="assets/img/nw_70.jpg" alt=""></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_71.jpg"><img src="assets/img/nw_71.jpg" alt=""></div>
+
+      <!-- new room photos (rm_) -->
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_02.jpg"><img src="assets/img/rm_02.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_03.jpg"><img src="assets/img/rm_03.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_09.jpg"><img src="assets/img/rm_09.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_11.jpg"><img src="assets/img/rm_11.jpg" alt="Deluxe Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_13.jpg"><img src="assets/img/rm_13.jpg" alt="Room with sofa"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_14.jpg"><img src="assets/img/rm_14.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_15.jpg"><img src="assets/img/rm_15.jpg" alt="Room with city view"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_17.jpg"><img src="assets/img/rm_17.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_18.jpg"><img src="assets/img/rm_18.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_19.jpg"><img src="assets/img/rm_19.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_20.jpg"><img src="assets/img/rm_20.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_23.jpg"><img src="assets/img/rm_23.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_24.jpg"><img src="assets/img/rm_24.jpg" alt="Room"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_04.jpg"><img src="assets/img/rm_04.jpg" alt="VIP Room bathroom"></div>
+      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_16.jpg"><img src="assets/img/rm_16.jpg" alt="VIP bathtub"></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/rm_01.jpg"><img src="assets/img/rm_01.jpg" alt="Rooftop terrace"></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/rm_06.jpg"><img src="assets/img/rm_06.jpg" alt="Rooftop with city view"></div>
+      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/rm_12.jpg"><img src="assets/img/rm_12.jpg" alt="Rooftop garden at night"></div>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <h3>KnK Inn</h3>
+      <p data-i18n="footer.tagline">Aussie pub style · Saigon heart.<br>96 Đề Thám, Cầu Ông Lãnh, Hồ Chí Minh 70000, Vietnam.</p>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.explore">Explore</h4>
+      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+      <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+      <a href="gallery.html" data-i18n="nav.gallery">Gallery</a>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.connect">Connect</h4>
+      <a href="tel:+84903933850">0903 933 850</a>
+      <a href="https://maps.app.goo.gl/536hWM3Kgq6KUPfg9" target="_blank" rel="noopener">Google Maps</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© <span data-year>2026</span> KnK Inn. <span data-i18n="footer.rights">All rights reserved.</span></span>
+    <span data-i18n="footer.madeWith">Built with coffee in Saigon.</span>
+  </div>
+</footer>
+
+<!-- LIGHTBOX -->
+<div id="lightbox">
+  <button class="lb-close" aria-label="Close">×</button>
+  <button class="lb-nav" id="lbPrev" aria-label="Previous">‹</button>
+  <div class="lb-img-wrap"><img src="" alt=""></div>
+  <button class="lb-nav" id="lbNext" aria-label="Next">›</button>
+  <div class="lb-counter"></div>
+</div>
+
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/main.js"></script>
+<script>
+  // Update visible count on filter
+  (function() {
+    const count = document.getElementById('gallery-count');
+    const items = document.querySelectorAll('.masonry-item');
+    document.querySelectorAll('.gallery-chip').forEach(chip => {
+      chip.addEventListener('click', () => {
+        setTimeout(() => {
+          const visible = Array.from(items).filter(i => getComputedStyle(i).display !== 'none').length;
+          if (count) count.textContent = visible;
+        }, 20);
+      });
+    });
+  })();
+</script>
+</body>
+</html>

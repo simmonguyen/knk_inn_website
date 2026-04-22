@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Rooms — KnK Inn</title>
+<meta name="description" content="Boutique rooms at KnK Inn — quiet, clean, comfortable accommodation in the heart of District 1, Ho Chi Minh City.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- NAV -->
+<nav id="nav">
+  <div class="nav-inner">
+    <a href="index.html" class="nav-logo">KnK Inn</a>
+    <ul class="nav-links">
+      <li><a href="index.html" data-i18n="nav.home">Home</a></li>
+      <li><a href="rooms.html" class="active" data-i18n="nav.rooms">Rooms</a></li>
+      <li><a href="drinks.html" data-i18n="nav.drinks">Drinks</a></li>
+      <li><a href="gallery.html" data-i18n="nav.gallery">Gallery</a></li>
+      <li><a href="index.html#sports" data-i18n="nav.sports">Sports</a></li>
+      <li><a href="index.html#contact" data-i18n="nav.contact">Contact</a></li>
+    </ul>
+    <div class="nav-right">
+      <div data-lang-switch></div>
+      <a href="index.html#contact" class="nav-cta" data-i18n="nav.book">Book</a>
+    </div>
+    <button class="hamburger" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </div>
+</nav>
+
+<div class="mobile-menu">
+  <a href="index.html" data-i18n="nav.home">Home</a>
+  <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+  <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+  <a href="gallery.html" data-i18n="nav.gallery">Gallery</a>
+  <a href="index.html#sports" data-i18n="nav.sports">Sports</a>
+  <a href="index.html#contact" data-i18n="nav.contact">Contact</a>
+</div>
+
+<!-- PAGE HEADER -->
+<header class="page-header">
+  <div class="container">
+    <span class="eyebrow" data-i18n="rooms.eyebrow">Accommodation</span>
+    <h1 class="display-lg" data-i18n="rooms.pageTitle">Our <em>Rooms.</em></h1>
+    <p data-i18n="rooms.pageSub">Ten boutique rooms across six floors. Quiet, cool, comfortable — the basics done properly.</p>
+  </div>
+</header>
+
+<section class="section" style="padding-top:2rem;">
+  <div class="container">
+    <p class="rooms-intro" data-i18n="rooms.intro">Every KnK Inn room has blackout curtains, strong AC, a rain shower, in-room safe, fast Wi-Fi and a proper mattress. Choose from standard queens, deluxe doubles and VIP rooms with private bathtubs. Ask about long-stay rates.</p>
+
+    <div class="rooms-features">
+      <div class="room-feat reveal">
+        <span class="room-feat-icon">❄️</span>
+        <div>
+          <h4 data-i18n="rooms.feat1.title">Strong AC</h4>
+          <p data-i18n="rooms.feat1.desc">Silent, split-system units in every room.</p>
+        </div>
+      </div>
+      <div class="room-feat reveal reveal-delay-1">
+        <span class="room-feat-icon">🛁</span>
+        <div>
+          <h4 data-i18n="rooms.feat2.title">Rain Showers</h4>
+          <p data-i18n="rooms.feat2.desc">Hot water, excellent pressure, Vietnamese-made soaps.</p>
+        </div>
+      </div>
+      <div class="room-feat reveal reveal-delay-2">
+        <span class="room-feat-icon">📶</span>
+        <div>
+          <h4 data-i18n="rooms.feat3.title">Fast Wi-Fi</h4>
+          <p data-i18n="rooms.feat3.desc">Fibre across the whole building, including the rooftop.</p>
+        </div>
+      </div>
+      <div class="room-feat reveal reveal-delay-3">
+        <span class="room-feat-icon">🔇</span>
+        <div>
+          <h4 data-i18n="rooms.feat4.title">Quiet</h4>
+          <p data-i18n="rooms.feat4.desc">Double glazing on the street side — you'd never know De Tham was below.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="rooms-grid" style="margin-top:4rem;">
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_02.jpg">
+        <img src="assets/img/rm_02.jpg" alt="Queen Standard room">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room1">Queen Standard</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_03.jpg">
+        <img src="assets/img/rm_03.jpg" alt="Queen Deluxe room">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room2">Queen Deluxe</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_09.jpg">
+        <img src="assets/img/rm_09.jpg" alt="Double Room">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room3">Double Room</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_14.jpg">
+        <img src="assets/img/rm_14.jpg" alt="Deluxe Double room">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room5">Deluxe Double</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_11.jpg">
+        <img src="assets/img/rm_11.jpg" alt="Boutique King room">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room9">Boutique King</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_15.jpg">
+        <img src="assets/img/rm_15.jpg" alt="City View room">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.room7">City View Room</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_13.jpg">
+        <img src="assets/img/rm_13.jpg" alt="Deluxe with lounge">
+        <div class="room-card-overlay"><span class="room-card-name">Deluxe with Lounge</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_16.jpg">
+        <img src="assets/img/rm_16.jpg" alt="VIP Room with bathtub">
+        <div class="room-card-overlay"><span class="room-card-name">VIP Room — Private Bathtub</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_23.jpg">
+        <img src="assets/img/rm_23.jpg" alt="Suite room">
+        <div class="room-card-overlay"><span class="room-card-name">Suite</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/rm_24.jpg">
+        <img src="assets/img/rm_24.jpg" alt="Premium room">
+        <div class="room-card-overlay"><span class="room-card-name">Premium Room</span></div>
+      </div>
+    </div>
+
+    <!-- COMMON SPACES -->
+    <div class="section-head" style="text-align:center;margin-top:5rem;margin-bottom:2rem;">
+      <span class="eyebrow" data-i18n="rooms.commonEyebrow">Inside KnK Inn</span>
+      <h2 class="display-lg" data-i18n="rooms.commonTitle">Common <em>spaces.</em></h2>
+      <p data-i18n="rooms.commonSub">Reception, lobby, stairs and landings — the spots you'll pass through on your way to the rooftop.</p>
+    </div>
+    <div class="rooms-grid">
+      <div class="room-card" data-lb data-lb-src="assets/img/nw_13.jpg">
+        <img src="assets/img/nw_13.jpg" alt="Reception">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonReception">Reception</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/nw_14.jpg">
+        <img src="assets/img/nw_14.jpg" alt="Lobby">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonLobby">Lobby</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/nw_68.jpg">
+        <img src="assets/img/nw_68.jpg" alt="Stairwell">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonStairs">Stairwell</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/nw_69.jpg">
+        <img src="assets/img/nw_69.jpg" alt="Hallway">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonHallway">Hallway</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/nw_70.jpg">
+        <img src="assets/img/nw_70.jpg" alt="Landing">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonLanding">Landing</span></div>
+      </div>
+      <div class="room-card" data-lb data-lb-src="assets/img/nw_71.jpg">
+        <img src="assets/img/nw_71.jpg" alt="Entry">
+        <div class="room-card-overlay"><span class="room-card-name" data-i18n="rooms.commonEntry">Entry</span></div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-top:4rem;">
+      <a href="index.html#contact" class="btn-primary" data-i18n="rooms.cta">Enquire about a room</a>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<footer>
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <h3>KnK Inn</h3>
+      <p data-i18n="footer.tagline">Aussie pub style · Saigon heart.<br>96 Đề Thám, Cầu Ông Lãnh, Hồ Chí Minh 70000, Vietnam.</p>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.explore">Explore</h4>
+      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+      <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+      <a href="gallery.html" data-i18n="nav.gallery">Gallery</a>
+    </div>
+    <div class="footer-col">
+      <h4 data-i18n="footer.connect">Connect</h4>
+      <a href="tel:+84903933850">0903 933 850</a>
+      <a href="https://maps.app.goo.gl/536hWM3Kgq6KUPfg9" target="_blank" rel="noopener">Google Maps</a>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <span>© <span data-year>2026</span> KnK Inn. <span data-i18n="footer.rights">All rights reserved.</span></span>
+    <span data-i18n="footer.madeWith">Built with coffee in Saigon.</span>
+  </div>
+</footer>
+
+<!-- LIGHTBOX -->
+<div id="lightbox">
+  <button class="lb-close" aria-label="Close">×</button>
+  <button class="lb-nav" id="lbPrev" aria-label="Previous">‹</button>
+  <div class="lb-img-wrap"><img src="" alt=""></div>
+  <button class="lb-nav" id="lbNext" aria-label="Next">›</button>
+  <div class="lb-counter"></div>
+</div>
+
+<script src="assets/js/i18n.js"></script>
+<script src="assets/js/main.js"></script>
+</body>
+</html>
