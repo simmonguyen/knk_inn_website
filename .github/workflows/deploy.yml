@@ -54,4 +54,5 @@ jobs:
             KnK-Inn-Website-GITHUB.zip
             config.php
             bookings.json
+            assets/img/gallery-live/**
             .ftp-deploy-sync-state.json

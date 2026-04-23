@@ -1,3 +1,16 @@
+<?php
+/* Live photos Simmo uploads via photos.php land in /assets/img/gallery-live/
+   and are prepended to the masonry below. Newest first. */
+$live_photos = [];
+$live_dir = __DIR__ . '/assets/img/gallery-live';
+if (is_dir($live_dir)) {
+  foreach (glob($live_dir . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE) as $f) {
+    $live_photos[] = ['name' => basename($f), 'mtime' => filemtime($f)];
+  }
+  usort($live_photos, function ($a, $b) { return $b['mtime'] <=> $a['mtime']; });
+}
+$live_count = count($live_photos);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css?v=11">
+<link rel="stylesheet" href="assets/css/styles.css?v=12">
 </head>
 <body>
 
@@ -20,7 +33,7 @@
       <li><a href="index.html" data-i18n="nav.home">Home</a></li>
       <li><a href="rooms.html" data-i18n="nav.rooms">Rooms</a></li>
       <li><a href="drinks.html" data-i18n="nav.drinks">Drinks</a></li>
-      <li><a href="gallery.html" class="active" data-i18n="nav.gallery">Gallery</a></li>
+      <li><a href="gallery.php" class="active" data-i18n="nav.gallery">Gallery</a></li>
       <li><a href="index.html#sports" data-i18n="nav.sports">Sports</a></li>
       <li><a href="index.html#contact" data-i18n="nav.contact">Contact</a></li>
     </ul>
@@ -38,7 +51,7 @@
   <a href="index.html" data-i18n="nav.home">Home</a>
   <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
   <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
-  <a href="gallery.html" data-i18n="nav.gallery">Gallery</a>
+  <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
   <a href="index.html#sports" data-i18n="nav.sports">Sports</a>
   <a href="index.html#contact" data-i18n="nav.contact">Contact</a>
 </div>
@@ -55,11 +68,12 @@
 <section class="section" id="gallery" style="padding-top:2rem;">
   <div class="container">
     <div class="gallery-head">
-      <span class="gallery-count"><span id="gallery-count">104</span> <span data-i18n="gallery.photosLabel">photos</span></span>
+      <span class="gallery-count"><span id="gallery-count"><?= 104 + $live_count ?></span> <span data-i18n="gallery.photosLabel">photos</span></span>
     </div>
 
     <div class="gallery-filter filter-bar">
       <button class="gallery-chip chip active" data-filter="all" data-i18n="gallery.filter.all">All</button>
+      <?php if ($live_count > 0): ?><button class="gallery-chip chip" data-filter="new" data-i18n="gallery.filter.latest">Latest</button><?php endif; ?>
       <button class="gallery-chip chip" data-filter="rooms" data-i18n="gallery.filter.rooms">Rooms</button>
       <button class="gallery-chip chip" data-filter="rooftop" data-i18n="gallery.filter.rooftop">Rooftop</button>
       <button class="gallery-chip chip" data-filter="bar" data-i18n="gallery.filter.bar">Bar &amp; Sports</button>
@@ -69,6 +83,12 @@
     </div>
 
     <div class="masonry" id="masonry">
+      <?php /* Live uploads from Simmo — newest first */ foreach ($live_photos as $lp):
+        $src = 'assets/img/gallery-live/' . rawurlencode($lp['name']);
+      ?>
+      <div class="masonry-item" data-cat="new" data-lb data-lb-src="<?= htmlspecialchars($src) ?>"><img src="<?= htmlspecialchars($src) ?>" alt="" loading="lazy"></div>
+      <?php endforeach; ?>
+
       <!-- existing photos (ex_) -->
       <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_01.jpg"><img src="assets/img/ex_01.jpg" alt=""></div>
       <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_03.jpg"><img src="assets/img/ex_03.jpg" alt=""></div>
@@ -193,7 +213,7 @@
       <a href="index.html" data-i18n="nav.home">Home</a>
       <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
       <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
-      <a href="gallery.html" data-i18n="nav.gallery">Gallery</a>
+      <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
     </div>
     <div class="footer-col">
       <h4 data-i18n="footer.connect">Connect</h4>
@@ -216,8 +236,8 @@
   <div class="lb-counter"></div>
 </div>
 
-<script src="assets/js/i18n.js?v=11"></script>
-<script src="assets/js/main.js?v=11"></script>
+<script src="assets/js/i18n.js?v=12"></script>
+<script src="assets/js/main.js?v=12"></script>
 <script>
   // Update visible count on filter
   (function() {
