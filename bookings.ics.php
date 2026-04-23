@@ -36,7 +36,7 @@ if ($expected === "" || !hash_equals($expected, $got)) {
 $ROOM_LABELS = [
     "standard-nowindow" => "Standard (no window)",
     "standard-balcony"  => "Standard with balcony",
-    "vip"               => "VIP",
+    "vip"               => "VIP w/ tub",
 ];
 
 $holds = bookings_list_all(true);

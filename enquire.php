@@ -123,7 +123,7 @@ if ($type === "booking") {
     $roomLabels = [
         "standard-nowindow" => "Standard (no window)",
         "standard-balcony"  => "Standard with balcony",
-        "vip"               => "VIP",
+        "vip"               => "VIP w/ tub",
     ];
     $roomLabel = $roomLabels[$roomId] ?? $roomId;
     $total = $price * $hold["nights"];
