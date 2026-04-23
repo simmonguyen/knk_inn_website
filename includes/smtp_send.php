@@ -21,6 +21,12 @@
  *       "reply_to_name"  => "Guest Name",
  *       "subject"   => "...",
  *       "body"      => "plain text body",
+ *       // Optional HTML alternative:
+ *       "html"      => "<html>...</html>",
+ *       // Optional attachments:
+ *       "attachments" => [
+ *           ["filename" => "booking.ics", "content" => "BEGIN:VCALENDAR...", "content_type" => "text/calendar; method=PUBLISH; charset=UTF-8"],
+ *       ],
  *   ], $errorOut);
  *
  * On failure the function returns false and populates $errorOut with the
@@ -42,6 +48,8 @@ function smtp_send(array $cfg, ?string &$errorOut = null): bool {
     $replyName = $cfg["reply_to_name"]  ?? "";
     $subject   = $cfg["subject"]  ?? "";
     $body      = $cfg["body"]     ?? "";
+    $html      = $cfg["html"]     ?? "";
+    $attach    = $cfg["attachments"] ?? [];
 
     if ($host === "" || $port === 0 || $user === "" || $pass === "" || $to === "") {
         $errorOut = "smtp_send: missing required config";
@@ -144,15 +152,69 @@ function smtp_send(array $cfg, ?string &$errorOut = null): bool {
     }
     $headers .= "Subject: " . smtp_encode_word($safe($subject)) . "\r\n";
     $headers .= "MIME-Version: 1.0\r\n";
-    $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
-    $headers .= "Content-Transfer-Encoding: 8bit\r\n";
     $headers .= "X-Mailer: KnKInn-Web\r\n";
 
-    // Normalize body line endings and dot-stuff leading "."
-    $body = preg_replace("/(?<!\r)\n/", "\r\n", (string)$body);
-    $body = preg_replace("/^\./m", "..", $body);
+    // Normalize both plain and html bodies (CRLF + dot-stuff)
+    $normalize = function ($s) {
+        $s = preg_replace("/(?<!\r)\n/", "\r\n", (string)$s);
+        $s = preg_replace("/^\./m", "..", $s);
+        return $s;
+    };
+    $body = $normalize($body);
+    $html = $normalize($html);
 
-    fwrite($fp, $headers . "\r\n" . $body . "\r\n.\r\n");
+    $hasHtml    = $html !== "";
+    $hasAttach  = !empty($attach);
+
+    if (!$hasHtml && !$hasAttach) {
+        // Single-part plain text (unchanged legacy path)
+        $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $headers .= "Content-Transfer-Encoding: 8bit\r\n";
+        $mime = $body;
+    } else {
+        // Multipart — build the inner "alternative" (plain + html), and if there are
+        // attachments, wrap it in an outer "mixed".
+        $altBoundary = "----=knk_alt_" . bin2hex(random_bytes(8));
+        $altParts  = "--{$altBoundary}\r\n";
+        $altParts .= "Content-Type: text/plain; charset=UTF-8\r\n";
+        $altParts .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+        $altParts .= ($body !== "" ? $body : "(This email is best viewed in an HTML-capable client.)") . "\r\n";
+        if ($hasHtml) {
+            $altParts .= "--{$altBoundary}\r\n";
+            $altParts .= "Content-Type: text/html; charset=UTF-8\r\n";
+            $altParts .= "Content-Transfer-Encoding: 8bit\r\n\r\n";
+            $altParts .= $html . "\r\n";
+        }
+        $altParts .= "--{$altBoundary}--\r\n";
+
+        if (!$hasAttach) {
+            $headers .= "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n";
+            $mime = $altParts;
+        } else {
+            $mixedBoundary = "----=knk_mix_" . bin2hex(random_bytes(8));
+            $headers .= "Content-Type: multipart/mixed; boundary=\"{$mixedBoundary}\"\r\n";
+
+            $mime  = "--{$mixedBoundary}\r\n";
+            $mime .= "Content-Type: multipart/alternative; boundary=\"{$altBoundary}\"\r\n\r\n";
+            $mime .= $altParts;
+
+            foreach ($attach as $a) {
+                $aName = $safe($a["filename"] ?? "attachment");
+                $aType = $a["content_type"] ?? "application/octet-stream";
+                $aCont = (string)($a["content"] ?? "");
+                // Also drop a secondary content-type header if caller provided method=... params.
+                $encoded = chunk_split(base64_encode($aCont), 76, "\r\n");
+                $mime .= "--{$mixedBoundary}\r\n";
+                $mime .= "Content-Type: {$aType}; name=\"{$aName}\"\r\n";
+                $mime .= "Content-Transfer-Encoding: base64\r\n";
+                $mime .= "Content-Disposition: attachment; filename=\"{$aName}\"\r\n\r\n";
+                $mime .= $encoded . "\r\n";
+            }
+            $mime .= "--{$mixedBoundary}--\r\n";
+        }
+    }
+
+    fwrite($fp, $headers . "\r\n" . $mime . "\r\n.\r\n");
     if (!$expect(250, $read())) return false;
 
     $write("QUIT");

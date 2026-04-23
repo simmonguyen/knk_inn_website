@@ -26,4 +26,9 @@ return [
 
     // Anti-spam
     "min_seconds" => 3,
+
+    // Google Calendar feed — random secret that guards bookings.ics.php
+    // Generate with:  php -r "echo bin2hex(random_bytes(16));"
+    // The admin page will display the full subscription URL once this is set.
+    "ics_key" => "",
 ];

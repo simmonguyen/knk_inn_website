@@ -149,6 +149,107 @@ function bookings_find_by_token(string $token): ?array {
     return null;
 }
 
+/** Return ALL holds, newest first by created_at. Optionally expire stale pending holds on the fly. */
+function bookings_list_all(bool $expire_stale = true): array {
+    [$fp, $data] = bookings_open();
+    $now = time();
+    $dirty = false;
+    foreach ($data["holds"] as $i => $h) {
+        $status = $h["status"] ?? "pending";
+        if ($expire_stale && $status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) {
+            $data["holds"][$i]["status"] = "expired";
+            $data["holds"][$i]["expired_at"] = $now;
+            $dirty = true;
+        }
+    }
+    if ($dirty) {
+        bookings_save($fp, $data);
+    } else {
+        bookings_close($fp);
+    }
+    $out = $data["holds"];
+    usort($out, function ($a, $b) { return ($b["created_at"] ?? 0) <=> ($a["created_at"] ?? 0); });
+    return $out;
+}
+
+/**
+ * Manually block a range of dates for a given room (e.g. maintenance).
+ * Creates a confirmed hold with guest.name = $reason (defaults to "Blocked").
+ * Returns the created hold or throws on overlap.
+ */
+function bookings_manual_block(string $room, string $checkin, string $checkout, string $reason = "Blocked"): array {
+    $hold = bookings_create_hold([
+        "room"                => $room,
+        "checkin"             => $checkin,
+        "checkout"            => $checkout,
+        "price_vnd_per_night" => 0,
+        "guest"               => [
+            "name"    => $reason,
+            "email"   => "",
+            "phone"   => "",
+            "message" => "Manually blocked via admin panel.",
+        ],
+    ]);
+    // Flip straight to confirmed (skip the pending phase)
+    return bookings_set_status_by_token($hold["token"], "confirm") ?? $hold;
+}
+
+/** Delete a hold by id (used for unblocking manual blocks or cleaning up). Returns true if deleted. */
+function bookings_delete_by_id(string $id): bool {
+    [$fp, $data] = bookings_open();
+    try {
+        $filtered = [];
+        $deleted = false;
+        foreach ($data["holds"] as $h) {
+            if (($h["id"] ?? "") === $id) { $deleted = true; continue; }
+            $filtered[] = $h;
+        }
+        if ($deleted) {
+            $data["holds"] = $filtered;
+            bookings_save($fp, $data);
+        } else {
+            bookings_close($fp);
+        }
+        return $deleted;
+    } catch (Throwable $e) {
+        bookings_close($fp);
+        throw $e;
+    }
+}
+
+/** Find a hold by id. Returns [hold, index] or null. */
+function bookings_find_by_id(string $id): ?array {
+    [$fp, $data] = bookings_open();
+    foreach ($data["holds"] as $i => $h) {
+        if (($h["id"] ?? "") === $id) {
+            bookings_close($fp);
+            return [$h, $i];
+        }
+    }
+    bookings_close($fp);
+    return null;
+}
+
+/** Flip status by id (admin use — token not required). action=confirm|decline. */
+function bookings_set_status_by_id(string $id, string $action): ?array {
+    [$fp, $data] = bookings_open();
+    try {
+        foreach ($data["holds"] as $i => $h) {
+            if (($h["id"] ?? "") !== $id) continue;
+            $newStatus = $action === "confirm" ? "confirmed" : "declined";
+            $data["holds"][$i]["status"] = $newStatus;
+            $data["holds"][$i]["actioned_at"] = time();
+            bookings_save($fp, $data);
+            return $data["holds"][$i];
+        }
+        bookings_close($fp);
+        return null;
+    } catch (Throwable $e) {
+        bookings_close($fp);
+        throw $e;
+    }
+}
+
 /** Update hold status by token. action = confirm|decline. Returns updated hold, or null if not found. */
 function bookings_set_status_by_token(string $token, string $action): ?array {
     [$fp, $data] = bookings_open();

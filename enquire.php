@@ -26,6 +26,7 @@ $CFG = require $configPath;
 
 require_once __DIR__ . "/includes/smtp_send.php";
 require_once __DIR__ . "/includes/bookings_store.php";
+require_once __DIR__ . "/includes/email_template.php";
 
 $TO_EMAIL    = $CFG["to_email"]    ?? "knkinnsaigon@gmail.com";
 $SITE_URL    = "https://knkinn.com";
@@ -119,13 +120,19 @@ if ($type === "booking") {
     }
 
     // Build Simmo's email
-    $roomLabel = strtoupper(substr($roomId, 0, 2)) . " " . (strpos($roomId, "vip") !== false ? "VIP" : "Standard");
+    $roomLabels = [
+        "standard-nowindow" => "Standard (no window)",
+        "standard-balcony"  => "Standard with balcony",
+        "vip"               => "VIP",
+    ];
+    $roomLabel = $roomLabels[$roomId] ?? $roomId;
     $total = $price * $hold["nights"];
     $subject = "New booking hold · {$roomLabel} · {$checkin} → {$checkout} · {$name}";
 
     $confirmUrl = $SITE_URL . "/confirm-booking.php?token=" . urlencode($hold["token"]) . "&action=confirm";
     $declineUrl = $SITE_URL . "/confirm-booking.php?token=" . urlencode($hold["token"]) . "&action=decline";
 
+    // Plain-text fallback (for clients that don't render HTML)
     $body  = "NEW BOOKING REQUEST — action needed within 24 hours\n";
     $body .= str_repeat("═", 52) . "\n\n";
     $body .= "Room:       {$roomLabel} ({$roomId})\n";
@@ -141,13 +148,50 @@ if ($type === "booking") {
     if ($message) $body .= "\nMessage from guest:\n{$message}\n";
     $body .= "\n" . str_repeat("─", 52) . "\n\n";
     $body .= "ACTION — tap one of the links below:\n\n";
-    $body .= "  ✅ CONFIRM this booking (dates will be blocked):\n";
+    $body .= "  CONFIRM this booking (dates will be blocked):\n";
     $body .= "     {$confirmUrl}\n\n";
-    $body .= "  ❌ DECLINE (dates stay open):\n";
+    $body .= "  DECLINE (dates stay open):\n";
     $body .= "     {$declineUrl}\n\n";
     $body .= str_repeat("─", 52) . "\n";
     $body .= "If you do nothing for 24h this hold auto-expires and the\n";
     $body .= "dates open back up.  Hold ID: {$hold["id"]}\n";
+
+    // HTML version — branded template with big Confirm / Decline buttons
+    $details = array_filter([
+        "Room"       => $roomLabel,
+        "Check-in"   => $checkin,
+        "Check-out"  => $checkout,
+        "Nights"     => (string)$hold["nights"],
+        "Price"      => $price > 0 ? (vnd($price) . " / night · total " . vnd($total)) : "",
+        "Guest"      => $name,
+        "Email"      => $email,
+        "Phone"      => $phone,
+        "Guests"     => $guests,
+    ], function ($v) { return $v !== "" && $v !== null; });
+
+    $msg_html = $message !== ""
+        ? "<p style=\"margin:18px 0 6px 0;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#6e5d40;\">Message from guest</p>"
+          . "<div style=\"padding:14px 18px;background:#f4ede0;border-left:3px solid #c9aa71;border-radius:3px;color:#2a1408;font-style:italic;white-space:pre-wrap;\">"
+          . htmlspecialchars($message, ENT_QUOTES, "UTF-8")
+          . "</div>"
+        : "";
+
+    $btn_confirm = knk_email_button("Confirm booking", $confirmUrl, "primary");
+    $btn_decline = knk_email_button("Decline", $declineUrl, "secondary");
+
+    $html_body  = "<p style=\"margin:0 0 6px 0;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#c9aa71;font-weight:700;\">New booking · action needed</p>";
+    $html_body .= "<h1 style=\"margin:0 0 14px 0;font-family:'Archivo Black','Helvetica Neue',Arial Black,Arial,sans-serif;font-size:26px;line-height:1.15;color:#180c03;letter-spacing:-0.01em;\">"
+                . htmlspecialchars($name, ENT_QUOTES, "UTF-8") . " wants the " . htmlspecialchars($roomLabel, ENT_QUOTES, "UTF-8") . "</h1>";
+    $html_body .= "<p style=\"margin:0 0 4px 0;color:#3d1f0d;\">{$checkin} → {$checkout} ({$hold["nights"]} nights)</p>";
+    $html_body .= knk_email_details_table($details);
+    $html_body .= $msg_html;
+    $html_body .= knk_email_divider();
+    $html_body .= "<p style=\"margin:6px 0 10px 0;color:#3d1f0d;\">Tap one below:</p>";
+    $html_body .= "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td style=\"padding-right:12px;\">{$btn_confirm}</td><td>{$btn_decline}</td></tr></table>";
+    $html_body .= "<p style=\"margin:22px 0 0 0;font-size:12px;color:#6e5d40;\">If you don't respond within 24 hours the hold auto-expires and the dates re-open. Hold ID: <code style=\"font-family:Menlo,Consolas,monospace;\">{$hold["id"]}</code></p>";
+
+    $preheader = "New booking: {$name} · {$roomLabel} · {$checkin} → {$checkout}";
+    $html_email = knk_email_html($subject, $preheader, $html_body, "This is an automated notice from the KnK Inn booking system.");
 
     $smtpErr = null;
     $ok = smtp_send([
@@ -163,6 +207,7 @@ if ($type === "booking") {
         "reply_to_name"  => $name,
         "subject"        => $subject,
         "body"           => $body,
+        "html"           => $html_email,
     ], $smtpErr);
 
     if (!$ok) {
@@ -196,6 +241,7 @@ if ($errors) fail(implode("<br>", $errors));
 $subject = "KnK Inn enquiry — $name";
 if ($room) $subject .= " — $room";
 
+// Plain-text fallback
 $body  = "New enquiry from the KnK Inn website\n";
 $body .= str_repeat("─", 48) . "\n\n";
 $body .= "Name:     $name\n";
@@ -209,6 +255,37 @@ $body .= "\nMessage:\n$message\n\n";
 $body .= str_repeat("─", 48) . "\n";
 $body .= "Submitted " . date("Y-m-d H:i:s") . " ICT · IP " . ($_SERVER["REMOTE_ADDR"] ?? "?") . "\n";
 $body .= "$SITE_URL\n";
+
+// HTML version
+$eq_details = array_filter([
+    "Name"       => $name,
+    "Email"      => $email,
+    "Phone"      => $phone,
+    "Room"       => $room,
+    "Check-in"   => $checkin,
+    "Check-out"  => $checkout,
+    "Guests"     => $guests,
+], function ($v) { return $v !== "" && $v !== null; });
+
+$eq_msg = "<p style=\"margin:18px 0 6px 0;font-size:12px;letter-spacing:0.14em;text-transform:uppercase;color:#6e5d40;\">Message</p>"
+        . "<div style=\"padding:14px 18px;background:#f4ede0;border-left:3px solid #c9aa71;border-radius:3px;color:#2a1408;white-space:pre-wrap;\">"
+        . htmlspecialchars($message, ENT_QUOTES, "UTF-8")
+        . "</div>";
+
+$replyUrl  = "mailto:" . rawurlencode($email) . "?subject=" . rawurlencode("Re: your enquiry at KnK Inn");
+$btn_reply = knk_email_button("Reply to " . ($name ?: "guest"), $replyUrl, "primary");
+
+$eq_html_body  = "<p style=\"margin:0 0 6px 0;font-size:12px;letter-spacing:0.2em;text-transform:uppercase;color:#c9aa71;font-weight:700;\">New enquiry</p>";
+$eq_html_body .= "<h1 style=\"margin:0 0 14px 0;font-family:'Archivo Black','Helvetica Neue',Arial Black,Arial,sans-serif;font-size:24px;line-height:1.15;color:#180c03;\">"
+              . htmlspecialchars($name, ENT_QUOTES, "UTF-8") . " sent a message</h1>";
+$eq_html_body .= knk_email_details_table($eq_details);
+$eq_html_body .= $eq_msg;
+$eq_html_body .= knk_email_divider();
+$eq_html_body .= $btn_reply;
+
+$eq_footer = "Submitted " . htmlspecialchars(date("Y-m-d H:i:s"), ENT_QUOTES, "UTF-8") . " ICT · IP " . htmlspecialchars($_SERVER["REMOTE_ADDR"] ?? "?", ENT_QUOTES, "UTF-8");
+$eq_preheader = "From {$name}" . ($room ? " about {$room}" : "");
+$eq_html = knk_email_html($subject, $eq_preheader, $eq_html_body, $eq_footer);
 
 $smtpErr = null;
 $ok = smtp_send([
@@ -224,6 +301,7 @@ $ok = smtp_send([
     "reply_to_name"  => $name,
     "subject"        => $subject,
     "body"           => $body,
+    "html"           => $eq_html,
 ], $smtpErr);
 
 if ($ok) {
