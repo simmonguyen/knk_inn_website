@@ -1,0 +1,57 @@
+name: Deploy to knkinn.com (Matbao FTP)
+
+# Auto-deploys the site to /public_html/ on the Matbao server
+# whenever someone pushes to main. Can also be run manually.
+#
+# Required secret:
+#   matbao  — FTP password for MB11495283@knkinn.com
+#
+# Files never touched on the server (kept from being overwritten):
+#   config.php      — SMTP + booking config (lives on server only)
+#   bookings.json   — live booking data (lives on server only)
+#
+# The action is "sync" — it only uploads files that have changed
+# since the last deploy (tracked via .ftp-deploy-sync-state.json on
+# the server root). First run does a full upload.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ftp-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: FTP sync to Matbao
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: 112.78.2.37
+          username: MB11495283@knkinn.com
+          password: ${{ secrets.matbao }}
+          protocol: ftp
+          port: 21
+          server-dir: /public_html/
+          local-dir: ./
+          # Don't wipe server-side config / live data:
+          # (everything else is replaced from the repo)
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/.github/**
+            **/__MACOSX/**
+            **/.DS_Store
+            **/*.md
+            deploy_to_knkinn.py
+            KnK-Inn-Website-GITHUB.zip
+            config.php
+            bookings.json
+            .ftp-deploy-sync-state.json
