@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>Booking action — KnK Inn</title>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+<section class="section" style="min-height:80vh;display:flex;align-items:center;padding-top:6rem;">
+  <div class="container" style="text-align:center;max-width:640px;">
+    <span class="eyebrow">Simmo</span>
+    <h1 class="display-lg" id="heading">Done.</h1>
+    <p id="detail" style="margin:2rem 0;color:var(--cream-dim);font-size:1.1rem;"></p>
+    <p style="margin-top:3rem;">
+      <a href="index.html" class="btn-ghost">Back to site</a>
+    </p>
+  </div>
+</section>
+
+<script>
+  const q = new URLSearchParams(location.search);
+  const action  = q.get("action");
+  const room    = q.get("room") || "";
+  const guest   = q.get("guest") || "the guest";
+  const checkin = q.get("checkin") || "";
+  const checkout= q.get("checkout") || "";
+  const h1 = document.getElementById("heading");
+  const p  = document.getElementById("detail");
+  if (action === "confirm") {
+    h1.innerHTML = "Booking <em>confirmed.</em>";
+    p.textContent = `Those dates (${checkin} → ${checkout}) for ${room.toUpperCase()} are now locked on the calendar. ${guest} will get an automated email.`;
+  } else if (action === "decline") {
+    h1.innerHTML = "Booking <em>declined.</em>";
+    p.textContent = `Dates are open again. ${guest}'s request has been marked declined — please email them back if you want to explain.`;
+  } else {
+    h1.textContent = "Unknown action.";
+  }
+</script>
+</body>
+</html>

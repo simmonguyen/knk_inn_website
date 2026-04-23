@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="robots" content="noindex,nofollow">
+<title>SMTP test — KnK Inn</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="assets/css/styles.css">
+<style>
+  body { padding: 6rem 1rem; }
+  .test-wrap { max-width: 560px; margin: 0 auto; }
+  .test-wrap h1 { margin-bottom: 0.5rem; }
+  .test-wrap p.lead { color: var(--cream-dim); margin-bottom: 2rem; }
+  .test-form label { display: block; margin: 1rem 0 0.35rem; font-weight: 600; }
+  .test-form input, .test-form textarea {
+    width: 100%; padding: 0.7rem 0.9rem; border-radius: 6px;
+    border: 1px solid rgba(255,255,255,0.15); background: rgba(0,0,0,0.25);
+    color: var(--cream); font-family: inherit; font-size: 1rem;
+  }
+  .test-form textarea { min-height: 120px; resize: vertical; }
+  .test-form button { margin-top: 1.5rem; }
+  .hp { position: absolute; left: -9999px; top: auto; width: 1px; height: 1px; overflow: hidden; }
+</style>
+</head>
+<body>
+
+<div class="test-wrap">
+  <span class="eyebrow">Internal</span>
+  <h1 class="display-lg">SMTP <em>test.</em></h1>
+  <p class="lead">Temporary page for verifying the Gmail-SMTP enquiry pipe. Submit this and an email should land in knkinnsaigon@gmail.com within ~30 seconds. Remove this page once the real booking flow is live.</p>
+
+  <form class="test-form" action="enquire.php" method="POST">
+    <!-- Anti-spam fields intentionally omitted for this smoke test.
+         Chrome autofill fills hidden "website" honeypot fields, which would
+         trigger enquire.php's silent-bot path and skip SMTP entirely. -->
+
+    <label for="name">Your name</label>
+    <input type="text" id="name" name="name" required maxlength="100" value="SMTP test">
+
+    <label for="email">Your email</label>
+    <input type="email" id="email" name="email" required maxlength="120" value="dev@dataknot.com">
+
+    <label for="message">Message</label>
+    <textarea id="message" name="message" required maxlength="2000">This is an SMTP delivery test from test-enquiry.html. If you received this, Gmail SMTP via the app password is working.</textarea>
+
+    <button type="submit" class="btn-primary">Send test email</button>
+  </form>
+
+  <p style="margin-top:2rem;font-size:0.85rem;color:var(--cream-dim);">
+    After hitting send you should land on <code>thanks.html</code>. If you get an error page instead, the error will tell you whether it's form validation or SMTP failure. Check your spam folder too.
+  </p>
+</div>
+
+</body>
+</html>
