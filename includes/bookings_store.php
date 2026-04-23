@@ -5,7 +5,7 @@
  * bookings.json schema:
  * {
  *   "holds": [
- *     { "id": "b_abc123", "token": "tok_...", "room": "f2-vip",
+ *     { "id": "b_abc123", "token": "tok_...", "room": "vip",
  *       "checkin": "2026-05-10", "checkout": "2026-05-14", "nights": 4,
  *       "guest": {"name":"...","email":"...","phone":"...","message":"..."},
  *       "status": "pending|confirmed|declined|expired",
@@ -21,6 +21,34 @@
 
 if (!defined("KNK_HOLD_TTL"))         define("KNK_HOLD_TTL", 86400);    // 24h
 if (!defined("KNK_BOOKINGS_PATH"))    define("KNK_BOOKINGS_PATH", __DIR__ . "/../bookings.json");
+
+/*
+ * Physical room inventory — keyed by room slug.
+ *
+ *   1st floor:            1 × Standard (no window)
+ *   2nd / 3rd / 4th:      each has 1 × Standard-balcony + 1 × VIP w/ tub
+ *   --------------------------------------------------------------
+ *                          1 + 3 + 3 = 7 rooms total
+ *
+ * Availability is measured against these counts, so a slug only blocks
+ * dates once every physical unit of that type is taken.
+ */
+if (!isset($GLOBALS["KNK_ROOM_INVENTORY"])) {
+    $GLOBALS["KNK_ROOM_INVENTORY"] = [
+        "standard-nowindow" => 1,
+        "standard-balcony"  => 3,
+        "vip"               => 3,
+    ];
+}
+
+function knk_room_inventory(string $room): int {
+    $inv = $GLOBALS["KNK_ROOM_INVENTORY"] ?? [];
+    return (int)($inv[$room] ?? 1);
+}
+
+function knk_total_rooms(): int {
+    return (int)array_sum($GLOBALS["KNK_ROOM_INVENTORY"] ?? []);
+}
 
 /** Acquire exclusive lock, load JSON, return [$fp, $data]. Caller must call bookings_save() or bookings_close(). */
 function bookings_open(): array {
@@ -60,28 +88,59 @@ function bookings_close($fp): void {
 
 /**
  * Return array of YYYY-MM-DD strings that are unavailable for the given room.
- * Includes confirmed bookings and non-expired pending holds.
+ * Inventory-aware: a date is only "blocked" once every physical unit of that
+ * room type is taken (confirmed bookings and non-expired pending holds).
  * checkout date is EXCLUSIVE (guest leaves that morning).
  */
 function bookings_blocked_dates(string $room): array {
     [$fp, $data] = bookings_open();
-    $now = time();
-    $blocked = [];
+    $now      = time();
+    $capacity = knk_room_inventory($room);
+    $counts   = []; // ymd => int
     foreach ($data["holds"] as $h) {
         if (($h["room"] ?? "") !== $room) continue;
         $status = $h["status"] ?? "pending";
         if ($status === "declined" || $status === "expired") continue;
         if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
-        // expand range [checkin, checkout)
         $start = strtotime($h["checkin"]);
         $end   = strtotime($h["checkout"]);
         if (!$start || !$end) continue;
         for ($t = $start; $t < $end; $t += 86400) {
-            $blocked[] = date("Y-m-d", $t);
+            $ymd = date("Y-m-d", $t);
+            $counts[$ymd] = ($counts[$ymd] ?? 0) + 1;
         }
     }
     bookings_close($fp);
-    return array_values(array_unique($blocked));
+    $blocked = [];
+    foreach ($counts as $ymd => $n) {
+        if ($n >= $capacity) $blocked[] = $ymd;
+    }
+    sort($blocked);
+    return $blocked;
+}
+
+/**
+ * Return [ymd => int] occupancy aggregated across ALL room types.
+ * Used by the unified calendar view to render fill ratios.
+ */
+function bookings_daily_occupancy(): array {
+    [$fp, $data] = bookings_open();
+    $now    = time();
+    $counts = [];
+    foreach ($data["holds"] as $h) {
+        $status = $h["status"] ?? "pending";
+        if ($status === "declined" || $status === "expired") continue;
+        if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
+        $start = strtotime($h["checkin"] ?? "");
+        $end   = strtotime($h["checkout"] ?? "");
+        if (!$start || !$end) continue;
+        for ($t = $start; $t < $end; $t += 86400) {
+            $ymd = date("Y-m-d", $t);
+            $counts[$ymd] = ($counts[$ymd] ?? 0) + 1;
+        }
+    }
+    bookings_close($fp);
+    return $counts;
 }
 
 /**
@@ -100,7 +159,11 @@ function bookings_create_hold(array $input): array {
             throw new InvalidArgumentException("Invalid room or dates");
         }
 
-        $now = time();
+        $now      = time();
+        $capacity = knk_room_inventory($room);
+        // Count existing overlap per day; reject only if ANY day in the
+        // requested range is already at inventory capacity for this slug.
+        $dayCounts = [];
         foreach ($data["holds"] as $h) {
             if (($h["room"] ?? "") !== $room) continue;
             $status = $h["status"] ?? "pending";
@@ -108,8 +171,15 @@ function bookings_create_hold(array $input): array {
             if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
             $hs = strtotime($h["checkin"]);
             $he = strtotime($h["checkout"]);
-            if ($start < $he && $end > $hs) {
-                throw new RuntimeException("Dates already held for this room");
+            if (!$hs || !$he) continue;
+            $ovStart = max($start, $hs);
+            $ovEnd   = min($end,   $he);
+            for ($t = $ovStart; $t < $ovEnd; $t += 86400) {
+                $ymd = date("Y-m-d", $t);
+                $dayCounts[$ymd] = ($dayCounts[$ymd] ?? 0) + 1;
+                if ($dayCounts[$ymd] >= $capacity) {
+                    throw new RuntimeException("Dates already held for this room");
+                }
             }
         }
 

@@ -1,7 +1,7 @@
 <?php
 /* =========================================================
    KnK Inn — Bookings admin for Simmo
-   https://knkinn.com/admin.php
+   https://knkinn.com/bookings.php
    Password-protected. See all bookings on one screen, confirm / decline
    pending holds, manually block dates (maintenance), browse recent history.
    ========================================================= */
@@ -15,7 +15,7 @@ const ADMIN_PASSWORD = "Knk@070475";   // same password Simmo uses elsewhere
 const ROOMS = [
     "standard-nowindow" => "Standard (no window)",
     "standard-balcony"  => "Standard with balcony",
-    "vip"               => "VIP",
+    "vip"               => "VIP w/ tub",
 ];
 const CALENDAR_MONTHS = 3;   // how many months forward to render on the calendar grid
 
@@ -27,7 +27,7 @@ function is_logged_in(): bool {
 if (($_POST["action"] ?? "") === "logout") {
     $_SESSION = [];
     session_destroy();
-    header("Location: admin.php");
+    header("Location: bookings.php");
     exit;
 }
 
@@ -38,7 +38,7 @@ if (($_POST["action"] ?? "") === "login") {
     if (hash_equals(ADMIN_PASSWORD, $pw)) {
         session_regenerate_id(true);
         $_SESSION["admin_ok"] = true;
-        header("Location: admin.php");
+        header("Location: bookings.php");
         exit;
     } else {
         $login_error = "Wrong password, mate. Try again.";
@@ -69,7 +69,7 @@ if (in_array(($_POST["action"] ?? ""), ["confirm", "decline"], true)) {
             $flash = "Error: " . $e->getMessage();
         }
     }
-    header("Location: admin.php?msg=" . urlencode($flash));
+    header("Location: bookings.php?msg=" . urlencode($flash));
     exit;
 }
 
@@ -93,7 +93,7 @@ if (($_POST["action"] ?? "") === "block") {
             $flash = "Could not block: " . $e->getMessage();
         }
     }
-    header("Location: admin.php?msg=" . urlencode($flash));
+    header("Location: bookings.php?msg=" . urlencode($flash));
     exit;
 }
 
@@ -108,7 +108,7 @@ if (($_POST["action"] ?? "") === "delete") {
             $flash = "Error: " . $e->getMessage();
         }
     }
-    header("Location: admin.php?msg=" . urlencode($flash));
+    header("Location: bookings.php?msg=" . urlencode($flash));
     exit;
 }
 
@@ -119,6 +119,7 @@ $all = bookings_list_all(true);  // auto-expires stale pending
 
 $now = time();
 $today_ymd = date("Y-m-d", $now);
+$totalRooms = knk_total_rooms();   // 7 physical rooms
 
 $pending   = [];
 $upcoming  = [];   // confirmed with checkout >= today
@@ -140,28 +141,21 @@ usort($upcoming, function ($a, $b) { return strtotime($a["checkin"]) <=> strtoti
 // limit history to most recent 50 to keep the page light
 $past = array_slice($past, 0, 50);
 
-/* ---------- Build calendar lookup: [room][Y-m-d] = status|reason ---------- */
-$calendar = [];
-foreach (array_keys(ROOMS) as $r) $calendar[$r] = [];
+/* ---------- Build unified occupancy map: [Y-m-d] = int count across all rooms ---------- */
+$occupancy = []; // ymd => count
+$dayGuests = []; // ymd => [ "Name (room-label)", ... ]  for tooltip
 foreach ($all as $h) {
     $s = $h["status"] ?? "pending";
     if ($s === "declined" || $s === "expired") continue;
     if ($s === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
-    $room = $h["room"] ?? "";
-    if (!isset($calendar[$room])) continue;
-    $start = strtotime($h["checkin"]);
-    $end   = strtotime($h["checkout"]);
+    $start = strtotime($h["checkin"] ?? "");
+    $end   = strtotime($h["checkout"] ?? "");
     if (!$start || !$end) continue;
+    $label = ($h["guest"]["name"] ?? "?") . " (" . (ROOMS[$h["room"] ?? ""] ?? ($h["room"] ?? "")) . ")";
     for ($t = $start; $t < $end; $t += 86400) {
         $d = date("Y-m-d", $t);
-        // confirmed wins over pending if both cover same day
-        $prev = $calendar[$room][$d]["status"] ?? null;
-        if ($prev === "confirmed") continue;
-        $calendar[$room][$d] = [
-            "status" => $s,
-            "name"   => $h["guest"]["name"] ?? "",
-            "id"     => $h["id"] ?? "",
-        ];
+        $occupancy[$d] = ($occupancy[$d] ?? 0) + 1;
+        $dayGuests[$d][] = $label;
     }
 }
 
@@ -174,7 +168,11 @@ function fmt_date(string $ymd): string {
 function fmt_datetime(int $ts): string {
     return $ts ? date("D j M · H:i", $ts) : "—";
 }
-function render_month_calendar(string $room, int $year, int $month, array $bookings): string {
+/**
+ * Unified calendar — one grid per month. Each day cell shows its fill ratio
+ * (booked / total) as a bottom-up gold fill, with the count in the corner.
+ */
+function render_month_calendar(int $year, int $month, array $occupancy, array $dayGuests, int $totalRooms): string {
     $first = mktime(0, 0, 0, $month, 1, $year);
     $daysInMonth = (int)date("t", $first);
     // Monday-first: PHP "w" returns 0=Sun..6=Sat, so shift
@@ -186,16 +184,22 @@ function render_month_calendar(string $room, int $year, int $month, array $booki
     for ($i = 0; $i < $leading; $i++) $html .= '<div class="m-cell empty"></div>';
     for ($d = 1; $d <= $daysInMonth; $d++) {
         $ymd = sprintf("%04d-%02d-%02d", $year, $month, $d);
-        $info = $bookings[$ymd] ?? null;
-        $cls = "m-cell";
+        $count = (int)($occupancy[$ymd] ?? 0);
+        $pct   = $totalRooms > 0 ? min(100, (int)round($count * 100 / $totalRooms)) : 0;
+        $cls   = "m-cell";
+        $style = "";
         $title = "";
-        if ($info) {
-            $cls .= " " . ($info["status"] === "confirmed" ? "confirmed" : "pending");
-            $title = ($info["status"] === "confirmed" ? "Confirmed" : "Pending") . " — " . $info["name"];
+        if ($count > 0) {
+            $cls  .= $count >= $totalRooms ? " full" : " part";
+            $style = ' style="--fill:' . $pct . '%"';
+            $guests = $dayGuests[$ymd] ?? [];
+            $title  = "{$count} of {$totalRooms} booked";
+            if ($guests) $title .= " — " . implode(", ", array_unique($guests));
         }
         if ($ymd === $today) $cls .= " today";
         if ($ymd < $today)   $cls .= " past";
-        $html .= '<div class="' . $cls . '" title="' . h($title) . '"><span class="d">' . $d . '</span></div>';
+        $badge = $count > 0 ? '<span class="c">' . $count . '</span>' : '';
+        $html .= '<div class="' . $cls . '"' . $style . ' title="' . h($title) . '"><span class="d">' . $d . '</span>' . $badge . '</div>';
     }
     $html .= '</div></div>';
     return $html;
@@ -306,13 +310,7 @@ function render_month_calendar(string $room, int $year, int $month, array $booki
     .pill.declined  { background: rgba(255,154,138,0.12); color: #ff9a8a; border: 1px solid rgba(255,154,138,0.35); }
     .pill.expired   { background: rgba(255,255,255,0.05); color: var(--cream-faint); border: 1px solid rgba(255,255,255,0.15); }
 
-    /* ---------- Calendar ---------- */
-    .room-block { margin-bottom: 2rem; }
-    .room-block:last-child { margin-bottom: 0; }
-    .room-block h3 {
-      font-family: 'Archivo Black', sans-serif; font-size: 1.1rem; color: var(--cream);
-      margin: 0 0 0.9rem 0; letter-spacing: 0.01em;
-    }
+    /* ---------- Unified occupancy calendar ---------- */
     .months {
       display: grid; gap: 1rem;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -336,18 +334,49 @@ function render_month_calendar(string $room, int $year, int $month, array $booki
       aspect-ratio: 1 / 1; position: relative; border-radius: 3px;
       background: rgba(255,255,255,0.02); display: flex; align-items: center; justify-content: center;
       font-size: 0.74rem; color: var(--cream-dim); border: 1px solid transparent;
+      overflow: hidden; --fill: 0%;
     }
+    /* Gold fill rises from the bottom of the cell proportional to occupancy */
+    .m-cell.part,
+    .m-cell.full {
+      background:
+        linear-gradient(
+          to top,
+          var(--gold) 0%,
+          var(--gold) var(--fill),
+          rgba(255,255,255,0.02) var(--fill),
+          rgba(255,255,255,0.02) 100%
+        );
+    }
+    .m-cell.full { color: var(--brown-deep); font-weight: 700; }
     .m-cell.empty { background: transparent; }
+    .m-cell .d { position: relative; z-index: 1; }
+    .m-cell .c {
+      position: absolute; top: 2px; right: 4px; z-index: 2;
+      font-size: 0.56rem; font-weight: 700; letter-spacing: 0.04em;
+      color: var(--brown-deep);
+      background: rgba(255,255,255,0.6);
+      padding: 0 4px; border-radius: 6px;
+      line-height: 1.3;
+    }
     .m-cell.today { border-color: var(--gold); color: var(--gold); font-weight: 700; }
-    .m-cell.past { opacity: 0.4; }
-    .m-cell.pending   { background: rgba(201,170,113,0.35); color: var(--brown-deep); font-weight: 700; }
-    .m-cell.confirmed { background: var(--gold); color: var(--brown-deep); font-weight: 700; }
-    .m-cell.past.confirmed,
-    .m-cell.past.pending { opacity: 0.55; }
-    .m-legend { display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.8rem; font-size: 0.72rem; color: var(--cream-faint); }
+    .m-cell.today.part,
+    .m-cell.today.full { color: var(--cream); }
+    .m-cell.past { opacity: 0.55; }
+
+    .m-legend {
+      display: flex; gap: 1.2rem; flex-wrap: wrap; margin-top: 0.9rem;
+      font-size: 0.72rem; color: var(--cream-faint); align-items: center;
+    }
+    .m-legend .scale {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+    }
+    .m-legend .bar {
+      display: inline-block; width: 110px; height: 10px; border-radius: 2px;
+      background: linear-gradient(to right, rgba(255,255,255,0.06), var(--gold));
+      border: 1px solid rgba(201,170,113,0.25);
+    }
     .m-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; vertical-align: middle; margin-right: 4px; }
-    .sw.confirmed { background: var(--gold); }
-    .sw.pending   { background: rgba(201,170,113,0.35); }
     .sw.today     { background: transparent; border: 1px solid var(--gold); }
 
     /* ---------- Manual block form ---------- */
@@ -525,34 +554,27 @@ function render_month_calendar(string $room, int $year, int $month, array $booki
   </section>
 
   <!-- ============================================================ -->
-  <!-- CALENDAR -->
+  <!-- UNIFIED OCCUPANCY CALENDAR -->
   <!-- ============================================================ -->
   <section class="panel">
-    <h2>Room availability <span class="sub">next <?= CALENDAR_MONTHS ?> months</span></h2>
+    <h2>Occupancy <span class="sub">next <?= CALENDAR_MONTHS ?> months · <?= (int)$totalRooms ?> rooms total</span></h2>
 
-    <?php foreach (ROOMS as $roomId => $roomLabel):
-      $bookings = $calendar[$roomId] ?? [];
-    ?>
-      <div class="room-block">
-        <h3><?= h($roomLabel) ?></h3>
-        <div class="months">
-          <?php
-          $y = (int)date("Y");
-          $m = (int)date("n");
-          for ($i = 0; $i < CALENDAR_MONTHS; $i++) {
-              echo render_month_calendar($roomId, $y, $m, $bookings);
-              $m++;
-              if ($m > 12) { $m = 1; $y++; }
-          }
-          ?>
-        </div>
-      </div>
-    <?php endforeach; ?>
+    <div class="months">
+      <?php
+      $y = (int)date("Y");
+      $m = (int)date("n");
+      for ($i = 0; $i < CALENDAR_MONTHS; $i++) {
+          echo render_month_calendar($y, $m, $occupancy, $dayGuests, $totalRooms);
+          $m++;
+          if ($m > 12) { $m = 1; $y++; }
+      }
+      ?>
+    </div>
 
     <div class="m-legend">
-      <span><span class="sw confirmed"></span>Confirmed</span>
-      <span><span class="sw pending"></span>Pending hold</span>
+      <span class="scale">Empty <span class="bar"></span> Full (<?= (int)$totalRooms ?>/<?= (int)$totalRooms ?>)</span>
       <span><span class="sw today"></span>Today</span>
+      <span style="color:var(--cream-faint);">Hover a day to see which rooms are booked.</span>
     </div>
   </section>
 
