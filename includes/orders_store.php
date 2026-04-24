@@ -22,20 +22,20 @@
  *   ]
  * }
  *
- * The menu itself is parsed on demand from drinks.html so there's ONE source
- * of truth — Simmo edits drinks.html, the order page picks up the change.
+ * The menu itself is parsed on demand from drinks.php so there's ONE source
+ * of truth — Simmo edits drinks.php, the order page picks up the change.
  */
 
 if (!defined("KNK_ORDERS_PATH")) define("KNK_ORDERS_PATH", __DIR__ . "/../orders.json");
-if (!defined("KNK_DRINKS_HTML")) define("KNK_DRINKS_HTML", __DIR__ . "/../drinks.html");
+if (!defined("KNK_DRINKS_HTML")) define("KNK_DRINKS_HTML", __DIR__ . "/../drinks.php");
 if (!defined("KNK_VAT_RATE"))    define("KNK_VAT_RATE", 0.10);  // Vietnam standard VAT 10%
 
 /* =========================================================
-   MENU — parsed from drinks.html
+   MENU — parsed from drinks.php
    ========================================================= */
 
 /**
- * Parse drinks.html → [ ["title"=>"Beer", "items"=>[ ["id"=>..., "name"=>..., "price_vnd"=>...], ... ] ], ... ]
+ * Parse drinks.php → [ ["title"=>"Beer", "items"=>[ ["id"=>..., "name"=>..., "price_vnd"=>...], ... ] ], ... ]
  *
  * Cached for the request.
  */

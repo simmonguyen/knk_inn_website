@@ -136,7 +136,7 @@ const T = {
     'footer.visit': 'Visit',
     'footer.rights': '© 2026 KnK Inn · All rights reserved',
     'footer.built': 'Coffee · Wine · Sports · Sky Garden',
-    // Keys used by the current index.html (added to match the live markup)
+    // Keys used by the current index.php (added to match the live markup)
     'nav.home': 'Home',
     'nav.book': 'Book',
     'hero.titleLine1': 'KnK',
@@ -367,7 +367,7 @@ const T = {
     'contact.hours.morning': 'Ca sáng','contact.hours.morning.val': '8:00 – 12:00','contact.hours.evening': 'Ca tối / Bar','contact.hours.evening.val': '16:30 – 23:30','contact.hours.days': 'Ngày','contact.hours.days.val': 'Mở cửa hàng ngày','contact.hours.admission': 'Vào cửa','contact.hours.admission.val': 'Chỉ khách vãng lai',
     'contact.map.cta': 'Mở Google Maps ↗',
     'footer.tagline': 'Cà phê, rượu vang & Sports Bar · Rooftop Lounge<br>96 Đề Thám, Quận 1<br>Thành phố Hồ Chí Minh','footer.hours': 'Giờ mở','footer.visit': 'Đến thăm','footer.rights': '© 2026 KnK Inn · Mọi quyền được bảo lưu','footer.built': 'Cà phê · Rượu vang · Thể thao · Sky Garden',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': 'Trang chủ','nav.book': 'Đặt chỗ',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': 'Xem phòng','hero.ctaSports': 'Lịch thể thao',
@@ -554,7 +554,7 @@ const T = {
     'contact.address.label': '地址','contact.address.value': '德探街96号,<br>Cau Ong Lanh坊, 第一郡,<br>胡志明市, 越南',
     'contact.hotline.label': '热线','contact.website.label': '网站','contact.hours.morning': '上午时段','contact.hours.morning.val': '上午8:00 – 中午12:00','contact.hours.evening': '晚间/酒吧时段','contact.hours.evening.val': '下午4:30 – 晚上11:30','contact.hours.days': '日期','contact.hours.days.val': '每日营业','contact.hours.admission': '入场','contact.hours.admission.val': '仅限非会员','contact.map.cta': '在Google地图中打开 ↗',
     'footer.tagline': '咖啡、葡萄酒 & 体育酒吧 · 屋顶休闲<br>德探街96号, 第一郡<br>胡志明市, 越南','footer.hours': '营业时间','footer.visit': '访问','footer.rights': '© 2026 KnK Inn · 保留所有权利','footer.built': '咖啡 · 葡萄酒 · 体育 · 天台花园',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': '首页','nav.book': '预订',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': '查看客房','hero.ctaSports': '近期赛事',
@@ -722,7 +722,7 @@ const T = {
     'contact.address.label': '住所','contact.address.value': 'デタム通り96番,<br>カウオンラン町, 1区,<br>ホーチミン市, ベトナム',
     'contact.hotline.label': 'ホットライン','contact.website.label': 'ウェブ','contact.hours.morning': 'モーニング','contact.hours.morning.val': '8:00 – 12:00','contact.hours.evening': '夜 / バー','contact.hours.evening.val': '16:30 – 23:30','contact.hours.days': '営業日','contact.hours.days.val': '毎日営業','contact.hours.admission': '入場','contact.hours.admission.val': '非会員のみ','contact.map.cta': 'Google マップで開く ↗',
     'footer.tagline': 'コーヒー、ワイン & スポーツバー · ルーフトップ<br>デタム通り96番, 1区<br>ホーチミン市, ベトナム','footer.hours': '営業時間','footer.visit': 'お越し','footer.rights': '© 2026 KnK Inn · All rights reserved','footer.built': 'コーヒー · ワイン · スポーツ · スカイガーデン',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': 'ホーム','nav.book': '予約',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': '客室を見る','hero.ctaSports': '試合予定',
@@ -889,7 +889,7 @@ const T = {
     'contact.address.label': '주소','contact.address.value': '데탐 거리 96,<br>꺼우옹란동, 1군,<br>호치민시, 베트남',
     'contact.hotline.label': '핫라인','contact.website.label': '웹사이트','contact.hours.morning': '오전','contact.hours.morning.val': '오전 8:00 – 12:00','contact.hours.evening': '저녁 / 바','contact.hours.evening.val': '오후 4:30 – 11:30','contact.hours.days': '영업일','contact.hours.days.val': '매일 영업','contact.hours.admission': '입장','contact.hours.admission.val': '비회원만','contact.map.cta': 'Google 지도에서 열기 ↗',
     'footer.tagline': '커피, 와인 & 스포츠 바 · 루프탑 라운지<br>데탐 거리 96, 1군<br>호치민시, 베트남','footer.hours': '영업 시간','footer.visit': '방문','footer.rights': '© 2026 KnK Inn · 모든 권리 보유','footer.built': '커피 · 와인 · 스포츠 · 스카이가든',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': '홈','nav.book': '예약',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': '객실 보기','hero.ctaSports': '경기 일정',
@@ -1056,7 +1056,7 @@ const T = {
     'contact.address.label': 'Adresse','contact.address.value': '96 rue De Tham,<br>quartier Cau Ong Lanh, District 1,<br>Hô Chi Minh-Ville, Vietnam',
     'contact.hotline.label': 'Hotline','contact.website.label': 'Site','contact.hours.morning': 'Matinée','contact.hours.morning.val': '8h00 – 12h00','contact.hours.evening': 'Soir / Bar','contact.hours.evening.val': '16h30 – 23h30','contact.hours.days': 'Jours','contact.hours.days.val': 'Ouvert tous les jours','contact.hours.admission': 'Entrée','contact.hours.admission.val': 'Non-membres uniquement','contact.map.cta': 'Ouvrir dans Google Maps ↗',
     'footer.tagline': 'Café, vin & Sports Bar · Toit-terrasse<br>96 rue De Tham, District 1<br>Hô Chi Minh-Ville, Vietnam','footer.hours': 'Horaires','footer.visit': 'Venir','footer.rights': '© 2026 KnK Inn · Tous droits réservés','footer.built': 'Café · Vin · Sport · Sky Garden',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': 'Accueil','nav.book': 'Réserver',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': 'Voir les chambres','hero.ctaSports': 'À l\'affiche',
@@ -1223,7 +1223,7 @@ const T = {
     'contact.address.label': 'Dirección','contact.address.value': '96 De Tham Street,<br>Cau Ong Lanh, Distrito 1,<br>Ciudad Ho Chi Minh, Vietnam',
     'contact.hotline.label': 'Teléfono','contact.website.label': 'Web','contact.hours.morning': 'Mañana','contact.hours.morning.val': '8:00 – 12:00','contact.hours.evening': 'Noche / Bar','contact.hours.evening.val': '16:30 – 23:30','contact.hours.days': 'Días','contact.hours.days.val': 'Abrimos a diario','contact.hours.admission': 'Acceso','contact.hours.admission.val': 'Solo no socios','contact.map.cta': 'Abrir en Google Maps ↗',
     'footer.tagline': 'Café, vino & Sports Bar · Azotea<br>96 De Tham, Distrito 1<br>Ciudad Ho Chi Minh, Vietnam','footer.hours': 'Horario','footer.visit': 'Visita','footer.rights': '© 2026 KnK Inn · Todos los derechos reservados','footer.built': 'Café · Vino · Deporte · Sky Garden',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': 'Inicio','nav.book': 'Reservar',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': 'Ver habitaciones','hero.ctaSports': 'En cartelera',
@@ -1390,7 +1390,7 @@ const T = {
     'contact.address.label': 'Adresse','contact.address.value': '96 De Tham Street,<br>Cau Ong Lanh, Bezirk 1,<br>Ho-Chi-Minh-Stadt, Vietnam',
     'contact.hotline.label': 'Hotline','contact.website.label': 'Webseite','contact.hours.morning': 'Vormittag','contact.hours.morning.val': '8:00 – 12:00','contact.hours.evening': 'Abend / Bar','contact.hours.evening.val': '16:30 – 23:30','contact.hours.days': 'Tage','contact.hours.days.val': 'Täglich geöffnet','contact.hours.admission': 'Einlass','contact.hours.admission.val': 'Nur Nicht-Mitglieder','contact.map.cta': 'In Google Maps öffnen ↗',
     'footer.tagline': 'Kaffee, Wein & Sports Bar · Dachterrasse<br>96 De Tham, Bezirk 1<br>Ho-Chi-Minh-Stadt, Vietnam','footer.hours': 'Öffnungszeiten','footer.visit': 'Besuchen','footer.rights': '© 2026 KnK Inn · Alle Rechte vorbehalten','footer.built': 'Kaffee · Wein · Sport · Sky Garden',
-    // Keys used by index.html
+    // Keys used by index.php
     'nav.home': 'Start','nav.book': 'Reservieren',
     'hero.titleLine1': 'KnK','hero.titleLine2': 'Inn',
     'hero.ctaRooms': 'Zimmer ansehen','hero.ctaSports': 'Auf dem Spielplan',

@@ -1,3 +1,23 @@
+<?php
+/*
+ * KnK Inn — home page.
+ *
+ * Dynamically renders the 20 managed homepage photos by reading
+ * the photo_slots table.  Admin edits happen at /photos.php.
+ *
+ * If the DB is unreachable or the table is empty, each slot falls
+ * back to the hardcoded filename used in the original index.html.
+ */
+
+require_once __DIR__ . "/includes/photo_slots_store.php";
+
+$slots = knk_slots_load();
+
+// Tiny helper to keep the template compact.
+function p_src(array $slots, string $section, int $i, string $default): string {
+    return htmlspecialchars(knk_photo_src($slots, $section, $i, $default));
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,11 +38,11 @@
 <!-- NAV -->
 <nav id="nav">
   <div class="nav-inner">
-    <a href="index.html" class="nav-logo">KnK Inn</a>
+    <a href="index.php" class="nav-logo">KnK Inn</a>
     <ul class="nav-links">
-      <li><a href="index.html" class="active" data-i18n="nav.home">Home</a></li>
+      <li><a href="index.php" class="active" data-i18n="nav.home">Home</a></li>
       <li><a href="rooms.html" data-i18n="nav.rooms">Rooms</a></li>
-      <li><a href="drinks.html" data-i18n="nav.drinks">Drinks</a></li>
+      <li><a href="drinks.php" data-i18n="nav.drinks">Drinks</a></li>
       <li><a href="gallery.php" data-i18n="nav.gallery">Gallery</a></li>
       <li><a href="#sports" data-i18n="nav.sports">Sports</a></li>
       <li><a href="#contact" data-i18n="nav.contact">Contact</a></li>
@@ -38,9 +58,9 @@
 </nav>
 
 <div class="mobile-menu">
-  <a href="index.html" data-i18n="nav.home">Home</a>
+  <a href="index.php" data-i18n="nav.home">Home</a>
   <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
-  <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+  <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
   <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
   <a href="#sports" data-i18n="nav.sports">Sports</a>
   <a href="#contact" data-i18n="nav.contact">Contact</a>
@@ -49,10 +69,10 @@
 <!-- HERO -->
 <section id="hero">
   <div class="hero-slides">
-    <div class="hero-slide active"><img src="assets/img/ex_06.jpg" alt="KnK Inn"></div>
-    <div class="hero-slide"><img src="assets/img/nw_26.jpg" alt="KnK Inn"></div>
-    <div class="hero-slide"><img src="assets/img/nw_51.jpg" alt="KnK Inn"></div>
-    <div class="hero-slide"><img src="assets/img/nw_62.jpg" alt="KnK Inn"></div>
+    <div class="hero-slide active"><img src="<?= p_src($slots, 'home_carousel', 1, 'ex_06.jpg') ?>" alt="KnK Inn"></div>
+    <div class="hero-slide"><img src="<?= p_src($slots, 'home_carousel', 2, 'nw_26.jpg') ?>" alt="KnK Inn"></div>
+    <div class="hero-slide"><img src="<?= p_src($slots, 'home_carousel', 3, 'nw_51.jpg') ?>" alt="KnK Inn"></div>
+    <div class="hero-slide"><img src="<?= p_src($slots, 'home_carousel', 4, 'nw_62.jpg') ?>" alt="KnK Inn"></div>
   </div>
   <div class="hero-overlay"></div>
   <div class="hero-content">
@@ -100,8 +120,8 @@
   <div class="container">
     <div class="about-wrap">
       <div class="about-images reveal">
-        <img class="about-img-main" src="assets/img/nw_62.jpg" alt="KnK Inn">
-        <img class="about-img-inset" src="assets/img/nw_51.jpg" alt="KnK Inn team">
+        <img class="about-img-main" src="<?= p_src($slots, 'piece_of_home', 1, 'nw_26.jpg') ?>" alt="KnK Inn">
+        <img class="about-img-inset" src="<?= p_src($slots, 'piece_of_home', 2, 'nw_51.jpg') ?>" alt="KnK Inn team">
       </div>
       <div class="about-content reveal">
         <span class="eyebrow" data-i18n="about.eyebrow">About Us</span>
@@ -158,10 +178,16 @@
       </div>
     </div>
     <div class="photo-strip">
-      <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_69.jpg"><img src="assets/img/nw_69.jpg" alt="Coffee"></a>
-      <a class="photo-strip-item" data-lb data-lb-src="assets/img/nw_56.jpg"><img src="assets/img/nw_56.jpg" alt="Wine"></a>
-      <a class="photo-strip-item" data-lb data-lb-src="assets/img/rm_15.jpg"><img src="assets/img/rm_15.jpg" alt="Sports bar"></a>
-      <a class="photo-strip-item" data-lb data-lb-src="assets/img/rm_23.jpg"><img src="assets/img/rm_23.jpg" alt="Rooms"></a>
+      <?php
+        $ft1 = p_src($slots, 'four_things', 1, 'nw_69.jpg');
+        $ft2 = p_src($slots, 'four_things', 2, 'nw_56.jpg');
+        $ft3 = p_src($slots, 'four_things', 3, 'rm_15.jpg');
+        $ft4 = p_src($slots, 'four_things', 4, 'rm_23.jpg');
+      ?>
+      <a class="photo-strip-item" data-lb data-lb-src="<?= $ft1 ?>"><img src="<?= $ft1 ?>" alt="Coffee"></a>
+      <a class="photo-strip-item" data-lb data-lb-src="<?= $ft2 ?>"><img src="<?= $ft2 ?>" alt="Wine"></a>
+      <a class="photo-strip-item" data-lb data-lb-src="<?= $ft3 ?>"><img src="<?= $ft3 ?>" alt="Sports bar"></a>
+      <a class="photo-strip-item" data-lb data-lb-src="<?= $ft4 ?>"><img src="<?= $ft4 ?>" alt="Rooms"></a>
     </div>
   </div>
 </section>
@@ -171,7 +197,7 @@
   <div class="rooftop-wrap">
     <div class="rooftop-images reveal">
       <div class="rooftop-badge"><span data-i18n="rooftop.badge">Signature</span></div>
-      <img class="rooftop-main" src="assets/img/rm_12.jpg" alt="Rooftop garden">
+      <img class="rooftop-main" src="<?= p_src($slots, 'up_above', 1, 'rm_12.jpg') ?>" alt="Rooftop garden">
     </div>
     <div class="rooftop-copy reveal">
       <span class="eyebrow" data-i18n="rooftop.eyebrow">Our Rooftop Garden</span>
@@ -354,14 +380,26 @@
       <h2 class="display-lg" data-i18n="gallery.title">A look <em>around.</em></h2>
     </div>
     <div class="preview-grid">
-      <a class="preview-item" data-lb data-lb-src="assets/img/ex_06.jpg"><img src="assets/img/ex_06.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/ex_07.jpg"><img src="assets/img/ex_07.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/nw_03.jpg"><img src="assets/img/nw_03.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/nw_12.jpg"><img src="assets/img/nw_12.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/nw_25.jpg"><img src="assets/img/nw_25.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/nw_30.jpg"><img src="assets/img/nw_30.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/nw_52.jpg"><img src="assets/img/nw_52.jpg" alt=""></a>
-      <a class="preview-item" data-lb data-lb-src="assets/img/nw_69.jpg"><img src="assets/img/nw_69.jpg" alt=""></a>
+      <?php
+        $sla = [
+          1 => p_src($slots, 'sports_look_around', 1, 'ex_06.jpg'),
+          2 => p_src($slots, 'sports_look_around', 2, 'ex_07.jpg'),
+          3 => p_src($slots, 'sports_look_around', 3, 'nw_03.jpg'),
+          4 => p_src($slots, 'sports_look_around', 4, 'nw_12.jpg'),
+          5 => p_src($slots, 'sports_look_around', 5, 'nw_25.jpg'),
+          6 => p_src($slots, 'sports_look_around', 6, 'nw_30.jpg'),
+          7 => p_src($slots, 'sports_look_around', 7, 'nw_52.jpg'),
+          8 => p_src($slots, 'sports_look_around', 8, 'nw_69.jpg'),
+        ];
+      ?>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[1] ?>"><img src="<?= $sla[1] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[2] ?>"><img src="<?= $sla[2] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[3] ?>"><img src="<?= $sla[3] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[4] ?>"><img src="<?= $sla[4] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[5] ?>"><img src="<?= $sla[5] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[6] ?>"><img src="<?= $sla[6] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[7] ?>"><img src="<?= $sla[7] ?>" alt=""></a>
+      <a class="preview-item" data-lb data-lb-src="<?= $sla[8] ?>"><img src="<?= $sla[8] ?>" alt=""></a>
     </div>
     <div style="text-align:center;margin-top:3rem;">
       <a href="gallery.php" class="btn-primary" data-i18n="gallery.cta">See full gallery</a>
@@ -371,14 +409,14 @@
 
 <!-- CTA -->
 <section id="cta-banner">
-  <div class="cta-banner-bg"><img src="assets/img/nw_05.jpg" alt=""></div>
+  <div class="cta-banner-bg"><img src="<?= p_src($slots, 'find_us', 1, 'nw_05.jpg') ?>" alt=""></div>
   <div class="cta-banner-inner">
     <span class="eyebrow" data-i18n="cta.eyebrow">Ready when you are</span>
     <h2 class="display-lg" data-i18n="cta.title">Come in. <em>Stay a while.</em></h2>
     <p data-i18n="cta.desc">Message us any time — we'll hold a room, a table, or a pint of whatever's cold.</p>
     <div class="hero-actions" style="justify-content:center;">
       <a href="rooms.html" class="btn-primary" data-i18n="cta.btn1">Book a Room</a>
-      <a href="drinks.html" class="btn-ghost" data-i18n="cta.btn2">See the drinks list</a>
+      <a href="drinks.php" class="btn-ghost" data-i18n="cta.btn2">See the drinks list</a>
     </div>
   </div>
 </section>
@@ -446,9 +484,9 @@
     </div>
     <div class="footer-col">
       <h4 data-i18n="footer.explore">Explore</h4>
-      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="index.php" data-i18n="nav.home">Home</a>
       <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
-      <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+      <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
       <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
     </div>
     <div class="footer-col">

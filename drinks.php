@@ -1,3 +1,19 @@
+<?php
+/*
+ * KnK Inn — drinks page.
+ *
+ * The two hero photos at the top are managed slots — Simmo can
+ * swap them via /photos.php without touching any code.
+ */
+
+require_once __DIR__ . "/includes/photo_slots_store.php";
+
+$slots = knk_slots_load();
+
+function d_src(array $slots, string $section, int $i, string $default): string {
+    return htmlspecialchars(knk_photo_src($slots, $section, $i, $default));
+}
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,18 +31,18 @@
 <!-- NAV -->
 <nav id="nav">
   <div class="nav-inner">
-    <a href="index.html" class="nav-logo">KnK Inn</a>
+    <a href="index.php" class="nav-logo">KnK Inn</a>
     <ul class="nav-links">
-      <li><a href="index.html" data-i18n="nav.home">Home</a></li>
+      <li><a href="index.php" data-i18n="nav.home">Home</a></li>
       <li><a href="rooms.html" data-i18n="nav.rooms">Rooms</a></li>
-      <li><a href="drinks.html" class="active" data-i18n="nav.drinks">Drinks</a></li>
+      <li><a href="drinks.php" class="active" data-i18n="nav.drinks">Drinks</a></li>
       <li><a href="gallery.php" data-i18n="nav.gallery">Gallery</a></li>
-      <li><a href="index.html#sports" data-i18n="nav.sports">Sports</a></li>
-      <li><a href="index.html#contact" data-i18n="nav.contact">Contact</a></li>
+      <li><a href="index.php#sports" data-i18n="nav.sports">Sports</a></li>
+      <li><a href="index.php#contact" data-i18n="nav.contact">Contact</a></li>
     </ul>
     <div class="nav-right">
       <div data-lang-switch></div>
-      <a href="index.html#contact" class="nav-cta" data-i18n="nav.book">Book</a>
+      <a href="index.php#contact" class="nav-cta" data-i18n="nav.book">Book</a>
     </div>
     <button class="hamburger" aria-label="Menu" aria-expanded="false">
       <span></span><span></span><span></span>
@@ -35,12 +51,12 @@
 </nav>
 
 <div class="mobile-menu">
-  <a href="index.html" data-i18n="nav.home">Home</a>
+  <a href="index.php" data-i18n="nav.home">Home</a>
   <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
-  <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+  <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
   <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
-  <a href="index.html#sports" data-i18n="nav.sports">Sports</a>
-  <a href="index.html#contact" data-i18n="nav.contact">Contact</a>
+  <a href="index.php#sports" data-i18n="nav.sports">Sports</a>
+  <a href="index.php#contact" data-i18n="nav.contact">Contact</a>
 </div>
 
 <!-- PAGE HEADER -->
@@ -56,8 +72,8 @@
   <div class="container">
     <div class="drinks-wrap">
       <div class="drinks-img-stack reveal">
-        <img src="assets/img/nw_69.jpg" alt="Bar">
-        <img src="assets/img/nw_56.jpg" alt="Bar detail">
+        <img src="<?= d_src($slots, 'drinks', 1, 'nw_69.jpg') ?>" alt="Bar">
+        <img src="<?= d_src($slots, 'drinks', 2, 'nw_56.jpg') ?>" alt="Bar detail">
       </div>
       <div class="drinks-categories reveal">
 
@@ -175,9 +191,9 @@
     </div>
     <div class="footer-col">
       <h4 data-i18n="footer.explore">Explore</h4>
-      <a href="index.html" data-i18n="nav.home">Home</a>
+      <a href="index.php" data-i18n="nav.home">Home</a>
       <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
-      <a href="drinks.html" data-i18n="nav.drinks">Drinks</a>
+      <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
       <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
     </div>
     <div class="footer-col">

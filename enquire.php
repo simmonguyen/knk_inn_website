@@ -43,13 +43,13 @@ function fail($msg) {
     echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Oops — KnK Inn</title>";
     echo "<link rel='stylesheet' href='assets/css/styles.css'></head><body style='padding:4rem;text-align:center;'>";
     echo "<h1>Something went wrong</h1><p>$msg</p>";
-    echo "<p><a href='index.html' class='btn-primary'>Back</a></p></body></html>";
+    echo "<p><a href='index.php' class='btn-primary'>Back</a></p></body></html>";
     exit;
 }
 
 // --- accept only POST ----------------------------------------------------
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
-    header("Location: index.html");
+    header("Location: index.php");
     exit;
 }
 

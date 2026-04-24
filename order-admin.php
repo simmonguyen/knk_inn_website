@@ -261,7 +261,7 @@ foreach ($all as $o) {
   <?php endif; ?>
 
   <p style="color:var(--muted);font-size:12px;margin-top:24px;">
-    Orders live in <code>orders.json</code>. Menu comes from <code>drinks.html</code> — edit the drinks page to change the menu.
+    Orders live in <code>orders.json</code>. Menu comes from <code>drinks.php</code> — edit the drinks page to change the menu.
   </p>
 
 </div>

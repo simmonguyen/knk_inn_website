@@ -55,4 +55,5 @@ jobs:
             config.php
             bookings.json
             assets/img/gallery-live/**
+            assets/img/slots/**
             .ftp-deploy-sync-state.json

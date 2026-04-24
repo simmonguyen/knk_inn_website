@@ -5,7 +5,7 @@
  * Rooftop ordering page.
  * Flow:
  *   1. Customer enters email → session remembers it (no verification).
- *   2. Menu is parsed from drinks.html; qty box next to each item.
+ *   2. Menu is parsed from drinks.php; qty box next to each item.
  *   3. Customer picks delivery location + optional notes → submit.
  *   4. Server creates a pending order, emails knkinnsaigon@gmail.com
  *      with a "Mark received" link for the bartender.
@@ -204,11 +204,11 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
 
 <nav id="nav">
   <div class="nav-inner">
-    <a href="index.html" class="nav-logo">KnK Inn</a>
+    <a href="index.php" class="nav-logo">KnK Inn</a>
     <ul class="nav-links">
-      <li><a href="index.html">Home</a></li>
+      <li><a href="index.php">Home</a></li>
       <li><a href="rooms.html">Rooms</a></li>
-      <li><a href="drinks.html">Drinks</a></li>
+      <li><a href="drinks.php">Drinks</a></li>
       <li><a href="gallery.php">Gallery</a></li>
       <li><a href="order.php" class="active">Order</a></li>
     </ul>

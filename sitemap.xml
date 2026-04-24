@@ -14,7 +14,7 @@
   </url>
 
   <url>
-    <loc>https://knkinn.com/index.html</loc>
+    <loc>https://knkinn.com/index.php</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
@@ -26,7 +26,7 @@
   </url>
 
   <url>
-    <loc>https://knkinn.com/drinks.html</loc>
+    <loc>https://knkinn.com/drinks.php</loc>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

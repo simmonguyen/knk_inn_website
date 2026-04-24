@@ -4,9 +4,9 @@
 
 User-agent: *
 Allow: /
-Allow: /index.html
+Allow: /index.php
 Allow: /rooms.html
-Allow: /drinks.html
+Allow: /drinks.php
 Allow: /gallery.php
 Allow: /assets/
 

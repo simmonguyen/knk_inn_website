@@ -40,8 +40,8 @@ You've got a fully static site: HTML, CSS, JS and JPEGs. No database, no backend
 ### Via cPanel File Manager
 1. Log in to your hosting control panel.
 2. Open **File Manager** and navigate to the `public_html` folder (sometimes `www` or `htdocs`).
-3. Delete any existing `index.html` there.
-4. Upload the contents of `knkinn_site/` into `public_html/` — **everything inside**, not the folder itself. So `public_html/index.html`, `public_html/assets/...` etc.
+3. Delete any existing `index.php` there.
+4. Upload the contents of `knkinn_site/` into `public_html/` — **everything inside**, not the folder itself. So `public_html/index.php`, `public_html/assets/...` etc.
 5. Visit `www.knkinn.com`. Done.
 
 ### Via FTP (if you prefer)
@@ -87,9 +87,9 @@ For a site like KnK Inn: **Netlify Drop**. Free, SSL included, no server to worr
 
 ```
 knkinn_site/
-├── index.html          — Home page
+├── index.php          — Home page
 ├── rooms.html          — Accommodation gallery
-├── drinks.html         — Full drinks menu
+├── drinks.php         — Full drinks menu
 ├── gallery.html        — All 92 photos with category filters
 ├── HOSTING.md          — This file
 └── assets/
