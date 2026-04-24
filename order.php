@@ -20,6 +20,20 @@ require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
 require_once __DIR__ . "/includes/guests_store.php";
 
+/* Phase 6 — Stay logged in:
+ * Remember the guest's email across visits via a 90-day cookie so they
+ * don't have to re-type it every time. Session carries it within a visit;
+ * this cookie re-seeds the session on the next visit. */
+define("KNK_GUEST_COOKIE",     "knk_guest_email");
+define("KNK_GUEST_COOKIE_TTL", 90 * 24 * 60 * 60);  // 90 days
+
+if (empty($_SESSION["order_email"]) && !empty($_COOKIE[KNK_GUEST_COOKIE])) {
+    $_remembered = strtolower(trim((string)$_COOKIE[KNK_GUEST_COOKIE]));
+    if (filter_var($_remembered, FILTER_VALIDATE_EMAIL)) {
+        $_SESSION["order_email"] = $_remembered;
+    }
+}
+
 /* Build the site URL from the current request so local tests link
    to localhost and production orders link to knkinn.com. */
 $_scheme  = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off") ? "https" : "http";
@@ -36,6 +50,17 @@ $confirm_order = null;
 /* ---- Logout / change email ---- */
 if (($_GET["logout"] ?? "") !== "") {
     unset($_SESSION["order_email"]);
+    if (isset($_COOKIE[KNK_GUEST_COOKIE])) {
+        $secure = !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off";
+        setcookie(KNK_GUEST_COOKIE, "", [
+            "expires"  => time() - 3600,
+            "path"     => "/",
+            "secure"   => $secure,
+            "httponly" => true,
+            "samesite" => "Lax",
+        ]);
+        unset($_COOKIE[KNK_GUEST_COOKIE]);
+    }
     redirect("order.php");
 }
 
@@ -46,6 +71,15 @@ if (($_POST["action"] ?? "") === "login") {
         $flash = "That email doesn't look right. Try again.";
     } else {
         $_SESSION["order_email"] = $email;
+        // Remember across visits for 90 days.
+        $secure = !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off";
+        setcookie(KNK_GUEST_COOKIE, $email, [
+            "expires"  => time() + KNK_GUEST_COOKIE_TTL,
+            "path"     => "/",
+            "secure"   => $secure,
+            "httponly" => true,
+            "samesite" => "Lax",
+        ]);
         redirect("order.php");
     }
 }
