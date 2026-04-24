@@ -8,8 +8,10 @@
 
 session_start();
 
-/* ---- Config ---- */
-const PHOTOS_PASSWORD = 'Knk@070475';                 // Simmo's password (same as FTP — his choice)
+/* ---- Config ----
+   Password lives in config.php (gitignored) — same key as the admin pages. */
+$_CFG = @include __DIR__ . '/config.php';
+define('PHOTOS_PASSWORD', is_array($_CFG) && !empty($_CFG['admin_password']) ? $_CFG['admin_password'] : '');
 const PHOTOS_DIR      = __DIR__ . '/assets/img/gallery-live';
 const PHOTOS_URL      = 'assets/img/gallery-live';    // relative from site root
 const MAX_UPLOAD      = 15 * 1024 * 1024;             // 15 MB cap per file (post-resize it'll be much smaller)

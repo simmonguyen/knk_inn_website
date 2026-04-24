@@ -10,8 +10,11 @@ session_start();
 
 require_once __DIR__ . "/includes/bookings_store.php";
 
-/* ---- Config ---- */
-const ADMIN_PASSWORD = "Knk@070475";   // same password Simmo uses elsewhere
+/* ---- Config ----
+   Admin password lives in config.php (gitignored) so it never enters git.
+   config.php returns [ ..., "admin_password" => "..." ]. */
+$_CFG = @include __DIR__ . "/config.php";
+define("ADMIN_PASSWORD", is_array($_CFG) && !empty($_CFG["admin_password"]) ? $_CFG["admin_password"] : "");
 const ROOMS = [
     "standard-nowindow" => "Standard (no window)",
     "standard-balcony"  => "Standard with balcony",

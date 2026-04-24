@@ -14,6 +14,10 @@ return [
     // Where enquiries land (Simmo's inbox)
     "to_email"   => "knkinnsaigon@gmail.com",
 
+    // Shared password for bookings.php, order-admin.php, photos.php.
+    // Pick something strong — this protects the staff dashboards.
+    "admin_password" => "change-me-before-going-live",
+
     // SMTP credentials — Gmail
     "smtp" => [
         "host"      => "smtp.gmail.com",

@@ -16,7 +16,9 @@ session_start();
 require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
 
-const ADMIN_PASSWORD = "Knk@070475";   // same password as bookings.php
+/* Password lives in config.php (gitignored). Shared with bookings.php. */
+$_CFG = @include __DIR__ . "/config.php";
+define("ADMIN_PASSWORD", is_array($_CFG) && !empty($_CFG["admin_password"]) ? $_CFG["admin_password"] : "");
 
 function is_admin(): bool { return !empty($_SESSION["admin_ok"]); }
 
