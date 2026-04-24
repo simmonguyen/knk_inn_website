@@ -194,13 +194,14 @@ function knk_role_home(string $role): string {
 
 /** Which pages should each role see in the nav bar? */
 function knk_role_nav(string $role): array {
-    $bookings = ["href" => "/bookings.php",    "label" => "Bookings"];
-    $orders   = ["href" => "/order-admin.php", "label" => "Orders"];
-    $photos   = ["href" => "/photos.php",      "label" => "Photos"];
-    $users    = ["href" => "/users.php",       "label" => "Users"];
+    $bookings = ["href" => "/bookings.php",                "label" => "Bookings"];
+    $orders   = ["href" => "/order-admin.php",             "label" => "Orders"];
+    $guests   = ["href" => "/bookings.php?tab=guests",     "label" => "Guests"];
+    $photos   = ["href" => "/photos.php",                  "label" => "Photos"];
+    $users    = ["href" => "/users.php",                   "label" => "Users"];
     switch ($role) {
-        case "super_admin": return [$bookings, $orders, $photos, $users];
-        case "owner":       return [$bookings, $orders, $photos];
+        case "super_admin": return [$bookings, $orders, $guests, $photos, $users];
+        case "owner":       return [$bookings, $orders, $guests, $photos];
         case "reception":   return [$bookings];
         case "bartender":   return [$orders];
         default:            return [];
@@ -298,7 +299,11 @@ function knk_render_admin_nav(array $me): void {
     $name  = htmlspecialchars($me["name"]);
     $role  = htmlspecialchars(knk_role_label($me["role"]));
     $links = knk_role_nav($me["role"]);
-    $current = $_SERVER["SCRIPT_NAME"] ?? "";
+    $current_script = $_SERVER["SCRIPT_NAME"] ?? "";
+    // For query-string-aware active-state (e.g. bookings.php?tab=guests),
+    // pick out the tab/filter keys from the current URL.
+    $current_tab    = $_GET["tab"]    ?? "";
+    $current_filter = $_GET["filter"] ?? "";
     ?>
     <nav class="knk-admin-nav">
       <div class="knk-admin-nav__brand">
@@ -306,8 +311,22 @@ function knk_render_admin_nav(array $me): void {
       </div>
       <div class="knk-admin-nav__links">
         <?php foreach ($links as $l):
-            $needle = ltrim($l["href"], "/");
-            $active = (substr($current, -strlen($needle)) === $needle) ? " is-active" : ""; ?>
+            // Split href into path + query so we can match both parts.
+            $href = $l["href"];
+            $qs_pos = strpos($href, "?");
+            $link_path = $qs_pos === false ? $href : substr($href, 0, $qs_pos);
+            $link_tab  = "";
+            if ($qs_pos !== false) {
+                parse_str(substr($href, $qs_pos + 1), $link_qs);
+                $link_tab = $link_qs["tab"] ?? "";
+            }
+            $path_needle = ltrim($link_path, "/");
+            $path_match  = (substr($current_script, -strlen($path_needle)) === $path_needle);
+            // Same path — match only if the tabs agree.
+            $tab_match = ($link_tab === "" && $current_tab === "")
+                      || ($link_tab !== "" && $link_tab === $current_tab);
+            $active = ($path_match && $tab_match) ? " is-active" : "";
+            ?>
           <a class="knk-admin-nav__link<?= $active ?>" href="<?= htmlspecialchars($l["href"]) ?>">
             <?= htmlspecialchars($l["label"]) ?>
           </a>

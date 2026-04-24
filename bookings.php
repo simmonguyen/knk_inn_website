@@ -9,9 +9,13 @@
 
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/bookings_store.php";
+require_once __DIR__ . "/includes/guests_store.php";
 
-/* Bookings are for Super Admin, Owner, and Reception. */
+/* Bookings are for Super Admin, Owner, and Reception.
+ * The Guests tab (V2 Phase 3) is further restricted to Super Admin + Owner
+ * — reception will be redirected back to the Bookings tab if they try it. */
 $me = knk_require_role(["super_admin", "owner", "reception"]);
+$can_see_guests = in_array($me["role"], ["super_admin", "owner"], true);
 
 const ROOMS = [
     "standard-nowindow" => "Standard (no window)",
@@ -81,50 +85,99 @@ if (($_POST["action"] ?? "") === "delete") {
     exit;
 }
 
+/* ---------- Action: save guest notes (Guests tab) ---------- */
+if (($_POST["action"] ?? "") === "guest_notes" && $can_see_guests) {
+    $gid   = (int)($_POST["guest_id"] ?? 0);
+    $notes = (string)($_POST["notes"] ?? "");
+    if ($gid > 0) {
+        $ok = knk_guest_update_notes($gid, $notes, (int)$me["id"]);
+        $flash = $ok ? "Notes saved." : "Couldn't save notes.";
+        header("Location: bookings.php?tab=guests&id=" . $gid . "&msg=" . urlencode($flash));
+        exit;
+    }
+}
+
 $flash_msg = $_GET["msg"] ?? "";
 
-/* ---------- Load data for the dashboard ---------- */
-$all = bookings_list_all(true);  // auto-expires stale pending
+/* ---------- Tab routing (V2 Phase 3 — Guests) ---------- */
+$tab = $_GET["tab"] ?? "bookings";
+if ($tab !== "bookings" && $tab !== "guests") $tab = "bookings";
 
+// Reception can't see Guests — bounce back to Bookings.
+if ($tab === "guests" && !$can_see_guests) {
+    header("Location: bookings.php");
+    exit;
+}
+
+// Guest-tab data (list OR single-profile depending on ?id).
+$guests_rows      = [];
+$guests_q         = "";
+$guest_detail     = null;   // guest row from DB
+$guest_bookings   = [];
+$guest_orders     = [];
+if ($tab === "guests") {
+    $guest_id_arg = (int)($_GET["id"] ?? 0);
+    if ($guest_id_arg > 0) {
+        $guest_detail = knk_guest_get($guest_id_arg);
+        if ($guest_detail) {
+            // Refresh cached counters so the profile always reflects
+            // the current JSON stores — cheap, and keeps the list in
+            // sync with whatever the admin sees on the profile.
+            knk_guest_refresh_stats($guest_id_arg);
+            $guest_detail   = knk_guest_get($guest_id_arg);
+            $guest_bookings = knk_guest_bookings_for_email((string)$guest_detail["email"]);
+            $guest_orders   = knk_guest_orders_for_email((string)$guest_detail["email"]);
+        }
+    } else {
+        $guests_q    = trim((string)($_GET["q"] ?? ""));
+        $guests_rows = knk_guests_list($guests_q, 200);
+    }
+}
+
+/* ---------- Load data for the dashboard ---------- */
 $now = time();
 $today_ymd = date("Y-m-d", $now);
 $totalRooms = knk_total_rooms();   // 7 physical rooms
 
 $pending   = [];
-$upcoming  = [];   // confirmed with checkout >= today
-$past      = [];   // status confirmed|declined|expired with checkout < today
-foreach ($all as $h) {
-    $status = $h["status"] ?? "pending";
-    $co = strtotime($h["checkout"] ?? "");
-    if ($status === "pending") {
-        $pending[] = $h;
-    } elseif ($status === "confirmed" && $co && $co >= $now) {
-        $upcoming[] = $h;
-    } else {
-        // confirmed past, declined, expired → history
-        $past[] = $h;
-    }
-}
-// sort upcoming by checkin ascending (nearest first)
-usort($upcoming, function ($a, $b) { return strtotime($a["checkin"]) <=> strtotime($b["checkin"]); });
-// limit history to most recent 50 to keep the page light
-$past = array_slice($past, 0, 50);
-
-/* ---------- Build unified occupancy map: [Y-m-d] = int count across all rooms ---------- */
+$upcoming  = [];
+$past      = [];
 $occupancy = []; // ymd => count
 $dayGuests = []; // ymd => [ "Name (room-label)", ... ]  for tooltip
-foreach ($all as $h) {
-    $s = $h["status"] ?? "pending";
-    if ($s === "declined" || $s === "expired") continue;
-    if ($s === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
-    $start = strtotime($h["checkin"] ?? "");
-    $end   = strtotime($h["checkout"] ?? "");
-    if (!$start || !$end) continue;
-    $label = ($h["guest"]["name"] ?? "?") . " (" . (ROOMS[$h["room"] ?? ""] ?? ($h["room"] ?? "")) . ")";
-    for ($t = $start; $t < $end; $t += 86400) {
-        $d = date("Y-m-d", $t);
-        $occupancy[$d] = ($occupancy[$d] ?? 0) + 1;
-        $dayGuests[$d][] = $label;
+
+if ($tab === "bookings") {
+    $all = bookings_list_all(true);  // auto-expires stale pending
+    foreach ($all as $h) {
+        $status = $h["status"] ?? "pending";
+        $co = strtotime($h["checkout"] ?? "");
+        if ($status === "pending") {
+            $pending[] = $h;
+        } elseif ($status === "confirmed" && $co && $co >= $now) {
+            $upcoming[] = $h;
+        } else {
+            // confirmed past, declined, expired → history
+            $past[] = $h;
+        }
+    }
+    // sort upcoming by checkin ascending (nearest first)
+    usort($upcoming, function ($a, $b) { return strtotime($a["checkin"]) <=> strtotime($b["checkin"]); });
+    // limit history to most recent 50 to keep the page light
+    $past = array_slice($past, 0, 50);
+
+    /* ---------- Build unified occupancy map: [Y-m-d] = int count across all rooms ---------- */
+    foreach ($all as $h) {
+        $s = $h["status"] ?? "pending";
+        if ($s === "declined" || $s === "expired") continue;
+        if ($s === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
+        $start = strtotime($h["checkin"] ?? "");
+        $end   = strtotime($h["checkout"] ?? "");
+        if (!$start || !$end) continue;
+        $label = ($h["guest"]["name"] ?? "?") . " (" . (ROOMS[$h["room"] ?? ""] ?? ($h["room"] ?? "")) . ")";
+        for ($t = $start; $t < $end; $t += 86400) {
+            $d = date("Y-m-d", $t);
+            $occupancy[$d] = ($occupancy[$d] ?? 0) + 1;
+            $dayGuests[$d][] = $label;
+        }
     }
 }
 
@@ -390,6 +443,126 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
 
     .footnote { color: var(--cream-faint); font-size: 0.78rem; margin-top: 1rem; line-height: 1.5; }
     .footnote code { background: rgba(0,0,0,0.3); padding: 1px 5px; border-radius: 2px; font-size: 0.82em; }
+
+    /* ---------- Tab switcher (Bookings / Guests) ---------- */
+    .tab-row {
+      display: flex; gap: 0.4rem; border-bottom: 1px solid rgba(201,170,113,0.25);
+      margin: 0 0 1.5rem 0;
+    }
+    .tab-row a {
+      color: var(--cream-dim); text-decoration: none; padding: 0.55rem 1.1rem;
+      border-radius: 6px 6px 0 0; font-weight: 600; font-size: 0.92rem;
+      border: 1px solid transparent; border-bottom: none;
+      background: rgba(255,255,255,0.02);
+    }
+    .tab-row a:hover { color: var(--cream); background: rgba(201,170,113,0.08); }
+    .tab-row a.is-active {
+      color: var(--brown-deep, #2a1a08); background: var(--gold, #c9aa71);
+      border-color: var(--gold, #c9aa71);
+    }
+
+    /* ---------- Guests tab ---------- */
+    .guests-search {
+      display: flex; gap: 0.6rem; margin-bottom: 1.2rem; align-items: center;
+    }
+    .guests-search input[type=search] {
+      flex: 1; padding: 0.55rem 0.8rem; font-size: 0.95rem;
+      background: rgba(0,0,0,0.3); color: var(--cream); font-family: inherit;
+      border: 1px solid rgba(201,170,113,0.28); border-radius: 4px;
+    }
+    .guests-search input[type=search]:focus {
+      outline: none; border-color: var(--gold, #c9aa71);
+    }
+    .guests-search button {
+      padding: 0.55rem 1rem; background: var(--gold, #c9aa71);
+      color: var(--brown-deep, #2a1a08); border: none; border-radius: 4px;
+      font-weight: 600; cursor: pointer;
+    }
+    .guests-search .clear-link {
+      color: var(--cream-faint); text-decoration: none; font-size: 0.85rem;
+    }
+    .guests-search .clear-link:hover { color: var(--cream); }
+
+    .guests-table {
+      width: 100%; border-collapse: collapse; font-size: 0.9rem;
+    }
+    .guests-table th, .guests-table td {
+      padding: 0.6rem 0.7rem; text-align: left;
+      border-bottom: 1px solid rgba(201,170,113,0.1);
+    }
+    .guests-table th {
+      font-size: 0.68rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: var(--cream-faint); font-weight: 600;
+    }
+    .guests-table td { color: var(--cream-dim); }
+    .guests-table tr:hover td { background: rgba(201,170,113,0.04); }
+    .guests-table td.name { color: var(--cream); font-weight: 600; }
+    .guests-table td.num  { text-align: right; font-variant-numeric: tabular-nums; }
+    .guests-table a.row-link {
+      color: var(--gold, #c9aa71); text-decoration: none; font-weight: 600;
+    }
+    .guests-table a.row-link:hover { text-decoration: underline; }
+    .guests-table .no-rows {
+      text-align: center; padding: 2rem; color: var(--cream-faint);
+    }
+
+    /* Guest profile */
+    .g-profile { display: grid; gap: 1.5rem; grid-template-columns: 1fr; }
+    @media (min-width: 920px) {
+      .g-profile { grid-template-columns: 320px 1fr; }
+    }
+    .g-card {
+      background: rgba(255,255,255,0.03); border: 1px solid rgba(201,170,113,0.18);
+      border-radius: 6px; padding: 1.2rem;
+    }
+    .g-card h3 {
+      margin: 0 0 0.8rem 0; font-size: 0.78rem;
+      letter-spacing: 0.18em; text-transform: uppercase;
+      color: var(--cream-faint); font-weight: 600;
+    }
+    .g-contact p { margin: 0.25rem 0; color: var(--cream-dim); font-size: 0.92rem; }
+    .g-contact .big-name { color: var(--cream); font-size: 1.2rem; font-weight: 600; margin-bottom: 0.4rem; }
+    .g-contact a { color: var(--gold, #c9aa71); text-decoration: none; }
+    .g-contact a:hover { text-decoration: underline; }
+
+    .g-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 1rem; }
+    .g-stat {
+      background: rgba(0,0,0,0.25); padding: 0.7rem; border-radius: 4px;
+    }
+    .g-stat .n  { color: var(--gold, #c9aa71); font-size: 1.4rem; font-weight: 700; font-family: "Archivo Black", sans-serif; }
+    .g-stat .l  { color: var(--cream-faint); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
+
+    .g-notes textarea {
+      width: 100%; min-height: 120px; background: rgba(0,0,0,0.3);
+      color: var(--cream); border: 1px solid rgba(201,170,113,0.28);
+      border-radius: 4px; padding: 0.6rem; font-family: inherit; font-size: 0.9rem;
+      resize: vertical;
+    }
+    .g-notes textarea:focus { outline: none; border-color: var(--gold, #c9aa71); }
+    .g-notes .save-row { display: flex; justify-content: flex-end; margin-top: 0.6rem; }
+    .g-notes button {
+      padding: 0.45rem 1.1rem; background: var(--gold, #c9aa71);
+      color: var(--brown-deep, #2a1a08); border: none; border-radius: 4px;
+      font-weight: 600; cursor: pointer;
+    }
+
+    .g-list h3 { margin-top: 0; }
+    .g-list ul { list-style: none; padding: 0; margin: 0; }
+    .g-list li {
+      padding: 0.55rem 0; border-bottom: 1px solid rgba(201,170,113,0.08);
+      font-size: 0.9rem; color: var(--cream-dim);
+      display: flex; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap;
+    }
+    .g-list li:last-child { border-bottom: none; }
+    .g-list li .lhs { color: var(--cream); font-weight: 600; }
+    .g-list li .rhs { color: var(--cream-faint); font-size: 0.82rem; white-space: nowrap; }
+    .g-list .empty { color: var(--cream-faint); font-style: italic; padding: 0.6rem 0; }
+
+    .back-link {
+      color: var(--gold, #c9aa71); text-decoration: none;
+      font-size: 0.88rem; display: inline-block; margin-bottom: 1rem;
+    }
+    .back-link:hover { text-decoration: underline; }
   </style>
 </head>
 <body>
@@ -399,16 +572,27 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
   <header class="bar">
     <div class="title">
       <span class="eyebrow">Staff only</span>
-      <h1 class="display-md">Bookings <em>admin</em></h1>
+      <h1 class="display-md">
+        <?= $tab === "guests" ? "Guests" : "Bookings" ?> <em>admin</em>
+      </h1>
     </div>
     <div class="actions">
       <a class="btn-mini" href="index.php" target="_blank">View site</a>
     </div>
   </header>
 
+  <?php if ($can_see_guests): ?>
+    <div class="tab-row">
+      <a href="bookings.php"            class="<?= $tab === "bookings" ? "is-active" : "" ?>">Bookings</a>
+      <a href="bookings.php?tab=guests" class="<?= $tab === "guests"   ? "is-active" : "" ?>">Guests</a>
+    </div>
+  <?php endif; ?>
+
   <?php if ($flash_msg): ?>
     <div class="flash"><?= h($flash_msg) ?></div>
   <?php endif; ?>
+
+  <?php if ($tab === "bookings"): ?>
 
   <!-- ============================================================ -->
   <!-- PENDING -->
@@ -644,6 +828,203 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
     <p style="word-break:break-all;"><code style="background:rgba(0,0,0,0.3);padding:4px 8px;border-radius:3px;font-size:0.82rem;color:var(--gold);"><?= h($icsUrl) ?></code></p>
   </section>
   <?php endif; ?>
+
+  <?php // --------------------- END bookings tab --------------------- ?>
+
+  <?php elseif ($tab === "guests"): ?>
+
+  <?php if ($guest_detail): /* ========= SINGLE GUEST PROFILE ========= */ ?>
+    <a class="back-link" href="bookings.php?tab=guests">← Back to all guests</a>
+    <div class="g-profile">
+      <!-- Left column: contact + stats + notes -->
+      <div>
+        <div class="g-card g-contact">
+          <h3>Contact</h3>
+          <div class="big-name">
+            <?= h($guest_detail["name"] ?: "(no name yet)") ?>
+          </div>
+          <p><a href="mailto:<?= h($guest_detail["email"]) ?>"><?= h($guest_detail["email"]) ?></a></p>
+          <?php if (!empty($guest_detail["phone"])): ?>
+            <p><a href="tel:<?= h($guest_detail["phone"]) ?>"><?= h($guest_detail["phone"]) ?></a></p>
+          <?php endif; ?>
+          <p style="color:var(--cream-faint);font-size:0.8rem;margin-top:0.6rem;">
+            First seen <?= h(fmt_date((string)($guest_detail["first_seen_at"] ?? ""))) ?>
+            <?php if (!empty($guest_detail["last_seen_at"])): ?>
+              · last seen <?= h(fmt_date((string)$guest_detail["last_seen_at"])) ?>
+            <?php endif; ?>
+          </p>
+
+          <div class="g-stats">
+            <div class="g-stat">
+              <div class="n"><?= (int)$guest_detail["bookings_count"] ?></div>
+              <div class="l">Bookings</div>
+            </div>
+            <div class="g-stat">
+              <div class="n"><?= (int)$guest_detail["orders_count"] ?></div>
+              <div class="l">Drink orders</div>
+            </div>
+            <div class="g-stat" style="grid-column: span 2;">
+              <div class="n"><?= h(knk_fmt_vnd((int)$guest_detail["total_vnd"])) ?></div>
+              <div class="l">Total spend</div>
+            </div>
+            <?php if (!empty($guest_detail["favourite_item"])): ?>
+              <div class="g-stat" style="grid-column: span 2;">
+                <div class="n" style="font-size:1rem;font-family:'Inter',sans-serif;font-weight:600;">
+                  <?= h($guest_detail["favourite_item"]) ?>
+                </div>
+                <div class="l">Favourite order</div>
+              </div>
+            <?php endif; ?>
+            <?php if (!empty($guest_detail["favourite_day"])): ?>
+              <div class="g-stat" style="grid-column: span 2;">
+                <div class="n" style="font-size:1rem;font-family:'Inter',sans-serif;font-weight:600;">
+                  <?= h($guest_detail["favourite_day"]) ?>
+                </div>
+                <div class="l">Usual day</div>
+              </div>
+            <?php endif; ?>
+          </div>
+        </div>
+
+        <div class="g-card g-notes" style="margin-top:1rem;">
+          <h3>Notes</h3>
+          <form method="post">
+            <input type="hidden" name="action"   value="guest_notes">
+            <input type="hidden" name="guest_id" value="<?= (int)$guest_detail["id"] ?>">
+            <textarea name="notes" placeholder="Anything worth remembering — allergies, usual room, birthday, VIP perks&hellip;"><?= h((string)($guest_detail["notes"] ?? "")) ?></textarea>
+            <div class="save-row"><button type="submit">Save notes</button></div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Right column: bookings + orders lists -->
+      <div>
+        <div class="g-card g-list">
+          <h3>Bookings (<?= count($guest_bookings) ?>)</h3>
+          <?php if (empty($guest_bookings)): ?>
+            <p class="empty">No bookings on record.</p>
+          <?php else: ?>
+            <ul>
+              <?php foreach ($guest_bookings as $b):
+                $room_label = ROOMS[$b["room"] ?? ""] ?? ($b["room"] ?? "");
+                $nights = (int)($b["nights"] ?? 0);
+                $ppn    = (int)($b["price_vnd_per_night"] ?? 0);
+                $total  = $ppn * $nights;
+                $status = (string)($b["status"] ?? "pending");
+              ?>
+                <li>
+                  <span class="lhs">
+                    <?= h(fmt_date((string)($b["checkin"] ?? ""))) ?> → <?= h(fmt_date((string)($b["checkout"] ?? ""))) ?>
+                    <span style="color:var(--cream-dim);font-weight:400;"> · <?= h($room_label) ?></span>
+                    <span class="pill <?= h($status) ?>" style="margin-left:6px;"><?= h($status) ?></span>
+                  </span>
+                  <span class="rhs">
+                    <?= $nights ?> night<?= $nights === 1 ? "" : "s" ?>
+                    <?php if ($total > 0): ?> · <?= h(knk_fmt_vnd($total)) ?><?php endif; ?>
+                  </span>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
+        </div>
+
+        <div class="g-card g-list" style="margin-top:1rem;">
+          <h3>Drink orders (<?= count($guest_orders) ?>)</h3>
+          <?php if (empty($guest_orders)): ?>
+            <p class="empty">No drink orders on record.</p>
+          <?php else: ?>
+            <ul>
+              <?php foreach ($guest_orders as $o):
+                $created = (int)($o["created_at"] ?? 0);
+                $items   = $o["items"] ?? [];
+                $summary = [];
+                foreach ($items as $it) {
+                    $summary[] = ($it["qty"] ?? 1) . "× " . ($it["name"] ?? "?");
+                }
+                $summary_str = implode(", ", $summary);
+                $status = (string)($o["status"] ?? "pending");
+              ?>
+                <li>
+                  <span class="lhs">
+                    <?= h(fmt_datetime($created)) ?>
+                    <span class="pill <?= h($status) ?>" style="margin-left:6px;"><?= h($status) ?></span>
+                    <div style="color:var(--cream-dim);font-weight:400;font-size:0.82rem;margin-top:0.2rem;">
+                      <?= h($summary_str) ?>
+                      <?php if (!empty($o["location"])): ?>
+                        · <?= h($o["location"]) ?>
+                        <?php if (!empty($o["room_number"])): ?> #<?= h($o["room_number"]) ?><?php endif; ?>
+                      <?php endif; ?>
+                    </div>
+                  </span>
+                  <span class="rhs"><?= h(knk_fmt_vnd((int)($o["total_vnd"] ?? 0))) ?></span>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          <?php endif; ?>
+        </div>
+      </div>
+    </div>
+
+  <?php else: /* ========= GUEST LIST ========= */ ?>
+    <section class="panel">
+      <form method="get" class="guests-search">
+        <input type="hidden" name="tab" value="guests">
+        <input type="search" name="q" value="<?= h($guests_q) ?>" placeholder="Search by name, email, or phone…">
+        <button type="submit">Search</button>
+        <?php if ($guests_q !== ""): ?>
+          <a class="clear-link" href="bookings.php?tab=guests">Clear</a>
+        <?php endif; ?>
+      </form>
+
+      <?php if (empty($guests_rows)): ?>
+        <div class="empty">
+          <?= $guests_q !== "" ? "No guests match \"" . h($guests_q) . "\"." : "No guests yet — profiles build up as enquiries and orders come in." ?>
+        </div>
+      <?php else: ?>
+        <div class="history-wrap">
+          <table class="guests-table">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Phone</th>
+                <th class="num">Bookings</th>
+                <th class="num">Drink orders</th>
+                <th class="num">Spend</th>
+                <th>Last seen</th>
+              </tr>
+            </thead>
+            <tbody>
+              <?php foreach ($guests_rows as $g):
+                $link = "bookings.php?tab=guests&id=" . (int)$g["id"];
+              ?>
+                <tr>
+                  <td class="name">
+                    <a class="row-link" href="<?= h($link) ?>">
+                      <?= h($g["name"] ?: "(no name)") ?>
+                    </a>
+                  </td>
+                  <td><?= h($g["email"]) ?></td>
+                  <td><?= h($g["phone"] ?? "") ?></td>
+                  <td class="num"><?= (int)$g["bookings_count"] ?></td>
+                  <td class="num"><?= (int)$g["orders_count"] ?></td>
+                  <td class="num"><?= h(knk_fmt_vnd((int)$g["total_vnd"])) ?></td>
+                  <td style="font-size:0.82rem;">
+                    <?php
+                      $ls = $g["last_seen_at"] ?? $g["first_seen_at"] ?? "";
+                      echo $ls ? h(fmt_date((string)$ls)) : "—";
+                    ?>
+                  </td>
+                </tr>
+              <?php endforeach; ?>
+            </tbody>
+          </table>
+        </div>
+      <?php endif; ?>
+    </section>
+  <?php endif; ?>
+
+  <?php endif; /* end tab branches */ ?>
 
 </div>
 </body>

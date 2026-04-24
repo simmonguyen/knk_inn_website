@@ -18,6 +18,7 @@ session_start();
 
 require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
+require_once __DIR__ . "/includes/guests_store.php";
 
 /* Build the site URL from the current request so local tests link
    to localhost and production orders link to knkinn.com. */
@@ -108,6 +109,12 @@ if (($_POST["action"] ?? "") === "place_order") {
 
             /* Fire the bartender email (best-effort — don't block the customer) */
             @knk_email_bar_new_order($order, $SITE_URL);
+
+            /* V2 Phase 3: upsert guest + refresh cached stats. Swallows
+             * its own errors so a guests-table issue never blocks the
+             * bartender flow. */
+            $gid = knk_guest_upsert($email);
+            if ($gid) knk_guest_refresh_stats($gid);
 
             $confirm_order = $order;
         }

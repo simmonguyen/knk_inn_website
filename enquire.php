@@ -27,6 +27,7 @@ $CFG = require $configPath;
 require_once __DIR__ . "/includes/smtp_send.php";
 require_once __DIR__ . "/includes/bookings_store.php";
 require_once __DIR__ . "/includes/email_template.php";
+require_once __DIR__ . "/includes/guests_store.php";
 
 $TO_EMAIL    = $CFG["to_email"]    ?? "knkinnsaigon@gmail.com";
 $SITE_URL    = "https://knkinn.com";
@@ -118,6 +119,12 @@ if ($type === "booking") {
         error_log("KnK booking error: " . $e->getMessage());
         fail("Something went wrong saving your booking. Please try again.");
     }
+
+    // Upsert guest record + refresh cached stats (V2 Phase 3).
+    // Swallows its own errors — a guests-table hiccup must never
+    // break the booking flow.
+    $gid = knk_guest_upsert($email, $name, $phone);
+    if ($gid) knk_guest_refresh_stats($gid);
 
     // Build Simmo's email
     $roomLabels = [
