@@ -197,11 +197,12 @@ function knk_role_nav(string $role): array {
     $bookings = ["href" => "/bookings.php",                "label" => "Bookings"];
     $orders   = ["href" => "/order-admin.php",             "label" => "Orders"];
     $guests   = ["href" => "/bookings.php?tab=guests",     "label" => "Guests"];
+    $sales    = ["href" => "/sales.php",                   "label" => "Sales"];
     $photos   = ["href" => "/photos.php",                  "label" => "Photos"];
     $users    = ["href" => "/users.php",                   "label" => "Users"];
     switch ($role) {
-        case "super_admin": return [$bookings, $orders, $guests, $photos, $users];
-        case "owner":       return [$bookings, $orders, $guests, $photos];
+        case "super_admin": return [$bookings, $orders, $guests, $sales, $photos, $users];
+        case "owner":       return [$bookings, $orders, $guests, $sales, $photos];
         case "reception":   return [$bookings];
         case "bartender":   return [$orders];
         default:            return [];
