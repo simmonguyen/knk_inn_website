@@ -44,7 +44,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
 /* Only bounce to same-origin paths — never blindly trust ?next=. */
 function knk_safe_next(string $next, string $role): string {
-    if ($next === "" || $next[0] !== "/" || str_starts_with($next, "//")) {
+    if ($next === "" || $next[0] !== "/" || substr($next, 0, 2) === "//") {
         return knk_role_home($role);
     }
     // Don't loop back to login / logout / setup.

@@ -188,10 +188,8 @@ function knk_role_label(string $role): string {
 
 /** Where should this role land after login? */
 function knk_role_home(string $role): string {
-    return match ($role) {
-        "bartender" => "/order-admin.php",
-        default     => "/bookings.php",
-    };
+    if ($role === "bartender") return "/order-admin.php";
+    return "/bookings.php";
 }
 
 /** Which pages should each role see in the nav bar? */
@@ -200,13 +198,13 @@ function knk_role_nav(string $role): array {
     $orders   = ["href" => "/order-admin.php", "label" => "Orders"];
     $photos   = ["href" => "/photos.php",      "label" => "Photos"];
     $users    = ["href" => "/users.php",       "label" => "Users"];
-    return match ($role) {
-        "super_admin" => [$bookings, $orders, $photos, $users],
-        "owner"       => [$bookings, $orders, $photos],
-        "reception"   => [$bookings],
-        "bartender"   => [$orders],
-        default       => [],
-    };
+    switch ($role) {
+        case "super_admin": return [$bookings, $orders, $photos, $users];
+        case "owner":       return [$bookings, $orders, $photos];
+        case "reception":   return [$bookings];
+        case "bartender":   return [$orders];
+        default:            return [];
+    }
 }
 
 /* --------------------------------------------------------------------
@@ -308,7 +306,8 @@ function knk_render_admin_nav(array $me): void {
       </div>
       <div class="knk-admin-nav__links">
         <?php foreach ($links as $l):
-            $active = (str_ends_with($current, ltrim($l["href"], "/"))) ? " is-active" : ""; ?>
+            $needle = ltrim($l["href"], "/");
+            $active = (substr($current, -strlen($needle)) === $needle) ? " is-active" : ""; ?>
           <a class="knk-admin-nav__link<?= $active ?>" href="<?= htmlspecialchars($l["href"]) ?>">
             <?= htmlspecialchars($l["label"]) ?>
           </a>
