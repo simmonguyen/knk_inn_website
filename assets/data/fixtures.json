@@ -1,0 +1,27 @@
+{
+  "_comment": "Upcoming sports fixtures shown on the homepage and used by the email reminder script. All kickoff times are ISO 8601 with explicit UTC offset (Z). Times are displayed to visitors in Saigon time (UTC+7) automatically.",
+  "fixtures": [
+    { "sport": "Cricket",     "title": "IPL: Mumbai Indians vs Chennai Super Kings",       "subtitle": "Wankhede Stadium",                                            "kickoff": "2026-04-21T14:00:00Z" },
+    { "sport": "Cricket",     "title": "IPL: Royal Challengers Bangalore vs Delhi Capitals", "subtitle": "M. Chinnaswamy Stadium",                                    "kickoff": "2026-04-25T14:00:00Z" },
+    { "sport": "Cricket",     "title": "IPL: Kolkata Knight Riders vs Punjab Kings",       "subtitle": "Eden Gardens",                                                "kickoff": "2026-05-02T14:00:00Z" },
+    { "sport": "Formula 1",   "title": "F1: Miami Grand Prix",                             "subtitle": "Race day",                                                    "kickoff": "2026-05-03T19:30:00Z" },
+    { "sport": "Formula 1",   "title": "F1: Emilia Romagna GP (Imola)",                    "subtitle": "Race day",                                                    "kickoff": "2026-05-17T13:00:00Z" },
+    { "sport": "Boxing",      "title": "Crawford vs Madrimov II",                          "subtitle": "Welterweight title",                                          "kickoff": "2026-04-26T03:00:00Z" },
+    { "sport": "Boxing",      "title": "Joshua vs Dubois — Heavyweight",                   "subtitle": "Wembley Stadium",                                             "kickoff": "2026-05-09T20:00:00Z" },
+    { "sport": "AFL",         "title": "Collingwood vs Essendon (Anzac Day)",              "subtitle": "MCG",                                                         "kickoff": "2026-04-25T05:20:00Z" },
+    { "sport": "AFL",         "title": "Geelong Cats vs Hawthorn",                         "subtitle": "GMHBA Stadium",                                               "kickoff": "2026-05-02T04:35:00Z" },
+    { "sport": "AFL",         "title": "Sydney Swans vs Brisbane Lions",                   "subtitle": "SCG",                                                         "kickoff": "2026-05-09T07:25:00Z" },
+    { "sport": "NRL",         "title": "Penrith Panthers vs Brisbane Broncos",             "subtitle": "BlueBet Stadium",                                             "kickoff": "2026-04-24T09:50:00Z" },
+    { "sport": "NRL",         "title": "Sydney Roosters vs Melbourne Storm",               "subtitle": "Allianz Stadium",                                             "kickoff": "2026-05-01T09:50:00Z" },
+    { "sport": "Soccer",      "title": "EPL: Liverpool vs Tottenham",                      "subtitle": "Anfield",                                                     "kickoff": "2026-04-25T14:00:00Z" },
+    { "sport": "Soccer",      "title": "EPL: Manchester City vs Aston Villa",              "subtitle": "Etihad Stadium",                                              "kickoff": "2026-04-26T15:30:00Z" },
+    { "sport": "Soccer",      "title": "UCL Semi-final: Real Madrid vs Bayern",            "subtitle": "Santiago Bernabéu",                                           "kickoff": "2026-04-29T19:00:00Z" },
+    { "sport": "Soccer",      "title": "UCL Semi-final: Arsenal vs PSG",                   "subtitle": "Emirates Stadium",                                            "kickoff": "2026-04-30T19:00:00Z" },
+    { "sport": "Rugby Union", "title": "Super Rugby: Crusaders vs Blues",                  "subtitle": "Apollo Projects Stadium",                                     "kickoff": "2026-04-25T06:35:00Z" },
+    { "sport": "Rugby Union", "title": "Super Rugby: Brumbies vs Reds",                    "subtitle": "GIO Stadium Canberra",                                        "kickoff": "2026-05-02T09:35:00Z" },
+    { "sport": "Tennis",      "title": "Madrid Open — Men\u2019s Final",                   "subtitle": "Caja Mágica",                                                 "kickoff": "2026-05-03T14:30:00Z" },
+    { "sport": "Tennis",      "title": "Italian Open begins (Rome)",                       "subtitle": "Foro Italico — week 1",                                       "kickoff": "2026-05-06T09:00:00Z" },
+    { "sport": "World Cup",   "title": "FIFA World Cup 2026 — Group Stage opens 11 Jun",   "subtitle": "Mexico City\u00A0\u2022\u00A0Hosted by USA, Canada, Mexico",   "kickoff": "2026-06-11T22:00:00Z" },
+    { "sport": "Olympics",    "title": "LA 2028 — qualifiers underway",                    "subtitle": "Multiple sports across the season",                           "kickoff": null }
+  ]
+}

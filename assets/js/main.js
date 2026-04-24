@@ -235,12 +235,41 @@
     mount.innerHTML = events.map(card).join('');
   }
 
-  // Fallback fixtures — kickoff times in ISO with explicit offsets,
-  // representing actual scheduled events. These will be displayed as
-  // SGT (UTC+7) automatically.
-  function fallbackFixtures() {
+  // Filter + sort helper — shared by JSON-fetched list and the
+  // hard-coded last-ditch fallback below. Keeps only upcoming events
+  // within the next 30 days, sorts soonest-first, caps at 14 cards.
+  function trimForDisplay(all) {
     const now = new Date();
     const horizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    return all
+      .filter(e => !e.kickoff || (new Date(e.kickoff) >= now && new Date(e.kickoff) <= horizon))
+      .sort((a, b) => {
+        if (!a.kickoff) return 1;
+        if (!b.kickoff) return -1;
+        return new Date(a.kickoff) - new Date(b.kickoff);
+      })
+      .slice(0, 14);
+  }
+
+  // Curated fixtures JSON — shared source of truth with the PHP
+  // reminder script. If the fetch fails (e.g. file missing mid-deploy)
+  // we drop through to the hard-coded fallback below.
+  async function fetchCurated() {
+    try {
+      const r = await fetch('/assets/data/fixtures.json', { cache: 'no-cache' });
+      if (!r.ok) return null;
+      const data = await r.json();
+      if (!data || !Array.isArray(data.fixtures)) return null;
+      return trimForDisplay(data.fixtures);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Hard-coded last-ditch fallback — only used if both the live API
+  // AND the curated JSON are unreachable. Keep this list short;
+  // edit the real list in /assets/data/fixtures.json.
+  function fallbackFixtures() {
     const all = [
       // Cricket — IPL 2026 fixtures (typical 7:30pm IST = 9:00pm SGT)
       { sport: 'Cricket', title: 'IPL: Mumbai Indians vs Chennai Super Kings', subtitle: 'Wankhede Stadium', kickoff: '2026-04-21T14:00:00Z' },
@@ -274,14 +303,7 @@
       { sport: 'World Cup', title: 'FIFA World Cup 2026 — Group Stage opens 11 Jun', subtitle: 'Mexico City\u00A0\u2022\u00A0Hosted by USA, Canada, Mexico', kickoff: '2026-06-11T22:00:00Z' },
       { sport: 'Olympics', title: 'LA 2028 — qualifiers underway', subtitle: 'Multiple sports across the season', kickoff: null }
     ];
-    return all
-      .filter(e => !e.kickoff || (new Date(e.kickoff) >= now && new Date(e.kickoff) <= horizon))
-      .sort((a, b) => {
-        if (!a.kickoff) return 1;
-        if (!b.kickoff) return -1;
-        return new Date(a.kickoff) - new Date(b.kickoff);
-      })
-      .slice(0, 14);
+    return trimForDisplay(all);
   }
 
   async function fetchLive() {
@@ -316,13 +338,20 @@
     return events;
   }
 
-  // Try live first; fall back if nothing returned
+  // Try live API first (today's games from TheSportsDB).
+  // If that returns nothing useful, fall back to the curated JSON list.
+  // If the JSON is unreachable too, use the inline hard-coded list.
   fetchLive()
-    .then(live => {
-      if (live && live.length >= 4) render(live);
-      else render(fallbackFixtures());
+    .then(async live => {
+      if (live && live.length >= 4) { render(live); return; }
+      const curated = await fetchCurated();
+      if (curated && curated.length) { render(curated); return; }
+      render(fallbackFixtures());
     })
-    .catch(() => render(fallbackFixtures()));
+    .catch(async () => {
+      const curated = await fetchCurated();
+      render(curated && curated.length ? curated : fallbackFixtures());
+    });
 })();
 
 /* ═══════════════════════════════════════════

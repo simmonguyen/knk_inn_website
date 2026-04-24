@@ -12,6 +12,49 @@ require_once __DIR__ . "/smtp_send.php";
 require_once __DIR__ . "/email_template.php";
 require_once __DIR__ . "/orders_store.php";
 
+/**
+ * Find the owner's preferred notification email, or null if owner
+ * alerts are turned off / no owner email is configured.
+ *
+ * Lookup order (first non-empty wins):
+ *   1. settings.owner_notification_email   (explicit override on /settings.php)
+ *   2. users.email WHERE role='owner' AND active=1  (staff-login fallback)
+ *
+ * Returns null when:
+ *   · settings.owner_order_notifications_enabled is '0'
+ *   · the DB / settings helpers aren't available (e.g. legacy JSON-only env)
+ *   · no owner account exists and no override is set
+ */
+function knk_order_owner_cc(): ?string {
+    // Defensive require — these files only exist after the V2 migration ran.
+    // If the hosting environment hasn't migrated yet, skip the CC silently.
+    $storePath = __DIR__ . "/settings_store.php";
+    if (!file_exists($storePath)) return null;
+    try {
+        require_once $storePath;
+        if (!knk_setting_bool("owner_order_notifications_enabled", true)) {
+            return null;
+        }
+        $override = trim((string)knk_setting("owner_notification_email", ""));
+        if ($override !== "" && filter_var($override, FILTER_VALIDATE_EMAIL)) {
+            return $override;
+        }
+        $stmt = knk_db()->prepare(
+            "SELECT email FROM users
+             WHERE role = 'owner' AND active = 1
+             ORDER BY id LIMIT 1"
+        );
+        $stmt->execute();
+        $row = $stmt->fetch();
+        if ($row && !empty($row["email"])) {
+            return (string)$row["email"];
+        }
+    } catch (Throwable $e) {
+        // DB unavailable or table missing — fall through to null.
+    }
+    return null;
+}
+
 function knk_order_smtp_config(): ?array {
     $configPath = __DIR__ . "/../config.php";
     if (!file_exists($configPath)) return null;
@@ -146,6 +189,16 @@ function knk_email_bar_new_order(array $order, string $siteUrl = "https://knkinn
     if (!empty($order["notes"])) $plain .= "Notes: " . $order["notes"] . "\n\n";
     $plain .= "Mark received: " . $receivedUrl . "\n";
 
+    // If the Owner has order alerts turned on, CC Simmo (or whatever
+    // address was configured on /settings.php) so he gets a copy too.
+    // Suppress the CC if it would duplicate the primary To address —
+    // e.g. same Gmail inbox used for both the bar and the owner.
+    $ccList = [];
+    $ownerCc = knk_order_owner_cc();
+    if ($ownerCc !== null && strcasecmp($ownerCc, $to) !== 0) {
+        $ccList[] = $ownerCc;
+    }
+
     $err = null;
     $ok = smtp_send([
         "host"           => $smtp["host"],
@@ -156,6 +209,7 @@ function knk_email_bar_new_order(array $order, string $siteUrl = "https://knkinn
         "from_email"     => $smtp["username"],
         "from_name"      => $smtp["from_name"] ?? "KnK Inn Website",
         "to"             => $to,
+        "cc"             => $ccList,
         "reply_to_email" => $order["email"],
         "reply_to_name"  => "KnK guest",
         "subject"        => "New order — " . $locLabel . " — " . knk_vnd((int)$order["total_vnd"]),

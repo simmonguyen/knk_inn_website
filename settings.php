@@ -1,0 +1,309 @@
+<?php
+/*
+ * KnK Inn — /settings.php
+ *
+ * Super Admin only. Two Simmo-facing toggles plus the notification
+ * email Simmo should receive things at:
+ *
+ *   1. Marketing Reminders
+ *      When ON, the daily cron script (cron/reminders.php) emails
+ *      Simmo a week before each upcoming sports fixture, one email
+ *      per match, so he can schedule social posts / cocktail specials.
+ *
+ *   2. Owner Order Alerts
+ *      When ON, every new drinks order from the website sends a
+ *      notification email to Simmo so he can keep an eye on what's
+ *      selling in real time.
+ *
+ *   3. Notification Email
+ *      The address both of the above go to. If blank, we fall back
+ *      to Simmo's staff-user email.
+ *
+ * UI notes:
+ *   · Each setting is its own tiny form with its own Save button,
+ *     so Simmo can change one thing without being forced to
+ *     re-confirm the others.
+ *   · POST-redirect-GET avoids re-submits on refresh.
+ */
+
+declare(strict_types=1);
+
+require_once __DIR__ . "/includes/auth.php";
+require_once __DIR__ . "/includes/settings_store.php";
+
+$me = knk_require_role(["super_admin"]);
+
+/* --------------------------------------------------------------------
+ * Find the owner user (if one exists) so we can show their email as
+ * the fallback when the notification-email field is blank.
+ * ------------------------------------------------------------------ */
+function knk_settings_owner_email(): ?string {
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT email FROM users
+             WHERE role = 'owner' AND active = 1
+             ORDER BY id LIMIT 1"
+        );
+        $stmt->execute();
+        $row = $stmt->fetch();
+        return $row ? (string)$row["email"] : null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/* --------------------------------------------------------------------
+ * POST actions — one setting per submit
+ * ------------------------------------------------------------------ */
+$flash = "";
+$error = "";
+$action = (string)($_POST["action"] ?? "");
+$me_id  = (int)$me["id"];
+
+if ($action === "save_marketing_reminders") {
+    $on = !empty($_POST["enabled"]) ? "1" : "0";
+    knk_setting_set("marketing_reminders_enabled", $on, $me_id);
+    knk_audit("settings.update", "settings", "marketing_reminders_enabled", ["value" => $on]);
+    $flash = $on === "1"
+        ? "Marketing reminder emails are now ON."
+        : "Marketing reminder emails are now OFF.";
+}
+elseif ($action === "save_owner_alerts") {
+    $on = !empty($_POST["enabled"]) ? "1" : "0";
+    knk_setting_set("owner_order_notifications_enabled", $on, $me_id);
+    knk_audit("settings.update", "settings", "owner_order_notifications_enabled", ["value" => $on]);
+    $flash = $on === "1"
+        ? "Owner order alerts are now ON."
+        : "Owner order alerts are now OFF.";
+}
+elseif ($action === "save_notification_email") {
+    $email = strtolower(trim((string)($_POST["email"] ?? "")));
+    if ($email !== "" && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "That doesn't look like a valid email address.";
+    } else {
+        knk_setting_set("owner_notification_email", $email, $me_id);
+        knk_audit("settings.update", "settings", "owner_notification_email", ["value" => $email]);
+        $flash = $email === ""
+            ? "Notification email cleared — we'll fall back to the Owner's staff email."
+            : "Notification email saved: {$email}";
+    }
+}
+
+if ($action !== "") {
+    $qs = [];
+    if ($flash) $qs["msg"] = $flash;
+    if ($error) $qs["err"] = $error;
+    header("Location: /settings.php" . ($qs ? "?" . http_build_query($qs) : ""));
+    exit;
+}
+
+$flash = (string)($_GET["msg"] ?? "");
+$error = (string)($_GET["err"] ?? "");
+
+/* --------------------------------------------------------------------
+ * Read current values for display
+ * ------------------------------------------------------------------ */
+$mark_on      = knk_setting_bool("marketing_reminders_enabled", true);
+$alerts_on    = knk_setting_bool("owner_order_notifications_enabled", true);
+$notif_email  = (string)knk_setting("owner_notification_email", "");
+$days_before  = knk_setting_int("marketing_reminder_days_before", 7);
+$owner_email  = knk_settings_owner_email();
+$effective    = $notif_email !== "" ? $notif_email : ($owner_email ?: "(none set yet)");
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex, nofollow">
+  <title>KnK Inn — Settings</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Caveat:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css?v=12">
+  <style>
+    body { background: #1b0f04; color: var(--cream, #f5e9d1); font-family: "Inter", system-ui, sans-serif; margin: 0; }
+    main.wrap { max-width: 900px; margin: 0 auto; padding: 2rem 1.5rem 4rem; }
+    h1.display-md { margin: 1.6rem 0 0.3rem; }
+    .lede { color: var(--cream-dim, #d8c9ab); margin-bottom: 2rem; }
+    .flash { padding: 0.75rem 1rem; border-radius: 4px; margin-bottom: 1.2rem; font-size: 0.95rem; }
+    .flash.ok  { background: rgba(142,212,154,0.12); color: #8ed49a; border: 1px solid rgba(142,212,154,0.28); }
+    .flash.err { background: rgba(255,154,138,0.1);  color: #ff9a8a; border: 1px solid rgba(255,154,138,0.3); }
+    section.card {
+      background: rgba(24,12,3,0.6); border: 1px solid rgba(201,170,113,0.22);
+      border-radius: 6px; padding: 1.5rem; margin-bottom: 1.5rem;
+    }
+    section.card h2 { margin: 0 0 0.4rem; font-family: "Archivo Black", sans-serif; letter-spacing: .02em; font-size: 1.25rem; }
+    section.card p.explain { color: var(--cream-dim, #d8c9ab); font-size: 0.92rem; margin: 0.2rem 0 1rem; line-height: 1.55; }
+    .status-row { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; margin-top: 0.4rem; }
+    .status-pill {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.35rem 0.85rem; border-radius: 999px;
+      font-size: 0.8rem; letter-spacing: 0.08em; text-transform: uppercase;
+      font-weight: 600;
+    }
+    .status-pill.on  { background: rgba(142,212,154,0.12); color: #8ed49a; border: 1px solid rgba(142,212,154,0.3); }
+    .status-pill.off { background: rgba(255,154,138,0.1);  color: #ff9a8a; border: 1px solid rgba(255,154,138,0.3); }
+    .status-pill .dot { width: 0.55rem; height: 0.55rem; border-radius: 50%; background: currentColor; }
+    label { display: block; font-size: 0.75rem; letter-spacing: 0.14em; text-transform: uppercase; color: var(--cream-dim, #d8c9ab); margin: 0 0 0.3rem 0.15rem; }
+    input[type="email"] {
+      width: 100%; padding: 0.7rem 0.85rem; background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(201,170,113,0.3); color: var(--cream, #f5e9d1);
+      font-size: 0.95rem; font-family: inherit; border-radius: 4px; box-sizing: border-box;
+    }
+    input[type="email"]:focus { outline: none; border-color: var(--gold, #c9aa71); }
+    button, .btn {
+      display: inline-block; padding: 0.55rem 1rem; background: var(--gold, #c9aa71);
+      color: var(--brown-deep, #2a1a08); border: none; font-weight: 700;
+      letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.72rem;
+      cursor: pointer; border-radius: 4px; font-family: inherit; text-decoration: none;
+    }
+    button:hover, .btn:hover { background: #d8c08b; }
+    button.ghost { background: transparent; color: var(--cream-dim, #d8c9ab); border: 1px solid rgba(201,170,113,0.3); }
+    button.ghost:hover { background: rgba(201,170,113,0.12); color: var(--cream, #f5e9d1); }
+    .muted { color: var(--cream-dim, #d8c9ab); font-size: 0.85rem; }
+    .email-current { color: var(--gold, #c9aa71); font-weight: 600; }
+    .inline-form { display: flex; gap: 0.6rem; align-items: center; flex-wrap: wrap; }
+    .inline-form input[type="email"] { flex: 1; min-width: 260px; width: auto; }
+    .cron-hint {
+      margin-top: 1rem; padding: 1rem 1.1rem; border-radius: 4px;
+      background: rgba(201,170,113,0.06); border: 1px dashed rgba(201,170,113,0.35);
+      font-size: 0.88rem; color: var(--cream-dim, #d8c9ab); line-height: 1.55;
+    }
+    .cron-hint strong { color: var(--cream, #f5e9d1); }
+    code {
+      background: rgba(0,0,0,0.35); border: 1px solid rgba(201,170,113,0.22);
+      padding: 0.12rem 0.4rem; border-radius: 3px; font-size: 0.85em;
+      color: var(--cream, #f5e9d1); font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+    }
+  </style>
+</head>
+<body>
+  <?php knk_render_admin_nav($me); ?>
+  <main class="wrap">
+    <span class="eyebrow">Super Admin</span>
+    <h1 class="display-md">Settings</h1>
+    <p class="lede">Turn automatic emails on or off, and choose where they go.</p>
+
+    <?php if ($flash): ?><div class="flash ok"><?= htmlspecialchars($flash) ?></div><?php endif; ?>
+    <?php if ($error): ?><div class="flash err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
+
+    <!-- Notification email (shown first — both settings below depend on it) -->
+    <section class="card">
+      <h2>Notification email</h2>
+      <p class="explain">
+        Where the automatic emails below get sent to. Leave blank and we'll fall
+        back to the Owner's staff-login email
+        <?php if ($owner_email): ?>
+          (<span class="email-current"><?= htmlspecialchars($owner_email) ?></span>)
+        <?php else: ?>
+          (<em>no Owner account yet — add one in Users</em>)
+        <?php endif; ?>.
+      </p>
+
+      <form method="post" class="inline-form">
+        <input type="hidden" name="action" value="save_notification_email">
+        <input type="email" name="email" placeholder="e.g. simmo@example.com"
+               value="<?= htmlspecialchars($notif_email) ?>"
+               autocomplete="off">
+        <button type="submit">Save email</button>
+        <?php if ($notif_email !== ""): ?>
+          <button type="submit" class="ghost" onclick="this.form.email.value='';" title="Clear and save">Clear</button>
+        <?php endif; ?>
+      </form>
+      <p class="muted" style="margin-top:0.7rem">
+        Emails are currently going to <strong class="email-current"><?= htmlspecialchars($effective) ?></strong>.
+      </p>
+    </section>
+
+    <!-- Marketing reminders -->
+    <section class="card">
+      <h2>Marketing reminder emails</h2>
+      <p class="explain">
+        A week before each big upcoming sports fixture — the ones shown on the
+        homepage — the system sends a short email with the match details.
+        That way Simmo has time to schedule social posts, line up drink
+        specials, or rope in a few regulars. One email per match; never
+        sent twice for the same game.
+      </p>
+
+      <div class="status-row">
+        <?php if ($mark_on): ?>
+          <span class="status-pill on"><span class="dot"></span>On</span>
+        <?php else: ?>
+          <span class="status-pill off"><span class="dot"></span>Off</span>
+        <?php endif; ?>
+        <span class="muted"><?= (int)$days_before ?> days before kickoff</span>
+      </div>
+
+      <form method="post" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <input type="hidden" name="action" value="save_marketing_reminders">
+        <?php if ($mark_on): ?>
+          <!-- Off switch: omit `enabled` so it evaluates to "0" server-side -->
+          <button type="submit" class="ghost">Turn off reminders</button>
+        <?php else: ?>
+          <input type="hidden" name="enabled" value="1">
+          <button type="submit">Turn on reminders</button>
+        <?php endif; ?>
+      </form>
+
+      <div class="cron-hint">
+        <strong>Heads up:</strong> the emails only go out if the daily scheduled
+        task is running on the hosting server. See the <em>Daily schedule</em>
+        box at the bottom of this page for setup — it's a one-time paste into
+        Matbao's Cron Jobs panel.
+      </div>
+    </section>
+
+    <!-- Owner order alerts -->
+    <section class="card">
+      <h2>Owner order alerts</h2>
+      <p class="explain">
+        When a guest places a drinks order from the phone, Simmo gets a copy
+        of the order-received email. Handy for keeping a pulse on what's
+        selling when he's not behind the bar.
+      </p>
+
+      <div class="status-row">
+        <?php if ($alerts_on): ?>
+          <span class="status-pill on"><span class="dot"></span>On</span>
+        <?php else: ?>
+          <span class="status-pill off"><span class="dot"></span>Off</span>
+        <?php endif; ?>
+      </div>
+
+      <form method="post" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <input type="hidden" name="action" value="save_owner_alerts">
+        <?php if ($alerts_on): ?>
+          <button type="submit" class="ghost">Turn off alerts</button>
+        <?php else: ?>
+          <input type="hidden" name="enabled" value="1">
+          <button type="submit">Turn on alerts</button>
+        <?php endif; ?>
+      </form>
+    </section>
+
+    <!-- Cron setup note (read-only, purely instructional) -->
+    <section class="card">
+      <h2>Daily schedule (one-time setup)</h2>
+      <p class="explain">
+        The marketing reminders above only work if the hosting server runs the
+        reminder script once a day. You set this up <strong>once</strong> in
+        Matbao's control panel and then forget about it — it runs forever.
+      </p>
+      <p class="muted" style="margin:0.4rem 0 0.6rem">
+        In <strong>Matbao → Hosting Manager → Cron Jobs</strong>, add a new
+        job that runs daily and calls this URL:
+      </p>
+      <p>
+        <code>curl -s "https://knkinn.com/cron/reminders.php?key=YOUR-ADMIN-PASSWORD"</code>
+      </p>
+      <p class="muted" style="margin-top:0.6rem">
+        Replace <code>YOUR-ADMIN-PASSWORD</code> with the same admin password
+        used for the migration page. A good time to run it is
+        <strong>09:00 Saigon time</strong> — morning emails tend to get read.
+      </p>
+    </section>
+  </main>
+</body>
+</html>

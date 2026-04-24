@@ -44,6 +44,13 @@ function smtp_send(array $cfg, ?string &$errorOut = null): bool {
     $fromAddr  = $cfg["from_email"] ?? $user;
     $fromName  = $cfg["from_name"]  ?? "";
     $to        = $cfg["to"]       ?? "";
+    // Optional CC — accepts a single address string or an array of addresses.
+    // Envelope-wise these become extra RCPT TOs; header-wise they appear
+    // on a single "Cc:" line so recipients can see each other.
+    $ccRaw     = $cfg["cc"] ?? [];
+    $cc        = [];
+    if (is_string($ccRaw)) { if ($ccRaw !== "") $cc[] = $ccRaw; }
+    elseif (is_array($ccRaw)) { foreach ($ccRaw as $c) if (is_string($c) && $c !== "") $cc[] = $c; }
     $replyAddr = $cfg["reply_to_email"] ?? "";
     $replyName = $cfg["reply_to_name"]  ?? "";
     $subject   = $cfg["subject"]  ?? "";
@@ -130,6 +137,11 @@ function smtp_send(array $cfg, ?string &$errorOut = null): bool {
     if (!$expect(250, $read())) return false;
     $write("RCPT TO:<" . $to . ">");
     if (!$expect([250, 251], $read())) return false;
+    // Extra RCPT TO for any CC recipients (envelope-level delivery).
+    foreach ($cc as $ccAddr) {
+        $write("RCPT TO:<" . $ccAddr . ">");
+        if (!$expect([250, 251], $read())) return false;
+    }
     $write("DATA");
     if (!$expect(354, $read())) return false;
 
@@ -144,6 +156,10 @@ function smtp_send(array $cfg, ?string &$errorOut = null): bool {
     $headers  = "Date: " . date("r") . "\r\n";
     $headers .= "From: " . $fromHeader . "\r\n";
     $headers .= "To: " . $safe($to) . "\r\n";
+    if (!empty($cc)) {
+        $ccSafe = array_map($safe, $cc);
+        $headers .= "Cc: " . implode(", ", $ccSafe) . "\r\n";
+    }
     if ($replyAddr !== "") {
         $headers .= "Reply-To: " .
             ($replyName !== ""
