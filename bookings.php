@@ -1,58 +1,24 @@
 <?php
 /* =========================================================
-   KnK Inn — Bookings admin for Simmo
+   KnK Inn — Bookings admin
    https://knkinn.com/bookings.php
-   Password-protected. See all bookings on one screen, confirm / decline
-   pending holds, manually block dates (maintenance), browse recent history.
+   Role-gated (super_admin, owner, reception). See all bookings on one
+   screen, confirm / decline pending holds, manually block dates
+   (maintenance), browse recent history.
    ========================================================= */
 
-session_start();
-
+require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/bookings_store.php";
 
-/* ---- Config ----
-   Admin password lives in config.php (gitignored) so it never enters git.
-   config.php returns [ ..., "admin_password" => "..." ]. */
-$_CFG = @include __DIR__ . "/config.php";
-define("ADMIN_PASSWORD", is_array($_CFG) && !empty($_CFG["admin_password"]) ? $_CFG["admin_password"] : "");
+/* Bookings are for Super Admin, Owner, and Reception. */
+$me = knk_require_role(["super_admin", "owner", "reception"]);
+
 const ROOMS = [
     "standard-nowindow" => "Standard (no window)",
     "standard-balcony"  => "Standard with balcony",
     "vip"               => "VIP w/ tub",
 ];
 const CALENDAR_MONTHS = 3;   // how many months forward to render on the calendar grid
-
-function is_logged_in(): bool {
-    return !empty($_SESSION["admin_ok"]);
-}
-
-/* ---------- Logout ---------- */
-if (($_POST["action"] ?? "") === "logout") {
-    $_SESSION = [];
-    session_destroy();
-    header("Location: bookings.php");
-    exit;
-}
-
-/* ---------- Login ---------- */
-$login_error = "";
-if (($_POST["action"] ?? "") === "login") {
-    $pw = $_POST["password"] ?? "";
-    if (hash_equals(ADMIN_PASSWORD, $pw)) {
-        session_regenerate_id(true);
-        $_SESSION["admin_ok"] = true;
-        header("Location: bookings.php");
-        exit;
-    } else {
-        $login_error = "Wrong password, mate. Try again.";
-    }
-}
-
-/* Gate everything below */
-if (!is_logged_in()) {
-    render_login($login_error);
-    exit;
-}
 
 /* ---------- Action: confirm / decline a hold by id ---------- */
 $flash = "";
@@ -427,6 +393,7 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
   </style>
 </head>
 <body>
+<?php knk_render_admin_nav($me); ?>
 <div class="wrap">
 
   <header class="bar">
@@ -435,12 +402,7 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
       <h1 class="display-md">Bookings <em>admin</em></h1>
     </div>
     <div class="actions">
-      <a class="btn-mini" href="order-admin.php">Orders</a>
       <a class="btn-mini" href="index.html" target="_blank">View site</a>
-      <form method="post" style="margin:0;">
-        <input type="hidden" name="action" value="logout">
-        <button type="submit">Log out</button>
-      </form>
     </div>
   </header>
 
@@ -686,58 +648,3 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
 </div>
 </body>
 </html>
-<?php
-
-/* ============================================================
-   Helpers (rendered below to keep top tidy)
-   ============================================================ */
-
-function render_login(string $error = ""): void { ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="robots" content="noindex, nofollow">
-  <title>KnK Inn — Admin</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Caveat:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/styles.css?v=12">
-  <style>
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
-    .lock-card {
-      background: rgba(24,12,3,0.6); border: 1px solid rgba(201,170,113,0.22);
-      padding: 2.4rem 2rem; border-radius: 6px; width: 100%; max-width: 380px;
-      text-align: center; backdrop-filter: blur(8px);
-    }
-    .lock-card h1 { margin-bottom: 0.6rem; }
-    .lock-card p { color: var(--cream-dim); font-size: 0.9rem; margin-bottom: 1.6rem; }
-    .lock-card input[type=password] {
-      width: 100%; padding: 0.85rem 1rem; margin-bottom: 1rem;
-      background: rgba(255,255,255,0.04); border: 1px solid rgba(201,170,113,0.3);
-      color: var(--cream); font-size: 1rem; font-family: inherit; border-radius: 4px;
-    }
-    .lock-card input[type=password]:focus { outline: none; border-color: var(--gold); }
-    .lock-card button {
-      width: 100%; padding: 0.85rem; background: var(--gold); color: var(--brown-deep);
-      border: none; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
-      font-size: 0.8rem; cursor: pointer; border-radius: 4px; font-family: inherit;
-    }
-    .lock-card button:hover { background: var(--gold-light, #d8c08b); }
-    .err { color: #ff9a8a; font-size: 0.85rem; margin-bottom: 1rem; }
-  </style>
-</head>
-<body>
-  <form class="lock-card" method="post" autocomplete="off">
-    <span class="eyebrow">Staff only</span>
-    <h1 class="display-md">KnK <em>Admin</em></h1>
-    <p>Enter password to manage bookings.</p>
-    <?php if ($error): ?><div class="err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
-    <input type="hidden" name="action" value="login">
-    <input type="password" name="password" placeholder="Password" autofocus required>
-    <button type="submit">Unlock</button>
-  </form>
-</body>
-</html>
-<?php }

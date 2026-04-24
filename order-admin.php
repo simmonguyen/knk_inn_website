@@ -2,8 +2,7 @@
 /*
  * KnK Inn — /order-admin.php
  *
- * Staff-only live orders dashboard.  Shares the same session/password as
- * bookings.php so Simmo logs in once.
+ * Live orders dashboard. Role-gated (super_admin, owner, bartender).
  *
  * Bartender can:
  *   · Mark a pending order as "received" (also emails the customer)
@@ -11,42 +10,12 @@
  *   · Mark an order as "cancelled"   (mistake / walkout)
  */
 
-session_start();
-
+require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
 
-/* Password lives in config.php (gitignored). Shared with bookings.php. */
-$_CFG = @include __DIR__ . "/config.php";
-define("ADMIN_PASSWORD", is_array($_CFG) && !empty($_CFG["admin_password"]) ? $_CFG["admin_password"] : "");
-
-function is_admin(): bool { return !empty($_SESSION["admin_ok"]); }
-
-/* ---------- Logout ---------- */
-if (($_POST["action"] ?? "") === "logout") {
-    $_SESSION = [];
-    session_destroy();
-    header("Location: order-admin.php");
-    exit;
-}
-
-/* ---------- Login ---------- */
-$login_error = "";
-if (($_POST["action"] ?? "") === "login") {
-    $pw = $_POST["password"] ?? "";
-    if (hash_equals(ADMIN_PASSWORD, $pw)) {
-        session_regenerate_id(true);
-        $_SESSION["admin_ok"] = true;
-        header("Location: order-admin.php");
-        exit;
-    }
-    $login_error = "Wrong password.";
-}
-
-if (!is_admin()) {
-    echo render_login($login_error);
-    exit;
-}
+/* Orders dashboard: Super Admin, Owner, and Bartender/Hostess. */
+$me = knk_require_role(["super_admin", "owner", "bartender"]);
 
 /* ---------- Actions: mark received / paid / cancelled ---------- */
 $flash = "";
@@ -168,7 +137,7 @@ foreach ($all as $o) {
 </style>
 </head>
 <body>
-
+<?php knk_render_admin_nav($me); ?>
 <div class="wrap">
 
   <header class="bar">
@@ -177,12 +146,7 @@ foreach ($all as $o) {
       <h1>Rooftop <em>orders</em></h1>
     </div>
     <div class="actions">
-      <a class="btn-mini" href="bookings.php">Bookings</a>
       <a class="btn-mini" href="order-admin.php" title="Refresh">↻ Refresh</a>
-      <form method="post" style="margin:0;">
-        <input type="hidden" name="action" value="logout">
-        <button type="submit">Log out</button>
-      </form>
     </div>
   </header>
 
@@ -303,33 +267,3 @@ foreach ($all as $o) {
 </div>
 
 </body></html>
-<?php
-
-function render_login(string $error = ""): string {
-    $err = $error ? "<p style='color:#9c2222;margin-top:8px;'>" . htmlspecialchars($error) . "</p>" : "";
-    return <<<HTML
-<!DOCTYPE html><html lang="en"><head>
-<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
-<meta name="robots" content="noindex,nofollow">
-<title>Staff · KnK Inn</title>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<style>
-body{margin:0;padding:0;background:#f4ede0;color:#180c03;font-family:Inter,system-ui,sans-serif;}
-.login-wrap{max-width:380px;margin:80px auto;background:#fdf8ef;border:1px solid #e7dcc2;border-radius:10px;padding:32px 28px;text-align:center;}
-.login-wrap h1{font-family:'Archivo Black',sans-serif;margin:0 0 6px;}
-.login-wrap input{width:100%;box-sizing:border-box;padding:12px;margin-top:12px;border:1px solid #e7dcc2;border-radius:6px;font-size:15px;}
-.login-wrap button{width:100%;background:#180c03;color:#c9aa71;border:none;padding:12px;border-radius:6px;margin-top:10px;font-weight:700;cursor:pointer;font-size:15px;}
-p.muted{color:#6e5d40;font-size:13px;margin:0;}
-</style></head><body>
-<div class="login-wrap">
-  <h1>Staff only</h1>
-  <p class="muted">Rooftop orders dashboard.</p>
-  <form method="post" action="order-admin.php">
-    <input type="hidden" name="action" value="login">
-    <input type="password" name="password" placeholder="Admin password" required autofocus>
-    <button type="submit">Enter</button>
-  </form>
-  {$err}
-</div></body></html>
-HTML;
-}

@@ -2,16 +2,15 @@
 /* =========================================================
    KnK Inn — Photo uploader for Simmo
    Drop this at https://knkinn.com/photos.php
-   Password-protected; uploads land in assets/img/gallery-live/
+   Role-gated (super_admin, owner); uploads land in assets/img/gallery-live/
    and appear on gallery.php automatically.
    ========================================================= */
 
-session_start();
+require_once __DIR__ . '/includes/auth.php';
 
-/* ---- Config ----
-   Password lives in config.php (gitignored) — same key as the admin pages. */
-$_CFG = @include __DIR__ . '/config.php';
-define('PHOTOS_PASSWORD', is_array($_CFG) && !empty($_CFG['admin_password']) ? $_CFG['admin_password'] : '');
+/* Photo management: Super Admin and Owner only. */
+$me = knk_require_role(['super_admin', 'owner']);
+
 const PHOTOS_DIR      = __DIR__ . '/assets/img/gallery-live';
 const PHOTOS_URL      = 'assets/img/gallery-live';    // relative from site root
 const MAX_UPLOAD      = 15 * 1024 * 1024;             // 15 MB cap per file (post-resize it'll be much smaller)
@@ -20,38 +19,6 @@ const ALLOWED_MIMES   = ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', '
 /* Make sure the upload dir exists */
 if (!is_dir(PHOTOS_DIR)) {
   @mkdir(PHOTOS_DIR, 0755, true);
-}
-
-function is_logged_in(): bool {
-  return !empty($_SESSION['photos_ok']);
-}
-
-/* ---------- Handle logout ---------- */
-if (($_POST['action'] ?? '') === 'logout') {
-  $_SESSION = [];
-  session_destroy();
-  header('Location: photos.php');
-  exit;
-}
-
-/* ---------- Handle login ---------- */
-$login_error = '';
-if (($_POST['action'] ?? '') === 'login') {
-  $pw = $_POST['password'] ?? '';
-  if (hash_equals(PHOTOS_PASSWORD, $pw)) {
-    session_regenerate_id(true);
-    $_SESSION['photos_ok'] = true;
-    header('Location: photos.php');
-    exit;
-  } else {
-    $login_error = 'Wrong password, mate. Try again.';
-  }
-}
-
-/* Everything below requires login */
-if (!is_logged_in()) {
-  render_login($login_error);
-  exit;
 }
 
 /* ---------- Handle delete (POST only, same-origin via session) ---------- */
@@ -146,55 +113,6 @@ render_manager();
    Helpers
    ============================================================ */
 
-function render_login(string $error = ''): void { ?>
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="robots" content="noindex, nofollow">
-  <title>KnK Inn — Photos</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Caveat:wght@700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="assets/css/styles.css?v=12">
-  <style>
-    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 2rem; }
-    .lock-card {
-      background: rgba(24,12,3,0.6); border: 1px solid rgba(201,170,113,0.22);
-      padding: 2.4rem 2rem; border-radius: 6px; width: 100%; max-width: 380px;
-      text-align: center; backdrop-filter: blur(8px);
-    }
-    .lock-card h1 { margin-bottom: 0.6rem; }
-    .lock-card p { color: var(--cream-dim); font-size: 0.9rem; margin-bottom: 1.6rem; }
-    .lock-card input[type=password] {
-      width: 100%; padding: 0.85rem 1rem; margin-bottom: 1rem;
-      background: rgba(255,255,255,0.04); border: 1px solid rgba(201,170,113,0.3);
-      color: var(--cream); font-size: 1rem; font-family: inherit; border-radius: 4px;
-    }
-    .lock-card input[type=password]:focus { outline: none; border-color: var(--gold); }
-    .lock-card button {
-      width: 100%; padding: 0.85rem; background: var(--gold); color: var(--brown-deep);
-      border: none; font-weight: 700; letter-spacing: 0.15em; text-transform: uppercase;
-      font-size: 0.8rem; cursor: pointer; border-radius: 4px; font-family: inherit;
-    }
-    .lock-card button:hover { background: var(--gold-light); }
-    .err { color: #ff9a8a; font-size: 0.85rem; margin-bottom: 1rem; }
-  </style>
-</head>
-<body>
-  <form class="lock-card" method="post" autocomplete="off">
-    <span class="eyebrow">Staff only</span>
-    <h1 class="display-md">KnK <em>Photos</em></h1>
-    <p>Enter password to upload photos to the gallery.</p>
-    <?php if ($error): ?><div class="err"><?= htmlspecialchars($error) ?></div><?php endif; ?>
-    <input type="hidden" name="action" value="login">
-    <input type="password" name="password" placeholder="Password" autofocus required>
-    <button type="submit">Unlock</button>
-  </form>
-</body>
-</html>
-<?php }
 
 function render_manager(): void {
   $files = [];
@@ -280,6 +198,7 @@ function render_manager(): void {
   </style>
 </head>
 <body>
+<?php knk_render_admin_nav($me); ?>
 <div class="wrap">
 
   <header class="bar">
@@ -287,10 +206,6 @@ function render_manager(): void {
       <span class="eyebrow">KnK Inn</span>
       <h1 class="display-md">Photo <em>manager</em></h1>
     </div>
-    <form method="post" style="margin:0;">
-      <input type="hidden" name="action" value="logout">
-      <button class="logout" type="submit">Log out</button>
-    </form>
   </header>
 
   <label class="drop" id="drop">
