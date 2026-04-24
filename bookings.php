@@ -432,7 +432,7 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
       <h1 class="display-md">Bookings <em>admin</em></h1>
     </div>
     <div class="actions">
-      <a class="btn-mini" href="photos.php">Photos</a>
+      <a class="btn-mini" href="order-admin.php">Orders</a>
       <a class="btn-mini" href="index.html" target="_blank">View site</a>
       <form method="post" style="margin:0;">
         <input type="hidden" name="action" value="logout">

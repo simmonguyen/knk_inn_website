@@ -1,0 +1,40 @@
+# KnK Inn — robots
+# Public pages: index / rooms / drinks / gallery (see sitemap.xml)
+# Everything else is staff-only or transactional — keep it out of search.
+
+User-agent: *
+Allow: /
+Allow: /index.html
+Allow: /rooms.html
+Allow: /drinks.html
+Allow: /gallery.php
+Allow: /assets/
+
+# Staff-only admin pages
+Disallow: /bookings.php
+Disallow: /bookings.ics.php
+Disallow: /photos.php
+Disallow: /confirm-booking.php
+Disallow: /order-admin.php
+Disallow: /order-received.php
+
+# Transactional / form endpoints — no reason to index these
+Disallow: /enquire.php
+Disallow: /order.php
+Disallow: /order-submit.php
+Disallow: /availability.php
+Disallow: /test-enquiry.html
+Disallow: /thanks.html
+Disallow: /booking-received.html
+Disallow: /booking-result.html
+Disallow: /booking-bad-link.html
+
+# Private data files — should never be directly served but block anyway
+Disallow: /bookings.json
+Disallow: /orders.json
+Disallow: /customers.json
+Disallow: /config.php
+Disallow: /includes/
+Disallow: /gallery-live/
+
+Sitemap: https://knkinn.com/sitemap.xml

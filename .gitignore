@@ -4,3 +4,6 @@ assets/.DS_Store
 
 # Real SMTP credentials live here — never commit.
 config.php
+
+# Local test data for the order system — live orders are stored on the server.
+orders.json
