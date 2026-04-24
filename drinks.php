@@ -2,17 +2,30 @@
 /*
  * KnK Inn — drinks page.
  *
- * The two hero photos at the top are managed slots — Simmo can
- * swap them via /photos.php without touching any code.
+ * Hero photos are managed slots (edit in /photos.php).
+ * The drink list itself is rendered from the `menu_drinks` table
+ * (edit in /menu.php) — same source of truth as /order.php.
  */
 
 require_once __DIR__ . "/includes/photo_slots_store.php";
+require_once __DIR__ . "/includes/menu_store.php";
 
 $slots = knk_slots_load();
+$menuGroups = knk_menu_grouped(true);   // visible-only
 
 function d_src(array $slots, string $section, int $i, string $default): string {
     return htmlspecialchars(knk_photo_src($slots, $section, $i, $default));
 }
+
+// VND display helper — falls back to "free" if zero, otherwise "120,000đ"
+function d_price(int $v): string {
+    return number_format($v, 0, ".", ",") . "đ";
+}
+
+// i18n-key helper for category headings: uses the seeded convention
+// `drinks.cat.<slug>` so existing translations keep working for the
+// categories we had at Phase 1.
+function d_cat_key(string $slug): string { return "drinks.cat." . $slug; }
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -77,101 +90,17 @@ function d_src(array $slots, string $section, int $i, string $default): string {
       </div>
       <div class="drinks-categories reveal">
 
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.beer">Beer</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.saigonGreen">Saigon Green</span><span class="drink-price">45,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.bialsa">Bia Saigon Special</span><span class="drink-price">55,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.tiger">Tiger</span><span class="drink-price">60,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.heineken">Heineken</span><span class="drink-price">65,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.corona">Corona</span><span class="drink-price">95,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.guinness">Guinness (can)</span><span class="drink-price">130,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.pasteurTap">Pasteur Street (tap)</span><span class="drink-price">120,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.beer.houseTap">House Tap Pint</span><span class="drink-price">110,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.wine">Wine</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.dalatRed">Dalat Red (glass)</span><span class="drink-price">120,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.dalatBottle">Dalat Red (bottle)</span><span class="drink-price">550,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.shirazGlass">Australian Shiraz (glass)</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.shirazBottle">Australian Shiraz (bottle)</span><span class="drink-price">790,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.sauvGlass">NZ Sauvignon Blanc (glass)</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.sauvBottle">NZ Sauvignon Blanc (bottle)</span><span class="drink-price">790,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.proseccoGlass">Prosecco (glass)</span><span class="drink-price">140,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.wine.proseccoBottle">Prosecco (bottle)</span><span class="drink-price">680,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.bourbon">Bourbon &amp; American Whiskey</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.bourbon.jimBeam">Jim Beam White</span><span class="drink-price">95,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.bourbon.jackBlack">Jack Daniel's Black</span><span class="drink-price">130,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.bourbon.jackHoney">Jack Daniel's Honey</span><span class="drink-price">140,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.bourbon.makers">Maker's Mark</span><span class="drink-price">165,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.bourbon.buffalo">Buffalo Trace</span><span class="drink-price">180,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.bourbon.woodford">Woodford Reserve</span><span class="drink-price">220,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.scotch">Scotch &amp; Irish</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.johnnieRed">Johnnie Walker Red</span><span class="drink-price">110,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.johnnieBlack">Johnnie Walker Black</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.chivas12">Chivas Regal 12</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.glenfiddich">Glenfiddich 12</span><span class="drink-price">210,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.glenlivet">Glenlivet 12</span><span class="drink-price">220,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.macallan">Macallan Double Cask 12</span><span class="drink-price">320,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.scotch.jameson">Jameson Irish</span><span class="drink-price">140,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.gin">Gin</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.gin.gordons">Gordon's</span><span class="drink-price">95,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.gin.beefeater">Beefeater</span><span class="drink-price">115,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.gin.bombay">Bombay Sapphire</span><span class="drink-price">140,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.gin.tanqueray">Tanqueray</span><span class="drink-price">145,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.gin.hendricks">Hendrick's</span><span class="drink-price">180,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.gin.monkey47">Monkey 47</span><span class="drink-price">260,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.rum">Rum &amp; Cane</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.rum.bacardi">Bacardi Superior</span><span class="drink-price">95,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.rum.havana3">Havana Club 3</span><span class="drink-price">120,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.rum.havana7">Havana Club 7</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.rum.captain">Captain Morgan Spiced</span><span class="drink-price">130,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.rum.kraken">Kraken Black Spiced</span><span class="drink-price">170,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.rum.sonTinh">Son Tinh Cane</span><span class="drink-price">110,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.premium">Premium &amp; Aperitifs</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.premium.patronSilver">Patrón Silver</span><span class="drink-price">220,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.premium.patronAnejo">Patrón Añejo</span><span class="drink-price">280,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.premium.cognac">Hennessy VS</span><span class="drink-price">240,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.premium.aperol">Aperol</span><span class="drink-price">110,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.premium.campari">Campari</span><span class="drink-price">120,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.premium.vermouth">Martini Vermouth</span><span class="drink-price">100,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.cocktails">House Cocktails</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.cocktails.saigonSpritz">Saigon Spritz</span><span class="drink-price">150,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.cocktails.lemongrassGT">Lemongrass G&amp;T</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.cocktails.espMartini">Espresso Martini</span><span class="drink-price">170,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.cocktails.oldFashioned">Bourbon Old Fashioned</span><span class="drink-price">180,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.cocktails.mojito">Mojito (mint grown upstairs)</span><span class="drink-price">160,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.cocktails.negroni">Negroni</span><span class="drink-price">180,000đ</span></div>
-        </div>
-
-        <div class="drink-cat">
-          <h3 class="drink-cat-title" data-i18n="drinks.cat.coffee">Coffee &amp; Soft</h3>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.caPhe">Cà Phê Sữa Đá</span><span class="drink-price">45,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.espresso">Espresso</span><span class="drink-price">45,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.flatWhite">Flat White</span><span class="drink-price">60,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.latte">Latte</span><span class="drink-price">60,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.softDrinks">Soft Drinks</span><span class="drink-price">35,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.juice">Fresh Juice</span><span class="drink-price">60,000đ</span></div>
-          <div class="drink-item"><span class="drink-name" data-i18n="drinks.coffee.sparkling">Sparkling Water</span><span class="drink-price">50,000đ</span></div>
-        </div>
+        <?php foreach ($menuGroups as $group): ?>
+          <div class="drink-cat">
+            <h3 class="drink-cat-title" data-i18n="<?= htmlspecialchars(d_cat_key($group["slug"])) ?>"><?= htmlspecialchars($group["title"]) ?></h3>
+            <?php foreach ($group["items"] as $drink): ?>
+              <div class="drink-item">
+                <span class="drink-name"<?= $drink["i18n_key"] ? ' data-i18n="' . htmlspecialchars($drink["i18n_key"]) . '"' : "" ?>><?= htmlspecialchars($drink["name"]) ?></span>
+                <span class="drink-price"><?= htmlspecialchars(d_price((int)$drink["price_vnd"])) ?></span>
+              </div>
+            <?php endforeach; ?>
+          </div>
+        <?php endforeach; ?>
 
       </div>
     </div>

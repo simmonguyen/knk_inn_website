@@ -27,73 +27,46 @@
  */
 
 if (!defined("KNK_ORDERS_PATH")) define("KNK_ORDERS_PATH", __DIR__ . "/../orders.json");
-if (!defined("KNK_DRINKS_HTML")) define("KNK_DRINKS_HTML", __DIR__ . "/../drinks.php");
 if (!defined("KNK_VAT_RATE"))    define("KNK_VAT_RATE", 0.10);  // Vietnam standard VAT 10%
 
+require_once __DIR__ . "/menu_store.php";
+
 /* =========================================================
-   MENU — parsed from drinks.php
+   MENU — read from the menu_drinks table (Stock Market Phase 1).
+   Simmo edits the menu via /menu.php; no more HTML scraping.
    ========================================================= */
 
 /**
- * Parse drinks.php → [ ["title"=>"Beer", "items"=>[ ["id"=>..., "name"=>..., "price_vnd"=>...], ... ] ], ... ]
+ * Return the menu grouped into categories, in the shape order.php expects:
+ *   [ [ "title"=>"Beer", "items"=>[ ["id"=>"beer.tiger","name"=>"Tiger","price_vnd"=>60000], ... ] ], ... ]
  *
- * Cached for the request.
+ * The "id" field here is the stable item_code from menu_drinks, which is
+ * what gets written into order_items.item_code so reports can join back.
+ * Hidden drinks (is_visible=0) are excluded.
  */
 function knk_menu(): array {
     static $cache = null;
     if ($cache !== null) return $cache;
 
-    $html = @file_get_contents(KNK_DRINKS_HTML);
-    if ($html === false) return $cache = [];
-
-    // Load into DOMDocument (suppress HTML5 warnings)
-    $prev = libxml_use_internal_errors(true);
-    $dom  = new DOMDocument();
-    $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html);
-    libxml_clear_errors();
-    libxml_use_internal_errors($prev);
-
-    $xp = new DOMXPath($dom);
-    $cats = $xp->query("//div[contains(concat(' ', normalize-space(@class), ' '), ' drink-cat ')]");
-
+    $groups = knk_menu_grouped(true);   // visible-only
     $menu = [];
-    foreach ($cats as $cat) {
-        $titleNode = $xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' drink-cat-title ')]", $cat)->item(0);
-        if (!$titleNode) continue;
-        $title = trim($titleNode->textContent);
-
+    foreach ($groups as $g) {
         $items = [];
-        $rows = $xp->query(".//div[contains(concat(' ', normalize-space(@class), ' '), ' drink-item ')]", $cat);
-        foreach ($rows as $row) {
-            $nameNode  = $xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' drink-name ')]",  $row)->item(0);
-            $priceNode = $xp->query(".//*[contains(concat(' ', normalize-space(@class), ' '), ' drink-price ')]", $row)->item(0);
-            if (!$nameNode || !$priceNode) continue;
-
-            $name = trim($nameNode->textContent);
-            $priceRaw = trim($priceNode->textContent);
-            // "45,000đ" or "1,000,000đ" → int
-            $digits = preg_replace('/[^0-9]/', '', $priceRaw);
-            if ($digits === '') continue;
-            $price = (int)$digits;
-
-            // Stable id — prefer the data-i18n key from the drink-name span, else hash of name
-            $key = $nameNode->getAttribute("data-i18n");
-            $id  = $key !== "" ? $key : "x." . substr(md5($name), 0, 10);
-
+        foreach ($g["items"] as $it) {
             $items[] = [
-                "id"        => $id,
-                "name"      => $name,
-                "price_vnd" => $price,
+                "id"        => $it["item_code"],
+                "name"      => $it["name"],
+                "price_vnd" => (int)$it["price_vnd"],
             ];
         }
         if ($items) {
-            $menu[] = ["title" => $title, "items" => $items];
+            $menu[] = ["title" => $g["title"], "items" => $items];
         }
     }
     return $cache = $menu;
 }
 
-/** Flatten menu to id → item lookup. */
+/** Flatten menu to id → item lookup. Keyed by item_code. */
 function knk_menu_lookup(): array {
     static $lk = null;
     if ($lk !== null) return $lk;
