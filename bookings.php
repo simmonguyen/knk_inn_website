@@ -321,6 +321,18 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
     .card button.no:hover { border-color: #ff9a8a; color: #ff9a8a; }
     .card button.rm { background: transparent; color: var(--cream-faint); border-color: rgba(255,255,255,0.15); font-size: 0.68rem; }
     .card button.rm:hover { border-color: #ff9a8a; color: #ff9a8a; }
+    .card a.bill,
+    .history a.bill {
+      display: inline-block;
+      padding: 0.55rem 1.1rem; border-radius: 3px;
+      border: 1px solid rgba(201,170,113,0.45);
+      font-size: 0.74rem; letter-spacing: 0.16em; text-transform: uppercase;
+      font-family: inherit; font-weight: 700;
+      text-decoration: none; color: var(--gold); background: transparent;
+    }
+    .card a.bill:hover,
+    .history a.bill:hover { background: var(--gold); color: var(--brown-deep); }
+    .history a.bill { font-size: 0.66rem; padding: 0.35rem 0.7rem; letter-spacing: 0.12em; }
 
     /* ---------- Status pill ---------- */
     .pill {
@@ -690,6 +702,9 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
               </div>
             <?php endif; ?>
             <div class="btn-row">
+              <?php if (!$isBlock): ?>
+                <a class="bill" href="bill.php?slug=<?= h($h["id"]) ?>" target="_blank">View bill</a>
+              <?php endif; ?>
               <form method="post" style="margin:0;" onsubmit="return confirm('Remove this booking? Dates will re-open.');">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= h($h["id"]) ?>">
@@ -795,8 +810,11 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
             <td><?= h(ROOMS[$h["room"]] ?? $h["room"]) ?></td>
             <td><?= h(fmt_date($h["checkin"])) ?> → <?= h(fmt_date($h["checkout"])) ?></td>
             <td style="font-size:0.8rem;"><?= h(fmt_datetime((int)($h["created_at"] ?? 0))) ?></td>
-            <td>
-              <form method="post" style="margin:0;" onsubmit="return confirm('Delete this entry permanently?');">
+            <td style="white-space:nowrap;">
+              <?php if ($s === "confirmed"): ?>
+                <a class="bill" href="bill.php?slug=<?= h($h["id"]) ?>" target="_blank">View bill</a>
+              <?php endif; ?>
+              <form method="post" style="margin:0;display:inline-block;" onsubmit="return confirm('Delete this entry permanently?');">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="<?= h($h["id"]) ?>">
                 <button type="submit" class="rm" style="font-size:0.66rem;padding:0.35rem 0.7rem;">Delete</button>
@@ -921,6 +939,9 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
                   <span class="rhs">
                     <?= $nights ?> night<?= $nights === 1 ? "" : "s" ?>
                     <?php if ($total > 0): ?> · <?= h(knk_fmt_vnd($total)) ?><?php endif; ?>
+                    <?php if ($status === "confirmed"): ?>
+                      · <a href="bill.php?slug=<?= h($b["id"] ?? "") ?>" target="_blank" style="color:var(--gold);text-decoration:none;">View bill</a>
+                    <?php endif; ?>
                   </span>
                 </li>
               <?php endforeach; ?>
