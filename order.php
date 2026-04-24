@@ -19,6 +19,7 @@ session_start();
 require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
 require_once __DIR__ . "/includes/guests_store.php";
+require_once __DIR__ . "/includes/market_engine.php";
 
 /* Phase 6 — Stay logged in:
  * Remember the guest's email across visits via a 90-day cookie so they
@@ -85,16 +86,39 @@ if (($_POST["action"] ?? "") === "login") {
 }
 
 /* ---- Place order (POST) ---- */
+/*
+ * Market-aware flow:
+ *   • Every render stamps `stamp_ts` (unix) + `stamp_price[<code>]`
+ *     hidden fields so we can detect stale prices on submit.
+ *   • On POST we recompute the live quote for each cart item.
+ *     If the market is on AND (stamp_ts is older than the
+ *     price_lock_seconds window OR any snapshot price differs
+ *     from the current quote OR a previously-eligible item is
+ *     no longer on the board), we bounce to a "prices updated"
+ *     re-confirm screen instead of creating the order.
+ *   • Fair-play (max market items per order + per-guest cooldown)
+ *     is enforced via knk_market_fairplay_check().
+ *   • Ineligible drinks always trade at base price — the market
+ *     engine's knk_market_quote() handles that distinction.
+ */
+$reconfirm_cart = null;   // set when we need to show "prices updated" screen
 if (($_POST["action"] ?? "") === "place_order") {
     $email = strtolower(trim($_SESSION["order_email"] ?? ""));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
         redirect("order.php");
     }
 
-    $lookup  = knk_menu_lookup();
-    $qtys    = $_POST["qty"] ?? [];
-    $items   = [];
+    $lookup    = knk_menu_lookup();
+    $qtys      = $_POST["qty"] ?? [];
+    $stampTs   = (int)($_POST["stamp_ts"] ?? 0);
+    $stampPx   = is_array($_POST["stamp_price"] ?? null) ? $_POST["stamp_price"] : [];
+    $marketOn  = knk_market_enabled();
+    $lockSec   = $marketOn ? (int)knk_market_config()["price_lock_seconds"] : 0;
+
+    $items    = [];
     $subtotal = 0;
+    $stale    = false;
+    $cartCodes = [];
     if (is_array($qtys)) {
         foreach ($qtys as $id => $qty) {
             $qty = (int)$qty;
@@ -102,55 +126,86 @@ if (($_POST["action"] ?? "") === "place_order") {
             if ($qty > 20) $qty = 20;  // guard against typos
             if (!isset($lookup[$id])) continue;
             $it = $lookup[$id];
-            $line = $it["price_vnd"] * $qty;
+            $cartCodes[] = $id;
+
+            // Live quote wins over the menu base price for eligible drinks.
+            $unit = (int)$it["price_vnd"];
+            if ($marketOn) {
+                $q    = knk_market_quote($id);
+                $unit = (int)$q["price_vnd"];
+                $snap = isset($stampPx[$id]) ? (int)$stampPx[$id] : -1;
+                // Stale if snapshot missing or different from current.
+                if ($snap !== $unit) $stale = true;
+            }
+
+            $line = $unit * $qty;
             $subtotal += $line;
             $items[] = [
-                "id"        => $id,
-                "name"      => $it["name"],
-                "price_vnd" => $it["price_vnd"],
-                "qty"       => $qty,
+                "id"         => $id,
+                "name"       => $it["name"],
+                "price_vnd"  => $unit,
+                "qty"        => $qty,
             ];
         }
     }
 
+    if ($marketOn && $lockSec > 0 && $stampTs > 0 && (time() - $stampTs) > $lockSec) {
+        $stale = true;
+    }
+
     if (!$items) {
         $flash = "Pick at least one drink, mate.";
+    } elseif ($marketOn && $stale) {
+        // Don't place — show the re-confirm screen. The cart carries
+        // its quantities through as hidden fields on the next form.
+        $reconfirm_cart = ["items" => $items];
+        $flash = "Prices moved on the market — check the new numbers and confirm.";
     } else {
-        $vat    = (int)round($subtotal * KNK_VAT_RATE);
-        $total  = $subtotal + $vat;
-        $loc    = $_POST["location"] ?? "rooftop";
-        if (!in_array($loc, ["rooftop", "floor-5", "floor-1", "room"], true)) $loc = "rooftop";
-        $room   = null;
-        if ($loc === "room") {
-            $room = preg_replace('/[^0-9A-Za-z]/', '', substr($_POST["room_number"] ?? "", 0, 6));
-            if ($room === "") {
-                $flash = "For Room delivery, type your room number.";
+        // Fair-play: max market items per order + per-guest cooldown.
+        if ($marketOn) {
+            $fp = knk_market_fairplay_check($cartCodes, $email);
+            if (!$fp["ok"]) {
+                $flash = $fp["reason"];
             }
         }
-        $notes  = trim(substr($_POST["notes"] ?? "", 0, 500));
 
         if ($flash === "") {
-            $order = orders_create([
-                "email"        => $email,
-                "location"     => $loc,
-                "room_number"  => $room,
-                "items"        => $items,
-                "subtotal_vnd" => $subtotal,
-                "vat_vnd"      => $vat,
-                "total_vnd"    => $total,
-                "notes"        => $notes,
-            ]);
+            $vat    = (int)round($subtotal * KNK_VAT_RATE);
+            $total  = $subtotal + $vat;
+            $loc    = $_POST["location"] ?? "rooftop";
+            if (!in_array($loc, ["rooftop", "floor-5", "floor-1", "room"], true)) $loc = "rooftop";
+            $room   = null;
+            if ($loc === "room") {
+                $room = preg_replace('/[^0-9A-Za-z]/', '', substr($_POST["room_number"] ?? "", 0, 6));
+                if ($room === "") {
+                    $flash = "For Room delivery, type your room number.";
+                }
+            }
+            $notes  = trim(substr($_POST["notes"] ?? "", 0, 500));
 
-            /* Fire the bartender email (best-effort — don't block the customer) */
-            @knk_email_bar_new_order($order, $SITE_URL);
+            if ($flash === "") {
+                $order = orders_create([
+                    "email"        => $email,
+                    "location"     => $loc,
+                    "room_number"  => $room,
+                    "items"        => $items,
+                    "subtotal_vnd" => $subtotal,
+                    "vat_vnd"      => $vat,
+                    "total_vnd"    => $total,
+                    "notes"        => $notes,
+                ]);
 
-            /* V2 Phase 3: upsert guest + refresh cached stats. Swallows
-             * its own errors so a guests-table issue never blocks the
-             * bartender flow. */
-            $gid = knk_guest_upsert($email);
-            if ($gid) knk_guest_refresh_stats($gid);
+                /* Fire the bartender email (best-effort — don't block the customer) */
+                @knk_email_bar_new_order($order, $SITE_URL);
 
-            $confirm_order = $order;
+                /* V2 Phase 3: upsert guest + refresh cached stats. Swallows
+                 * its own errors so a guests-table issue never blocks the
+                 * bartender flow. */
+                $gid = knk_guest_upsert($email);
+                if ($gid) knk_guest_refresh_stats($gid);
+
+                $confirm_order = $order;
+            }
         }
     }
 }
@@ -161,6 +216,19 @@ if (($_POST["action"] ?? "") === "place_order") {
 
 $email = $_SESSION["order_email"] ?? "";
 $menu  = knk_menu();
+
+/* Market quotes keyed by item_code. When the market is off this is
+ * a map of identity quotes (price == base, eligible=false) so the
+ * render loop can read it uniformly. */
+$marketOn = knk_market_enabled();
+$quotes   = [];
+if ($marketOn) {
+    foreach ($menu as $cat) foreach ($cat["items"] as $it) {
+        $quotes[$it["id"]] = knk_market_quote($it["id"]);
+    }
+}
+$renderTs = time();   // baked into hidden stamp_ts for the 15-sec price lock
+
 $history = $email ? orders_for_email($email) : [];
 $unpaid  = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") !== "paid" && ($o["status"] ?? "") !== "cancelled"));
 $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") === "paid" || ($o["status"] ?? "") === "cancelled"));
@@ -216,6 +284,22 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
   .item .nm { font-weight: 600; color: var(--brown-deep); }
   .item .pr { color: var(--muted); font-size: 13px; min-width: 80px; text-align: right; }
   .item input[type=number] { width: 56px; padding: 6px 8px; text-align: center; font-size: 14px; }
+  .item .trend { font-size: 12px; margin-left: 4px; }
+  .item .trend.up   { color: #b84c2b; }
+  .item .trend.down { color: #1f5a1f; }
+  .item .trend.flat { color: var(--muted); }
+  .tag-pill { display:inline-block; padding: 1px 7px; border-radius: 9px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-left: 6px; vertical-align: middle; }
+  .tag-pill.crash { background: #b84c2b; color: #fff; animation: crashFlash 1.4s infinite; }
+  .tag-pill.lock  { background: #c9aa71; color: #2a1a08; }
+  @keyframes crashFlash {
+    0%, 100% { opacity: 1; }
+    50%      { opacity: 0.55; }
+  }
+  .market-ribbon { background: linear-gradient(90deg,#2a1a08,#3d1f0d); color: var(--gold); padding: 8px 12px; border-radius: 6px; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; text-align: center; margin-bottom: 10px; }
+  .market-ribbon a { color: var(--gold); text-decoration: underline; }
+  .reconfirm-list { margin: 6px 0 12px; }
+  .reconfirm-list .rc-row { display: flex; justify-content: space-between; padding: 5px 0; border-bottom: 1px dashed var(--border); font-size: 14px; }
+  .reconfirm-list .rc-row:last-child { border-bottom: none; }
 
   .loc-row { display:grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .loc-row .roomnum { display:none; }
@@ -295,6 +379,52 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     </div>
     <a href="order.php" class="btn block">Place another order</a>
 
+  <?php elseif ($reconfirm_cart): ?>
+    <!-- ─────── PRICES UPDATED — RE-CONFIRM ─────── -->
+    <?php
+      $rcSub = 0;
+      foreach ($reconfirm_cart["items"] as $it) $rcSub += (int)$it["price_vnd"] * (int)$it["qty"];
+      $rcVat = (int)round($rcSub * KNK_VAT_RATE);
+      $rcTot = $rcSub + $rcVat;
+    ?>
+    <div class="card">
+      <h2>Prices updated</h2>
+      <p class="muted">The market moved while you were browsing. Check the new numbers and confirm — or tap back to the menu.</p>
+      <form method="post" action="order.php">
+        <input type="hidden" name="action" value="place_order">
+        <input type="hidden" name="stamp_ts" value="<?= (int)$renderTs ?>">
+        <input type="hidden" name="location" value="<?= h($_POST["location"] ?? "rooftop") ?>">
+        <?php if (!empty($_POST["room_number"])): ?>
+          <input type="hidden" name="room_number" value="<?= h($_POST["room_number"]) ?>">
+        <?php endif; ?>
+        <?php if (!empty($_POST["notes"])): ?>
+          <input type="hidden" name="notes" value="<?= h($_POST["notes"]) ?>">
+        <?php endif; ?>
+
+        <div class="reconfirm-list">
+          <?php foreach ($reconfirm_cart["items"] as $it): ?>
+            <div class="rc-row">
+              <span><b><?= h($it["name"]) ?></b> <span class="muted">× <?= (int)$it["qty"] ?></span></span>
+              <span><?= h(knk_vnd((int)$it["price_vnd"] * (int)$it["qty"])) ?></span>
+            </div>
+            <input type="hidden" name="qty[<?= h($it["id"]) ?>]" value="<?= (int)$it["qty"] ?>">
+            <input type="hidden" name="stamp_price[<?= h($it["id"]) ?>]" value="<?= (int)$it["price_vnd"] ?>">
+          <?php endforeach; ?>
+        </div>
+
+        <div class="totals">
+          <div class="row"><span>Subtotal</span><span><?= h(knk_vnd($rcSub)) ?></span></div>
+          <div class="row"><span>VAT 10%</span><span><?= h(knk_vnd($rcVat)) ?></span></div>
+          <div class="row total"><span>Total</span><span><?= h(knk_vnd($rcTot)) ?></span></div>
+        </div>
+
+        <button type="submit" class="btn block">Confirm at new prices</button>
+      </form>
+      <p style="text-align:center; margin-top: 10px;">
+        <a href="order.php" class="muted">Back to the menu</a>
+      </p>
+    </div>
+
   <?php elseif (!$email): ?>
     <!-- ─────── EMAIL LOGIN ─────── -->
     <div class="card">
@@ -344,6 +474,13 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     <!-- Order form -->
     <form method="post" action="order.php" id="orderForm">
       <input type="hidden" name="action" value="place_order">
+      <input type="hidden" name="stamp_ts" value="<?= (int)$renderTs ?>">
+
+      <?php if ($marketOn): ?>
+        <div class="market-ribbon">
+          The Beer Stock Market is live — prices move in real time · <a href="/market.php" target="_blank">Watch the board ↗</a>
+        </div>
+      <?php endif; ?>
 
       <div class="card">
         <h2>Menu</h2>
@@ -352,12 +489,40 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
         <?php foreach ($menu as $cat): ?>
           <div class="cat">
             <div class="cat-title"><?= h($cat["title"]) ?></div>
-            <?php foreach ($cat["items"] as $it): ?>
+            <?php foreach ($cat["items"] as $it):
+              $code = (string)$it["id"];
+              // Live price for eligible market items; base otherwise.
+              $liveQuote = $marketOn ? ($quotes[$code] ?? null) : null;
+              $livePrice = $liveQuote ? (int)$liveQuote["price_vnd"] : (int)$it["price_vnd"];
+              $isEligible = $liveQuote && !empty($liveQuote["eligible"]);
+              $trend = $isEligible ? knk_market_trend($code) : "";
+              $inCrash = $isEligible && !empty($liveQuote["in_crash"]);
+              $isLocked = $isEligible && !empty($liveQuote["locked_until"]);
+            ?>
               <div class="item">
-                <span class="nm"><?= h($it["name"]) ?></span>
-                <span class="pr"><?= h(knk_vnd($it["price_vnd"])) ?></span>
-                <input type="number" name="qty[<?= h($it["id"]) ?>]" min="0" max="20" step="1" value="0"
-                       data-price="<?= (int)$it["price_vnd"] ?>" class="qty-input" aria-label="Quantity of <?= h($it["name"]) ?>">
+                <span class="nm">
+                  <?= h($it["name"]) ?>
+                  <?php if ($inCrash): ?>
+                    <span class="tag-pill crash">Crashing</span>
+                  <?php elseif ($isLocked): ?>
+                    <span class="tag-pill lock">Special</span>
+                  <?php endif; ?>
+                </span>
+                <span class="pr">
+                  <?= h(knk_vnd($livePrice)) ?>
+                  <?php if ($isEligible && $trend === "up"): ?>
+                    <span class="trend up" title="Trending up">&#9650;</span>
+                  <?php elseif ($isEligible && $trend === "down"): ?>
+                    <span class="trend down" title="Trending down">&#9660;</span>
+                  <?php elseif ($isEligible): ?>
+                    <span class="trend flat" title="Flat">&ndash;</span>
+                  <?php endif; ?>
+                </span>
+                <input type="number" name="qty[<?= h($code) ?>]" min="0" max="20" step="1" value="0"
+                       data-price="<?= (int)$livePrice ?>" class="qty-input" aria-label="Quantity of <?= h($it["name"]) ?>">
+                <?php if ($marketOn): ?>
+                  <input type="hidden" name="stamp_price[<?= h($code) ?>]" value="<?= (int)$livePrice ?>">
+                <?php endif; ?>
               </div>
             <?php endforeach; ?>
           </div>
