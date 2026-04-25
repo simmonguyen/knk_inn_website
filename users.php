@@ -37,20 +37,41 @@ if ($action === "create") {
 }
 
 elseif ($action === "update") {
-    $id   = (int)($_POST["id"] ?? 0);
-    $name = trim((string)($_POST["name"] ?? ""));
-    $role = (string)($_POST["role"] ?? "");
+    $id    = (int)($_POST["id"] ?? 0);
+    $name  = trim((string)($_POST["name"]  ?? ""));
+    $email = strtolower(trim((string)($_POST["email"] ?? "")));
+    $role  = (string)($_POST["role"]  ?? "");
 
     if ($id <= 0 || $name === "" || !in_array($role, ["super_admin","owner","reception","bartender"], true)) {
         $error = "Missing or invalid fields.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "Enter a valid email address.";
     } elseif ($id === (int)$me["id"] && $role !== "super_admin") {
         // Guard-rail: Ben can't accidentally strip his own super_admin.
         $error = "You can't remove your own Super Admin role. Ask another Super Admin to do it.";
     } else {
-        $stmt = knk_db()->prepare("UPDATE users SET name = ?, role = ? WHERE id = ?");
-        $stmt->execute([$name, $role, $id]);
-        knk_audit("user.update", "users", (string)$id, ["name" => $name, "role" => $role]);
-        $flash = "Updated user #{$id}.";
+        // Reject duplicate emails up front with a friendlier message
+        // than the database UNIQUE-key error.
+        $dup = knk_db()->prepare("SELECT id FROM users WHERE email = ? AND id <> ? LIMIT 1");
+        $dup->execute([$email, $id]);
+        if ($dup->fetch()) {
+            $error = "Someone else is already using that email.";
+        } else {
+            $stmt = knk_db()->prepare("UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?");
+            $stmt->execute([$name, $email, $role, $id]);
+            knk_audit("user.update", "users", (string)$id, [
+                "name"  => $name,
+                "email" => $email,
+                "role"  => $role,
+            ]);
+            // Editing yourself? Refresh the cached email so the nav bar
+            // doesn't keep showing the old one until the next login.
+            if ($id === (int)$me["id"]) {
+                $_SESSION["knk_user_email"] = $email;
+                $_SESSION["knk_user_name"]  = $name;
+            }
+            $flash = "Updated user #{$id}.";
+        }
     }
 }
 
@@ -105,6 +126,38 @@ elseif ($action === "update_permissions") {
         knk_set_user_permissions($id, $perms);
         knk_audit("user.update_permissions", "users", (string)$id, $perms);
         $flash = "Permissions updated for user #{$id}.";
+    }
+}
+
+elseif ($action === "delete") {
+    $id = (int)($_POST["id"] ?? 0);
+    if ($id <= 0) {
+        $error = "Missing user.";
+    } elseif ($id === (int)$me["id"]) {
+        // Hard guard — Ben can't delete himself out of his own admin.
+        $error = "You can't delete yourself. Ask another Super Admin.";
+    } else {
+        // Pull the email/role first so the audit row records who was
+        // wiped. Safe because audit_log.user_id (the actor) is set
+        // to NULL on delete by the FK, but the entity_id + details
+        // are stored as plain strings and won't go away.
+        $stmt = knk_db()->prepare("SELECT email, role FROM users WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+        $target = $stmt->fetch();
+        if (!$target) {
+            $error = "That user is already gone.";
+        } else {
+            knk_audit("user.delete", "users", (string)$id, [
+                "email" => $target["email"],
+                "role"  => $target["role"],
+            ]);
+            // Hard delete. user_sessions + user_permissions cascade
+            // away; orders.bartender_user_id, audit_log.user_id,
+            // photo_slots.updated_by, etc. are all ON DELETE SET NULL,
+            // so historical rows survive with the actor anonymised.
+            knk_db()->prepare("DELETE FROM users WHERE id = ?")->execute([$id]);
+            $flash = "Deleted " . htmlspecialchars($target["email"]) . ".";
+        }
     }
 }
 
@@ -335,7 +388,8 @@ $role_options = [
                   <form method="post" class="row-form">
                     <input type="hidden" name="action" value="update">
                     <input type="hidden" name="id" value="<?= (int)$u["id"] ?>">
-                    <input name="name" type="text" value="<?= htmlspecialchars($u["name"]) ?>" required>
+                    <input name="name"  type="text"  value="<?= htmlspecialchars($u["name"]) ?>"  placeholder="Name"  required>
+                    <input name="email" type="email" value="<?= htmlspecialchars($u["email"]) ?>" placeholder="Email" required>
                     <select name="role">
                       <?php foreach ($role_options as $val => $lbl): ?>
                         <option value="<?= htmlspecialchars($val) ?>" <?= $val === $u["role"] ? "selected" : "" ?>><?= htmlspecialchars($lbl) ?></option>
@@ -399,6 +453,13 @@ $role_options = [
                       <?php else: ?>
                         <button type="submit">Re-activate</button>
                       <?php endif; ?>
+                    </form>
+
+                    <form method="post" class="row-form"
+                          onsubmit="return confirm('Permanently delete <?= htmlspecialchars($u["email"], ENT_QUOTES) ?>?\n\nTheir login is removed for good. Past orders, photos and audit rows stay but show no actor.')">
+                      <input type="hidden" name="action" value="delete">
+                      <input type="hidden" name="id" value="<?= (int)$u["id"] ?>">
+                      <button type="submit" class="danger">Delete user</button>
                     </form>
                   <?php endif; ?>
                 </details>
