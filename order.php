@@ -25,14 +25,74 @@ require_once __DIR__ . "/includes/market_engine.php";
  * Remember the guest's email across visits via a 90-day cookie so they
  * don't have to re-type it every time. Session carries it within a visit;
  * this cookie re-seeds the session on the next visit. */
-define("KNK_GUEST_COOKIE",     "knk_guest_email");
-define("KNK_GUEST_COOKIE_TTL", 90 * 24 * 60 * 60);  // 90 days
+define("KNK_GUEST_COOKIE",      "knk_guest_email");
+define("KNK_GUEST_COOKIE_TTL",  90 * 24 * 60 * 60);  // 90 days
+
+/* Phase 6.1 — Anonymous-but-persistent cookie identity for /bar.php.
+ *
+ * When the page is included from the bar shell (KNK_BAR_FRAME defined)
+ * we want a tipsy first-time guest to be able to order WITHOUT typing
+ * an email. We mint a random anon token on first visit, stash it in a
+ * 1-year cookie, and synthesise a placeholder email of the form
+ *     anon-<token>@guest.knkinn.local
+ * — that satisfies FILTER_VALIDATE_EMAIL so it slots straight into the
+ * existing email-keyed orders/guests pipeline. Real-email login (via the
+ * future profile button) will re-key the orders later by re-using the
+ * same upsert path, so this anon identity is the only persistent thing.
+ *
+ * NOT used outside the bar shell — standalone /order.php still asks for
+ * a real email so receipts/notifications work properly.
+ */
+define("KNK_GUEST_ANON_COOKIE",     "knk_guest_anon");
+define("KNK_GUEST_ANON_COOKIE_TTL", 365 * 24 * 60 * 60);  // 1 year
+/* Use a real subdomain of knkinn.com so FILTER_VALIDATE_EMAIL never
+ * trips on the TLD. The subdomain has no MX record so any errant
+ * outbound mail just bounces — there's no real human at the other end. */
+define("KNK_GUEST_ANON_DOMAIN",     "anon.knkinn.com");
+
+function knk_anon_email_from_token(string $token): string {
+    // Hyphens only — URL-safe and lowercase, easy to spot in admin views.
+    $token = preg_replace('/[^a-z0-9]/', '', strtolower($token));
+    return "anon-" . $token . "@" . KNK_GUEST_ANON_DOMAIN;
+}
+
+/* Mint or re-use an anonymous identity, seed $_SESSION["order_email"],
+ * and (re)issue the cookie. Safe to call repeatedly. */
+function knk_ensure_anon_identity(): void {
+    $token = isset($_COOKIE[KNK_GUEST_ANON_COOKIE])
+        ? preg_replace('/[^a-z0-9]/', '', strtolower((string)$_COOKIE[KNK_GUEST_ANON_COOKIE]))
+        : "";
+    if (strlen($token) < 16) {
+        // 16 hex chars = 64 bits of entropy — plenty for casual identity.
+        try {
+            $token = bin2hex(random_bytes(8));
+        } catch (\Throwable $e) {
+            $token = substr(hash("sha256", uniqid("", true) . microtime(true)), 0, 16);
+        }
+    }
+    $_COOKIE[KNK_GUEST_ANON_COOKIE] = $token;
+    $secure = !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off";
+    setcookie(KNK_GUEST_ANON_COOKIE, $token, [
+        "expires"  => time() + KNK_GUEST_ANON_COOKIE_TTL,
+        "path"     => "/",
+        "secure"   => $secure,
+        "httponly" => true,
+        "samesite" => "Lax",
+    ]);
+    $_SESSION["order_email"] = knk_anon_email_from_token($token);
+}
 
 if (empty($_SESSION["order_email"]) && !empty($_COOKIE[KNK_GUEST_COOKIE])) {
     $_remembered = strtolower(trim((string)$_COOKIE[KNK_GUEST_COOKIE]));
     if (filter_var($_remembered, FILTER_VALIDATE_EMAIL)) {
         $_SESSION["order_email"] = $_remembered;
     }
+}
+
+/* In bar shell mode: if we still don't have an email, mint an anon one
+ * RIGHT NOW so the menu renders on the first visit without a login gate. */
+if (defined('KNK_BAR_FRAME') && empty($_SESSION["order_email"])) {
+    knk_ensure_anon_identity();
 }
 
 /* Build the site URL from the current request so local tests link
@@ -245,6 +305,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Order — KnK Inn</title>
@@ -439,6 +500,9 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
 
   <?php elseif (!$email): ?>
     <!-- ─────── EMAIL LOGIN ─────── -->
+    <!-- NOTE: in bar-shell mode an anonymous cookie identity is minted
+         automatically up top, so $email is always set and this branch
+         never fires inside /bar.php. Standalone /order.php still asks. -->
     <div class="card">
       <h2>Your email</h2>
       <p class="muted">So the bar knows who's ordering and you can see your tab.</p>
@@ -455,10 +519,19 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
   <?php else: ?>
     <!-- ─────── LOGGED-IN: MENU + HISTORY ─────── -->
 
+    <?php
+      // In bar-shell mode the email is usually a synthetic anon-<token>@...
+      // address — meaningless to a tipsy guest, so don't show the strip.
+      // Standalone /order.php still shows it for the "Not you?" reset.
+      $isAnonEmail = (substr($email, -strlen("@" . KNK_GUEST_ANON_DOMAIN)) === "@" . KNK_GUEST_ANON_DOMAIN);
+      $hideLoginStrip = defined('KNK_BAR_FRAME') && $isAnonEmail;
+    ?>
+    <?php if (!$hideLoginStrip): ?>
     <div class="loggedin">
       <span>Ordering as <b><?= h($email) ?></b></span>
       <a href="<?= h($KNK_SELF_URL) ?><?= strpos($KNK_SELF_URL, '?') === false ? '?' : '&' ?>logout=1">Not you?</a>
     </div>
+    <?php endif; ?>
 
     <?php if ($unpaid): ?>
       <div class="card">
