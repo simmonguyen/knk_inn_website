@@ -84,11 +84,53 @@ $jbx_enabled   = !empty($jbx_cfg["enabled"]);
 $jbx_poll      = $jbx_enabled ? max(2, (int)$jbx_cfg["board_poll_seconds"]) : 60;
 $jbx_now       = $jbx_enabled ? knk_jukebox_now_playing() : null;
 $jbx_up_next   = $jbx_enabled ? knk_jukebox_up_next(5) : [];
+
+/* Radio fallback (migration 009). Always upgrade http:// to https://
+ * so the browser doesn't block mixed content on the live site. */
+$radio_enabled = !empty($jbx_cfg["radio_enabled"]);
+$radio_url     = (string)($jbx_cfg["radio_url"] ?? "");
+if ($radio_url !== "" && stripos($radio_url, "http://") === 0) {
+    $radio_url = "https://" . substr($radio_url, 7);
+}
+
 /* Build the request URL for the radio fallback card so we can show
  * patrons where to send their song request when nothing is queued. */
 $_scheme = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off") ? "https" : "http";
 $_host   = (string)($_SERVER["HTTP_HOST"] ?? "knkinn.com");
 $JUKEBOX_REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
+
+/* Audio-engine bootstrap payload — same shape as /jukebox-player.php
+ * uses, so the JS audio loop is a near-copy of that page's. */
+$jbx_initial = [
+    "enabled"      => $jbx_enabled,
+    "poll_seconds" => $jbx_poll,
+    "radio"        => [
+        "enabled" => $radio_enabled,
+        "url"     => $radio_url,
+    ],
+    "now_playing"  => $jbx_now ? [
+        "id"       => (int)$jbx_now["id"],
+        "video_id" => (string)$jbx_now["youtube_video_id"],
+        "title"    => (string)$jbx_now["youtube_title"],
+        "channel"  => (string)$jbx_now["youtube_channel"],
+        "duration" => (int)$jbx_now["duration_seconds"],
+        "thumb"    => (string)$jbx_now["thumbnail_url"],
+        "name"     => (string)$jbx_now["requester_name"],
+        "table_no" => (string)$jbx_now["table_no"],
+    ] : null,
+    "up_next"      => array_map(function ($r) {
+        return [
+            "id"       => (int)$r["id"],
+            "video_id" => (string)$r["youtube_video_id"],
+            "title"    => (string)$r["youtube_title"],
+            "channel"  => (string)$r["youtube_channel"],
+            "duration" => (int)$r["duration_seconds"],
+            "thumb"    => (string)$r["thumbnail_url"],
+            "name"     => (string)$r["requester_name"],
+            "table_no" => (string)$r["table_no"],
+        ];
+    }, $jbx_up_next),
+];
 
 /* ---- Darts ---- */
 $darts_cfg     = knk_darts_config();
@@ -516,9 +558,77 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     letter-spacing: 0.06em;
   }
   .crash-banner.is-hidden { display: none; }
+
+  /* ============================================================
+   * Splash gate — tap to unblock browser autoplay.
+   * ========================================================== */
+  .tv-splash {
+    position: fixed; inset: 0; z-index: 100;
+    background: radial-gradient(circle at center, #1b0f04 0%, #000 70%);
+    display: flex; align-items: center; justify-content: center;
+  }
+  .tv-splash .inner { text-align: center; max-width: 640px; padding: 2rem; }
+  .tv-splash h1 {
+    font-family: "Archivo Black", sans-serif;
+    font-size: 4rem; letter-spacing: 0.04em;
+    margin: 0 0 0.4rem; color: var(--fg);
+  }
+  .tv-splash h1 .accent { color: var(--gold); }
+  .tv-splash p { color: var(--muted); font-size: 1.1rem; margin: 0.6rem 0 1.6rem; }
+  .tv-splash button.start {
+    padding: 1.1rem 2.4rem; background: var(--gold);
+    color: #2a1a08; border: 0;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 1.05rem; letter-spacing: 0.16em; text-transform: uppercase;
+    cursor: pointer; border-radius: 6px;
+  }
+  .tv-splash button.start:hover { background: #d8c08b; }
+  .tv-splash .request-url { margin-top: 2rem; color: var(--muted); font-size: 0.95rem; }
+  .tv-splash .request-url strong { color: var(--gold); font-weight: 700; }
+  body.tv:not(.splash-on) .tv-splash { display: none; }
+
+  /* Hidden audio engine — YouTube iframe scaled to 1×1, parked
+   * off-screen. The user sees the jukebox info in the side panel
+   * (thumbnail + title) and hears the audio from this element. */
+  .tv-audio {
+    position: fixed;
+    width: 1px; height: 1px;
+    left: -9999px; top: -9999px;
+    overflow: hidden; opacity: 0;
+    pointer-events: none;
+  }
+  .tv-audio #tv-yt-player,
+  .tv-audio #tv-yt-player iframe { width: 100%; height: 100%; border: 0; }
 </style>
 </head>
-<body class="tv">
+<body class="tv splash-on">
+
+<!-- Splash gate — required so the browser autoplay policy lets us start
+     audio. Tap once at the start of the night; after that the page plays
+     each queued song automatically and falls back to Triple J radio
+     when the queue's empty. Only shown when the jukebox is enabled. -->
+<?php if ($jbx_enabled): ?>
+<div class="tv-splash" id="tv-splash">
+  <div class="inner">
+    <h1>KnK <span class="accent">Bar TV</span></h1>
+    <p>Tap to start the audio. After this, the jukebox plays automatically.</p>
+    <button type="button" class="start" id="tv-start-btn">▶ Start</button>
+    <div class="request-url">
+      Request a song at <strong><?= h($JUKEBOX_REQUEST_URL) ?></strong>
+    </div>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- Hidden audio engine. The YouTube iframe is sized 1×1 and tucked
+     off-screen — /tv.php is dominated by the market/darts panels and
+     the song info already lives in the jukebox panel, so we only need
+     the audio. /jukebox-player.php still exists if you want a big
+     video screen instead. -->
+<div class="tv-audio" aria-hidden="true">
+  <div id="tv-yt-player"></div>
+  <audio id="tv-radio" preload="none"></audio>
+</div>
 
 <header class="tv-bar">
   <div class="brand">KnK <em>Inn</em></div>
@@ -756,9 +866,193 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   // ============================================================
-  // JUKEBOX (left)
+  // JUKEBOX (left) — panel UI + audio engine.
+  //
+  // Two responsibilities glued together:
+  //   1. Render the side panel (now playing + up-next + radio
+  //      fallback card). Same as before.
+  //   2. Drive the hidden YouTube iframe + radio <audio> element so
+  //      the bar actually hears music. Mirrors the audio loop on
+  //      /jukebox-player.php — kept in sync deliberately.
+  //
+  // Audio is gated behind the splash "Start" button: browsers won't
+  // let us autoplay sound without a user gesture.
   // ============================================================
   var JBX_POLL = <?= (int)$jbx_poll * 1000 ?>;
+
+  // ---- Audio engine state ----
+  var JBX_INITIAL = <?= json_encode($jbx_initial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
+  var RADIO       = JBX_INITIAL.radio || { enabled: false, url: "" };
+  var ytPlayer    = null;
+  var ytReady     = false;
+  var currentRow  = JBX_INITIAL.now_playing; // row currently loaded (or null)
+  var advancing   = false;
+  var audioStarted = false;                  // splash dismissed?
+  var radioPlaying = false;
+  var radioEl      = document.getElementById("tv-radio");
+
+  if (RADIO.enabled && RADIO.url) {
+    radioEl.src = RADIO.url;
+    radioEl.volume = 0.7;
+  }
+  // Surface stream errors so it's obvious in DevTools when a stream URL
+  // is dead. No user-facing fuss — the radio overlay card stays up.
+  radioEl.addEventListener("error", function () {
+    var err = radioEl.error;
+    console.warn("[radio] audio element error", err && err.code, RADIO.url);
+  });
+  radioEl.addEventListener("stalled", function () {
+    console.warn("[radio] stream stalled");
+  });
+  // A real radio stream never ends. If the browser sees `ended` it
+  // means the connection dropped — re-seat src with a cache buster
+  // so we open a fresh connection instead of looping a buffered chunk.
+  radioEl.addEventListener("ended", function () {
+    if (!RADIO.enabled || !RADIO.url) return;
+    if (currentRow) return; // a song just took over
+    console.warn("[radio] stream ended — reconnecting");
+    var sep = RADIO.url.indexOf("?") >= 0 ? "&" : "?";
+    radioEl.src = RADIO.url + sep + "_=" + Date.now();
+    var p = radioEl.play();
+    if (p && p.catch) p.catch(function (e) {
+      console.warn("[radio] reconnect play failed", e);
+    });
+  });
+
+  function startRadioIfIdle() {
+    if (!audioStarted) return;
+    if (!RADIO.enabled || !RADIO.url) return;
+    if (currentRow) return;             // YouTube has the floor
+    // No-op if already streaming. Repeated play() on some streams
+    // restarts the buffered chunk, which sounds like a short loop.
+    if (radioPlaying && !radioEl.paused && !radioEl.ended && !radioEl.error) {
+      return;
+    }
+    try {
+      if (radioEl.error || radioEl.ended || !radioEl.src) {
+        var sep = RADIO.url.indexOf("?") >= 0 ? "&" : "?";
+        radioEl.src = RADIO.url + sep + "_=" + Date.now();
+      }
+      var p = radioEl.play();
+      if (p && p.catch) p.catch(function (e) {
+        console.warn("[radio] play blocked", e);
+      });
+    } catch (e) { console.warn(e); }
+    radioPlaying = true;
+  }
+  function stopRadio() {
+    if (!radioPlaying && radioEl.paused) return;
+    try { radioEl.pause(); } catch (_) {}
+    radioPlaying = false;
+  }
+
+  function loadYouTubeAPI() {
+    if (window.YT && window.YT.Player) {
+      onYouTubeReady();
+      return;
+    }
+    var tag = document.createElement("script");
+    tag.src = "https://www.youtube.com/iframe_api";
+    document.head.appendChild(tag);
+  }
+  window.onYouTubeIframeAPIReady = onYouTubeReady;
+
+  function onYouTubeReady() {
+    if (ytReady) return;
+    ytReady = true;
+    var startVid = currentRow ? currentRow.video_id : null;
+    ytPlayer = new YT.Player("tv-yt-player", {
+      height: "100%",
+      width: "100%",
+      videoId: startVid || "",
+      playerVars: {
+        autoplay: 1,
+        controls: 0,
+        modestbranding: 1,
+        rel: 0,
+        fs: 0,
+        playsinline: 1,
+        iv_load_policy: 3
+      },
+      events: {
+        onReady: function (e) {
+          if (startVid) {
+            try { e.target.playVideo(); } catch (_) {}
+          } else {
+            advanceNow(); // queue had something pending — pull it in
+          }
+        },
+        onStateChange: function (e) {
+          // YT.PlayerState.ENDED == 0
+          if (e.data === 0) advanceNow();
+        },
+        onError: function (e) {
+          console.warn("YT error", e && e.data);
+          advanceNow();
+        }
+      }
+    });
+  }
+
+  function advanceNow() {
+    if (advancing) return;
+    advancing = true;
+    var cid = currentRow ? currentRow.id : null;
+    fetch("/api/jukebox_advance.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "current_id=" + encodeURIComponent(cid || "")
+    })
+    .then(function (r) { return r.json(); })
+    .then(function (j) {
+      advancing = false;
+      if (!j || j.ok !== true) return;
+      playRow(j.next || null);
+    })
+    .catch(function (e) { advancing = false; console.warn(e); });
+  }
+
+  function playRow(row) {
+    currentRow = row;
+    if (!row) {
+      if (ytPlayer && ytPlayer.stopVideo) try { ytPlayer.stopVideo(); } catch (_) {}
+      startRadioIfIdle();
+      return;
+    }
+    stopRadio();
+    if (ytPlayer && ytPlayer.loadVideoById) {
+      try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
+    }
+  }
+
+  // ---- Splash / start gesture (autoplay unblock) ----
+  var startBtn = document.getElementById("tv-start-btn");
+  if (startBtn) {
+    startBtn.addEventListener("click", function () {
+      audioStarted = true;
+      document.body.classList.remove("splash-on");
+      // Prime audio inside the user gesture so later .play() calls
+      // aren't blocked. If nothing is queued, fire up the radio
+      // overlay directly — don't wait for the first poll tick.
+      if (RADIO.enabled && RADIO.url) {
+        if (currentRow) {
+          // A song will take over — just prime then pause.
+          try {
+            radioEl.play().then(function () {
+              try { radioEl.pause(); } catch (_) {}
+            }).catch(function (e) { console.warn("[radio] prime failed", e); });
+          } catch (_) {}
+        } else {
+          startRadioIfIdle();
+        }
+      }
+      loadYouTubeAPI();
+    });
+  } else {
+    // Jukebox kill switch is off — the splash isn't rendered. We're
+    // a passive scoreboard until staff flip it back on (and reload).
+    audioStarted = false;
+  }
 
   function pollJukebox() {
     fetch("/api/jukebox_state.php", { cache: "no-store" })
@@ -769,10 +1063,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   function renderJukebox(s) {
     if (!s) return;
 
-    var nowEl   = document.getElementById("jbx-now");
-    var radioEl = document.getElementById("jbx-radio");
-    var upEl    = document.getElementById("jbx-up");
-    var ol      = document.getElementById("jbx-up-list");
+    var nowEl     = document.getElementById("jbx-now");
+    var radioCard = document.getElementById("jbx-radio");
+    var upEl      = document.getElementById("jbx-up");
+    var ol        = document.getElementById("jbx-up-list");
 
     var hasNow  = !!s.now_playing;
     var upNext  = (s.up_next || []).slice(0, 5);
@@ -781,6 +1075,29 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
      * which is also the case when the kill switch is off (the API
      * returns an empty state in that scenario). */
     var showRadio = !hasNow && !hasUp;
+
+    // ---- Audio engine sync ----
+    // Mirrors the loop in /jukebox-player.php's pollState(): keep our
+    // local YT player in step with whatever the server thinks.
+    if (audioStarted) {
+      var serverNow = s.now_playing;
+      var localId   = currentRow ? currentRow.id : null;
+      var serverId  = serverNow ? serverNow.id : null;
+      if (localId !== serverId) {
+        if (serverNow) {
+          playRow(serverNow);
+        } else if (!advancing && ytReady) {
+          advanceNow();
+        }
+      } else if (!currentRow && hasUp && !advancing && ytReady) {
+        // Nothing playing locally or on server, but a song just
+        // landed in the queue — pick it up.
+        advanceNow();
+      } else if (!currentRow && !hasUp) {
+        // Idle — make sure radio is on (no-op if already streaming).
+        startRadioIfIdle();
+      }
+    }
 
     if (hasNow) {
       var n = s.now_playing;
@@ -797,7 +1114,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       nowEl.hidden = true;
     }
 
-    radioEl.hidden = !showRadio;
+    radioCard.hidden = !showRadio;
 
     if (hasUp) {
       var html = "";
