@@ -35,4 +35,10 @@ return [
     // Generate with:  php -r "echo bin2hex(random_bytes(16));"
     // The admin page will display the full subscription URL once this is set.
     "ics_key" => "",
+
+    // YouTube Data API v3 key for the Jukebox (Phase 3).
+    // Get one at https://console.cloud.google.com — create a project,
+    // enable "YouTube Data API v3", create an API key, paste it here.
+    // Leave empty to disable the jukebox.
+    "youtube_api_key" => "",
 ];

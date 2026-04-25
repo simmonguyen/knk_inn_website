@@ -1,0 +1,594 @@
+<?php
+/*
+ * KnK Inn — Jukebox engine (Phase 3 / proof-of-concept).
+ *
+ * Bar-guest jukebox. Guest scans a QR code, types Artist + Song
+ * Title, this lib calls the YouTube Data API v3, finds a match,
+ * queues it. The bar laptop runs /jukebox-player.php on the TV
+ * and plays each video via the YouTube IFrame Player API.
+ *
+ * Storage:
+ *   jukebox_config     — single-row knobs (see migration 008).
+ *   jukebox_queue      — every request + its lifecycle status.
+ *                        "Now playing" is whichever row has
+ *                        status='playing' (zero or one at a time).
+ *   jukebox_blocklist  — banned videoIds and keywords.
+ *
+ * YouTube quota cost:
+ *   search.list  = 100 units
+ *   videos.list  =   1 unit  (any number of ids in one call)
+ *   So ~101 units per request → ~99 requests / day on the free
+ *   10 000-unit daily quota. Plenty for a pub.
+ */
+
+declare(strict_types=1);
+
+require_once __DIR__ . "/db.php";
+
+/* ==========================================================
+ * CONFIG
+ * ======================================================== */
+
+/** Fields the admin form is allowed to write. */
+function knk_jukebox_config_fields(): array {
+    return [
+        "enabled",
+        "auto_approve",
+        "max_duration_seconds",
+        "per_ip_cooldown_seconds",
+        "require_table_no",
+        "max_queue_length",
+        "board_poll_seconds",
+    ];
+}
+
+function knk_jukebox_defaults(): array {
+    return [
+        "enabled"                 => 0,
+        "auto_approve"            => 1,
+        "max_duration_seconds"    => 420,
+        "per_ip_cooldown_seconds" => 300,
+        "require_table_no"        => 0,
+        "max_queue_length"        => 50,
+        "board_poll_seconds"      => 5,
+    ];
+}
+
+function knk_jukebox_config(): array {
+    $row = knk_db()->query("SELECT * FROM jukebox_config WHERE id = 1 LIMIT 1")->fetch();
+    if (!$row) {
+        // First run after migration but before INSERT IGNORE — seed defaults.
+        knk_db()->exec("INSERT IGNORE INTO jukebox_config (id) VALUES (1)");
+        $row = knk_db()->query("SELECT * FROM jukebox_config WHERE id = 1 LIMIT 1")->fetch();
+    }
+    return $row ?: knk_jukebox_defaults();
+}
+
+function knk_jukebox_config_update(array $fields, ?int $by_user = null): void {
+    if (empty($fields)) return;
+    $allowed = knk_jukebox_config_fields();
+    $sets = [];
+    $vals = [];
+    foreach ($fields as $k => $v) {
+        if (!in_array($k, $allowed, true)) continue;
+        $sets[] = "`{$k}` = ?";
+        $vals[] = is_bool($v) ? (int)$v : $v;
+    }
+    if (empty($sets)) return;
+    $sets[] = "updated_by = ?";
+    $vals[] = $by_user;
+    $sql = "UPDATE jukebox_config SET " . implode(", ", $sets) . " WHERE id = 1";
+    knk_db()->prepare($sql)->execute($vals);
+}
+
+function knk_jukebox_enabled(): bool {
+    $cfg = knk_jukebox_config();
+    return !empty($cfg["enabled"]);
+}
+
+function knk_jukebox_api_key(): string {
+    $cfg = knk_config();
+    return (string)($cfg["youtube_api_key"] ?? "");
+}
+
+/* ==========================================================
+ * BLOCKLIST
+ * ======================================================== */
+
+function knk_jukebox_blocklist_list(): array {
+    return knk_db()->query(
+        "SELECT id, kind, value, reason, blocked_by, blocked_at
+         FROM jukebox_blocklist ORDER BY blocked_at DESC"
+    )->fetchAll();
+}
+
+function knk_jukebox_blocklist_add(string $kind, string $value, string $reason = "", ?int $by_user = null): int {
+    if ($kind !== "video" && $kind !== "keyword") {
+        throw new RuntimeException("Unknown blocklist kind: {$kind}");
+    }
+    $value = trim($value);
+    if ($value === "") throw new RuntimeException("Empty blocklist value.");
+    if ($kind === "keyword") $value = strtolower($value);
+    if (mb_strlen($value) > 200) $value = mb_substr($value, 0, 200);
+
+    $stmt = knk_db()->prepare(
+        "INSERT INTO jukebox_blocklist (kind, value, reason, blocked_by)
+         VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE reason = VALUES(reason), blocked_by = VALUES(blocked_by), blocked_at = CURRENT_TIMESTAMP"
+    );
+    $stmt->execute([$kind, $value, mb_substr($reason, 0, 200), $by_user]);
+    return (int)knk_db()->lastInsertId();
+}
+
+function knk_jukebox_blocklist_remove(int $id): void {
+    knk_db()->prepare("DELETE FROM jukebox_blocklist WHERE id = ?")->execute([$id]);
+}
+
+function knk_jukebox_video_blocked(string $video_id): bool {
+    $stmt = knk_db()->prepare(
+        "SELECT 1 FROM jukebox_blocklist WHERE kind = 'video' AND value = ? LIMIT 1"
+    );
+    $stmt->execute([$video_id]);
+    return (bool)$stmt->fetchColumn();
+}
+
+function knk_jukebox_text_blocked(string $text): bool {
+    $text = strtolower($text);
+    if ($text === "") return false;
+    $stmt = knk_db()->query("SELECT value FROM jukebox_blocklist WHERE kind = 'keyword'");
+    foreach ($stmt as $row) {
+        $kw = (string)$row["value"];
+        if ($kw !== "" && strpos($text, $kw) !== false) return true;
+    }
+    return false;
+}
+
+/* ==========================================================
+ * QUEUE READS
+ * ======================================================== */
+
+function knk_jukebox_now_playing(): ?array {
+    $row = knk_db()->query(
+        "SELECT * FROM jukebox_queue WHERE status = 'playing' ORDER BY submitted_at ASC LIMIT 1"
+    )->fetch();
+    return $row ?: null;
+}
+
+function knk_jukebox_up_next(int $limit = 10): array {
+    $limit = max(1, min(100, $limit));
+    $stmt = knk_db()->prepare(
+        "SELECT * FROM jukebox_queue WHERE status = 'queued'
+         ORDER BY submitted_at ASC LIMIT {$limit}"
+    );
+    $stmt->execute();
+    return $stmt->fetchAll();
+}
+
+function knk_jukebox_pending(int $limit = 50): array {
+    $limit = max(1, min(200, $limit));
+    return knk_db()->query(
+        "SELECT * FROM jukebox_queue WHERE status = 'pending'
+         ORDER BY submitted_at ASC LIMIT {$limit}"
+    )->fetchAll();
+}
+
+function knk_jukebox_recent(int $limit = 20): array {
+    $limit = max(1, min(200, $limit));
+    return knk_db()->query(
+        "SELECT * FROM jukebox_queue
+         WHERE status IN ('played','skipped','rejected')
+         ORDER BY COALESCE(played_at, submitted_at) DESC LIMIT {$limit}"
+    )->fetchAll();
+}
+
+function knk_jukebox_queue_length(): int {
+    return (int)knk_db()->query(
+        "SELECT COUNT(*) FROM jukebox_queue WHERE status IN ('queued','playing')"
+    )->fetchColumn();
+}
+
+function knk_jukebox_queue_position(int $id): int {
+    // 1-based position of this id in the up-next queue (0 if not queued).
+    $stmt = knk_db()->prepare(
+        "SELECT COUNT(*) FROM jukebox_queue
+         WHERE status = 'queued'
+           AND submitted_at <= (SELECT submitted_at FROM jukebox_queue WHERE id = ?)"
+    );
+    $stmt->execute([$id]);
+    $n = (int)$stmt->fetchColumn();
+    return $n;
+}
+
+/* ==========================================================
+ * REQUEST FLOW (guest submit)
+ * ======================================================== */
+
+/**
+ * Returns 0 if this IP is allowed to submit right now, otherwise
+ * the number of seconds remaining on the cooldown.
+ */
+function knk_jukebox_ip_cooldown_remaining(string $ip): int {
+    if ($ip === "") return 0;
+    $cfg = knk_jukebox_config();
+    $cooldown = (int)$cfg["per_ip_cooldown_seconds"];
+    if ($cooldown <= 0) return 0;
+
+    $stmt = knk_db()->prepare(
+        "SELECT TIMESTAMPDIFF(SECOND, submitted_at, NOW()) AS age
+         FROM jukebox_queue
+         WHERE requester_ip = ?
+           AND status IN ('queued','playing','played','pending')
+         ORDER BY submitted_at DESC LIMIT 1"
+    );
+    $stmt->execute([$ip]);
+    $row = $stmt->fetch();
+    if (!$row) return 0;
+    $age = (int)$row["age"];
+    $remaining = $cooldown - $age;
+    return $remaining > 0 ? $remaining : 0;
+}
+
+/**
+ * Server-side YouTube search. Returns the chosen match metadata
+ * or throws RuntimeException with a guest-friendly message.
+ */
+function knk_jukebox_search(string $artist, string $title): array {
+    $key = knk_jukebox_api_key();
+    if ($key === "") {
+        throw new RuntimeException("Jukebox isn't set up yet — staff need to add a YouTube API key.");
+    }
+
+    $artist = trim($artist);
+    $title  = trim($title);
+    $q = trim($artist . " " . $title);
+    if ($q === "") {
+        throw new RuntimeException("Type an artist and a song title.");
+    }
+    if (mb_strlen($q) > 250) {
+        throw new RuntimeException("That's a very long search — shorten it a bit.");
+    }
+
+    $cfg    = knk_jukebox_config();
+    $maxDur = (int)$cfg["max_duration_seconds"];
+
+    // 1) search.list — top 5 candidates.
+    $params = http_build_query([
+        "key"             => $key,
+        "q"               => $q,
+        "part"            => "snippet",
+        "type"            => "video",
+        "maxResults"      => 5,
+        "videoEmbeddable" => "true",
+        "safeSearch"      => "none",
+    ]);
+    $resp = knk_jukebox_http_get("https://www.googleapis.com/youtube/v3/search?" . $params);
+    $data = json_decode($resp, true);
+    if (!is_array($data)) {
+        throw new RuntimeException("Couldn't reach YouTube. Try again in a moment.");
+    }
+    if (isset($data["error"])) {
+        $msg = (string)($data["error"]["message"] ?? "unknown");
+        // Don't leak the raw API error to guests — log and show a friendly version.
+        error_log("jukebox search error: " . $msg);
+        throw new RuntimeException("YouTube search failed. Try again in a moment.");
+    }
+    if (!isset($data["items"]) || !is_array($data["items"]) || count($data["items"]) === 0) {
+        throw new RuntimeException("Couldn't find that on YouTube. Check the spelling and try again.");
+    }
+
+    $candidates = [];
+    foreach ($data["items"] as $item) {
+        $vid = (string)($item["id"]["videoId"] ?? "");
+        if ($vid === "") continue;
+        $sn = $item["snippet"] ?? [];
+        $thumb = (string)(
+            $sn["thumbnails"]["medium"]["url"]
+                ?? $sn["thumbnails"]["high"]["url"]
+                ?? $sn["thumbnails"]["default"]["url"]
+                ?? ""
+        );
+        $candidates[$vid] = [
+            "video_id" => $vid,
+            "title"    => (string)($sn["title"] ?? ""),
+            "channel"  => (string)($sn["channelTitle"] ?? ""),
+            "thumb"    => $thumb,
+        ];
+    }
+    if (empty($candidates)) {
+        throw new RuntimeException("No usable results.");
+    }
+
+    // 2) videos.list — duration + embeddable status.
+    $vparams = http_build_query([
+        "key"  => $key,
+        "id"   => implode(",", array_keys($candidates)),
+        "part" => "contentDetails,status",
+    ]);
+    $vresp = knk_jukebox_http_get("https://www.googleapis.com/youtube/v3/videos?" . $vparams);
+    $vdata = json_decode($vresp, true);
+    if (!is_array($vdata) || !isset($vdata["items"])) {
+        throw new RuntimeException("YouTube lookup failed.");
+    }
+    foreach ($vdata["items"] as $item) {
+        $vid = (string)($item["id"] ?? "");
+        if ($vid === "" || !isset($candidates[$vid])) continue;
+        $candidates[$vid]["duration"]   = knk_jukebox_iso8601_to_seconds((string)($item["contentDetails"]["duration"] ?? ""));
+        $candidates[$vid]["embeddable"] = !empty($item["status"]["embeddable"]);
+        $candidates[$vid]["resolved"]   = true;
+    }
+
+    // Pick the first candidate (in YouTube's relevance order) that
+    // is resolvable, embeddable, has a sane duration, and is not
+    // blocklisted.
+    foreach ($candidates as $vid => $c) {
+        if (empty($c["resolved"]))   continue;
+        if (empty($c["embeddable"])) continue;
+        $d = (int)($c["duration"] ?? 0);
+        if ($d <= 0) continue;
+        if ($maxDur > 0 && $d > $maxDur) continue;
+        if (knk_jukebox_video_blocked($vid)) continue;
+        if (knk_jukebox_text_blocked($c["title"])) continue;
+        if (knk_jukebox_text_blocked($artist . " " . $title)) continue;
+        return [
+            "video_id" => $vid,
+            "title"    => $c["title"],
+            "channel"  => $c["channel"],
+            "duration" => $d,
+            "thumb"    => $c["thumb"],
+        ];
+    }
+
+    // Help the guest understand why nothing went through.
+    $reasons = [];
+    foreach ($candidates as $vid => $c) {
+        if (empty($c["resolved"]) || empty($c["embeddable"])) {
+            $reasons["embed"] = true; continue;
+        }
+        $d = (int)($c["duration"] ?? 0);
+        if ($maxDur > 0 && $d > $maxDur) { $reasons["long"] = true; continue; }
+        if (knk_jukebox_video_blocked($vid) || knk_jukebox_text_blocked($c["title"])) {
+            $reasons["blocked"] = true; continue;
+        }
+    }
+    if (!empty($reasons["long"])) {
+        $minutes = (int)ceil($maxDur / 60);
+        throw new RuntimeException("Top results were longer than the {$minutes}-minute cap. Try a single song version.");
+    }
+    if (!empty($reasons["embed"])) {
+        throw new RuntimeException("Top results aren't allowed to be embedded. Try a different version.");
+    }
+    if (!empty($reasons["blocked"])) {
+        throw new RuntimeException("Staff have blocked this song. Try something else.");
+    }
+    throw new RuntimeException("No suitable match. Try a different search.");
+}
+
+/**
+ * Submit a guest request. Runs cooldown + queue-length checks,
+ * then knk_jukebox_search(), then writes the row.
+ *
+ * Returns: ["id"=>..., "video_id"=>..., "youtube_title"=>..., "position"=>N, "status"=>"queued"|"pending"]
+ */
+function knk_jukebox_request_submit(array $in, string $ip): array {
+    if (!knk_jukebox_enabled()) {
+        throw new RuntimeException("Jukebox is closed right now.");
+    }
+
+    $cfg = knk_jukebox_config();
+    if (!empty($cfg["require_table_no"]) && trim((string)($in["table_no"] ?? "")) === "") {
+        throw new RuntimeException("Please add your table number.");
+    }
+
+    $remaining = knk_jukebox_ip_cooldown_remaining($ip);
+    if ($remaining > 0) {
+        $mins = (int)ceil($remaining / 60);
+        throw new RuntimeException("You've just queued one. Try again in {$mins} min.");
+    }
+
+    if (knk_jukebox_queue_length() >= (int)$cfg["max_queue_length"]) {
+        throw new RuntimeException("The queue is full. Try again in a bit.");
+    }
+
+    $artist = trim((string)($in["artist"] ?? ""));
+    $title  = trim((string)($in["title"]  ?? ""));
+    if ($artist === "" || $title === "") {
+        throw new RuntimeException("Type an artist and a song title.");
+    }
+
+    $match = knk_jukebox_search($artist, $title);
+
+    $status = !empty($cfg["auto_approve"]) ? "queued" : "pending";
+
+    $stmt = knk_db()->prepare(
+        "INSERT INTO jukebox_queue
+         (artist_text, title_text, youtube_video_id, youtube_title, youtube_channel,
+          duration_seconds, thumbnail_url, requester_name, table_no, requester_ip, status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+    );
+    $stmt->execute([
+        mb_substr($artist, 0, 200),
+        mb_substr($title, 0, 200),
+        mb_substr((string)$match["video_id"], 0, 20),
+        mb_substr((string)$match["title"], 0, 300),
+        mb_substr((string)$match["channel"], 0, 200),
+        (int)$match["duration"],
+        mb_substr((string)$match["thumb"], 0, 400),
+        mb_substr(trim((string)($in["name"] ?? "")), 0, 80),
+        mb_substr(trim((string)($in["table_no"] ?? "")), 0, 20),
+        mb_substr($ip, 0, 45),
+        $status,
+    ]);
+    $id = (int)knk_db()->lastInsertId();
+
+    return [
+        "id"            => $id,
+        "video_id"      => $match["video_id"],
+        "youtube_title" => $match["title"],
+        "channel"       => $match["channel"],
+        "duration"      => (int)$match["duration"],
+        "thumb"         => $match["thumb"],
+        "position"      => $status === "queued" ? knk_jukebox_queue_position($id) : 0,
+        "status"        => $status,
+    ];
+}
+
+/* ==========================================================
+ * PLAYBACK FLOW
+ * ======================================================== */
+
+/**
+ * Player flow:
+ *   • If `current_id` is the row that's actually 'playing', mark it
+ *     'played' and promote the oldest 'queued' row to 'playing'.
+ *   • If `current_id` is null, do nothing destructive — only promote
+ *     the next queued row if there's nothing currently playing.
+ *
+ * This means a stale (or stranger-supplied) `current_id` can't be
+ * used to skip songs: the UPDATE only matches the actual playing
+ * row, and we re-check 'playing' before promoting.
+ *
+ * Returns the row that's now 'playing' (or null when the queue is
+ * empty and nothing was playing).
+ */
+function knk_jukebox_advance(?int $current_id = null): ?array {
+    $pdo = knk_db();
+    $pdo->beginTransaction();
+    try {
+        // 1. Close out the currently-playing row, but only if the
+        //    caller's id matches it.
+        if ($current_id !== null && $current_id > 0) {
+            $stmt = $pdo->prepare(
+                "UPDATE jukebox_queue
+                 SET status = 'played', played_at = NOW()
+                 WHERE id = ? AND status = 'playing'"
+            );
+            $stmt->execute([$current_id]);
+        }
+
+        // 2. If something is still playing, return it (no-op advance).
+        $still = $pdo->query(
+            "SELECT * FROM jukebox_queue WHERE status = 'playing'
+             ORDER BY submitted_at ASC LIMIT 1"
+        )->fetch();
+        if ($still) {
+            $pdo->commit();
+            return $still;
+        }
+
+        // 3. No-one's playing — promote the oldest 'queued' row.
+        $next = $pdo->query(
+            "SELECT id FROM jukebox_queue WHERE status = 'queued'
+             ORDER BY submitted_at ASC LIMIT 1"
+        )->fetch();
+
+        if ($next) {
+            $upd = $pdo->prepare(
+                "UPDATE jukebox_queue SET status = 'playing' WHERE id = ? AND status = 'queued'"
+            );
+            $upd->execute([(int)$next["id"]]);
+            $check = $pdo->prepare("SELECT * FROM jukebox_queue WHERE id = ? LIMIT 1");
+            $check->execute([(int)$next["id"]]);
+            $next = $check->fetch() ?: null;
+        }
+
+        $pdo->commit();
+        return $next ? $next : null;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
+    }
+}
+
+function knk_jukebox_skip(int $id, ?int $by_user = null): void {
+    $stmt = knk_db()->prepare(
+        "UPDATE jukebox_queue
+         SET status = 'skipped', played_at = NOW(), actor_user_id = ?
+         WHERE id = ? AND status IN ('queued','playing','pending')"
+    );
+    $stmt->execute([$by_user, $id]);
+}
+
+function knk_jukebox_approve(int $id, ?int $by_user = null): void {
+    $stmt = knk_db()->prepare(
+        "UPDATE jukebox_queue
+         SET status = 'queued', actor_user_id = ?
+         WHERE id = ? AND status = 'pending'"
+    );
+    $stmt->execute([$by_user, $id]);
+}
+
+function knk_jukebox_reject(int $id, string $reason, ?int $by_user = null): void {
+    $stmt = knk_db()->prepare(
+        "UPDATE jukebox_queue
+         SET status = 'rejected', rejection_reason = ?, played_at = NOW(), actor_user_id = ?
+         WHERE id = ? AND status IN ('pending','queued')"
+    );
+    $stmt->execute([mb_substr($reason, 0, 200), $by_user, $id]);
+}
+
+/* ==========================================================
+ * UTILITIES
+ * ======================================================== */
+
+/** ISO 8601 duration "PT4M13S" → 253. Returns 0 on parse failure. */
+function knk_jukebox_iso8601_to_seconds(string $iso): int {
+    if ($iso === "" || $iso[0] !== "P") return 0;
+    if (!preg_match('/^P(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/', $iso, $m)) return 0;
+    $h  = isset($m[1]) ? (int)$m[1] : 0;
+    $mi = isset($m[2]) ? (int)$m[2] : 0;
+    $s  = isset($m[3]) ? (int)$m[3] : 0;
+    return $h * 3600 + $mi * 60 + $s;
+}
+
+/** Tiny "3:42" formatter for the UI. */
+function knk_jukebox_fmt_duration(int $seconds): string {
+    $seconds = max(0, $seconds);
+    $m = (int)floor($seconds / 60);
+    $s = $seconds % 60;
+    return $m . ":" . str_pad((string)$s, 2, "0", STR_PAD_LEFT);
+}
+
+/** Best-effort client IP (proxy-aware). Used for cooldown only. */
+function knk_jukebox_client_ip(): string {
+    $candidates = [
+        $_SERVER["HTTP_CF_CONNECTING_IP"] ?? "",
+        $_SERVER["HTTP_X_FORWARDED_FOR"] ?? "",
+        $_SERVER["REMOTE_ADDR"] ?? "",
+    ];
+    foreach ($candidates as $c) {
+        $c = trim(explode(",", (string)$c)[0]);
+        if ($c !== "" && filter_var($c, FILTER_VALIDATE_IP)) return $c;
+    }
+    return "";
+}
+
+/**
+ * GET wrapper. cURL when available (Matbao's PHP 7.4 ships it),
+ * file_get_contents fallback otherwise.
+ */
+function knk_jukebox_http_get(string $url): string {
+    if (function_exists("curl_init")) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+        curl_setopt($ch, CURLOPT_USERAGENT, "KnKInn-Jukebox/1.0");
+        $resp = curl_exec($ch);
+        $err  = curl_error($ch);
+        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+        if ($resp === false) {
+            throw new RuntimeException("Network error: " . $err);
+        }
+        if ($code >= 500) {
+            throw new RuntimeException("YouTube returned {$code}.");
+        }
+        return (string)$resp;
+    }
+    $ctx = stream_context_create(["http" => ["timeout" => 8, "ignore_errors" => true]]);
+    $resp = @file_get_contents($url, false, $ctx);
+    if ($resp === false) throw new RuntimeException("Network error talking to YouTube.");
+    return $resp;
+}
