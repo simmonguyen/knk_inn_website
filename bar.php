@@ -83,6 +83,7 @@ if ($BAR_TAB !== 'home') {
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta name="robots" content="noindex,nofollow">
   <title>KnK Inn — Bar</title>
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -224,9 +225,9 @@ if ($BAR_TAB !== 'home') {
           <h1 class="bar-home-greeting">Welcome to <em>KnK Inn</em></h1>
           <p class="bar-home-sub">What would you like to do?</p>
 
-          <a class="bar-home-btn" href="/bar.php?tab=drinks">
-            <span class="icon">🍸</span>
-            <span class="label">Order Drinks</span>
+          <a class="bar-home-btn" href="/bar.php?tab=darts">
+            <span class="icon">🎯</span>
+            <span class="label">Throw Darts</span>
             <span class="chev">›</span>
           </a>
           <a class="bar-home-btn" href="/bar.php?tab=music">
@@ -234,9 +235,9 @@ if ($BAR_TAB !== 'home') {
             <span class="label">Music Request</span>
             <span class="chev">›</span>
           </a>
-          <a class="bar-home-btn" href="/bar.php?tab=darts">
-            <span class="icon">🎯</span>
-            <span class="label">Throw Darts</span>
+          <a class="bar-home-btn" href="/bar.php?tab=drinks">
+            <span class="icon">🍸</span>
+            <span class="label">Order Drinks</span>
             <span class="chev">›</span>
           </a>
         </div>
@@ -246,14 +247,14 @@ if ($BAR_TAB !== 'home') {
     </main>
 
     <nav class="bar-shell-tabnav" aria-label="Bar sections">
-      <a class="bar-shell-tab<?= $BAR_TAB === 'drinks' ? ' is-active' : '' ?>" href="/bar.php?tab=drinks">
-        <span class="icon">🍸</span><span>Drinks</span>
+      <a class="bar-shell-tab<?= $BAR_TAB === 'darts' ? ' is-active' : '' ?>" href="/bar.php?tab=darts">
+        <span class="icon">🎯</span><span>Darts</span>
       </a>
       <a class="bar-shell-tab<?= $BAR_TAB === 'music' ? ' is-active' : '' ?>" href="/bar.php?tab=music">
         <span class="icon">🎵</span><span>Music</span>
       </a>
-      <a class="bar-shell-tab<?= $BAR_TAB === 'darts' ? ' is-active' : '' ?>" href="/bar.php?tab=darts">
-        <span class="icon">🎯</span><span>Darts</span>
+      <a class="bar-shell-tab<?= $BAR_TAB === 'drinks' ? ' is-active' : '' ?>" href="/bar.php?tab=drinks">
+        <span class="icon">🍸</span><span>Drinks</span>
       </a>
     </nav>
   </div>
