@@ -177,6 +177,29 @@ function orders_set_status_by_token(string $token, string $status): ?array {
     return $hit;
 }
 
+/**
+ * Permanently delete an order by id. Returns the deleted order (so the
+ * caller can audit-log it) or null if no order matched.
+ *
+ * Used by /order-admin.php to clean up test orders. Super-admin only —
+ * the caller is expected to gate this.
+ */
+function orders_delete_by_id(string $id): ?array {
+    [$fp, $data] = orders_open();
+    $deleted = null;
+    $kept = [];
+    foreach ($data["orders"] as $o) {
+        if ($deleted === null && ($o["id"] ?? "") === $id) {
+            $deleted = $o;
+            continue;
+        }
+        $kept[] = $o;
+    }
+    $data["orders"] = $kept;
+    orders_save($fp, $data);
+    return $deleted;
+}
+
 function orders_set_status_by_id(string $id, string $status): ?array {
     if (!in_array($status, ["pending", "received", "paid", "cancelled"], true)) return null;
     [$fp, $data] = orders_open();

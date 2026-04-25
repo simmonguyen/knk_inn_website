@@ -40,6 +40,41 @@ if (in_array(($_POST["action"] ?? ""), ["received", "paid", "cancelled"], true))
     header("Location: order-admin.php?msg=" . urlencode($flash));
     exit;
 }
+
+/* ---------- Action: permanently delete an order (Super Admin only) ----------
+ * Used to clean up test orders. The audit log row keeps a record of who
+ * deleted what and the order JSON so it can be reconstructed if needed.
+ */
+if (($_POST["action"] ?? "") === "delete") {
+    if (($me["role"] ?? "") !== "super_admin") {
+        header("Location: order-admin.php?msg=" . urlencode("Only Super Admin can delete orders."));
+        exit;
+    }
+    $id = preg_replace('/[^a-zA-Z0-9_]/', '', $_POST["id"] ?? "");
+    if ($id !== "") {
+        try {
+            $deleted = orders_delete_by_id($id);
+            if ($deleted) {
+                knk_audit("order.delete", "order", $id, [
+                    "email"     => $deleted["email"]    ?? null,
+                    "total_vnd" => $deleted["total_vnd"] ?? null,
+                    "status"    => $deleted["status"]   ?? null,
+                    "snapshot"  => $deleted,
+                ]);
+                $flash = "Deleted order #" . $id . ".";
+            } else {
+                $flash = "Couldn't find that order.";
+            }
+        } catch (Throwable $e) {
+            $flash = "Error: " . $e->getMessage();
+        }
+    }
+    $back = $_POST["filter"] ?? "all";
+    if (!in_array($back, ["open", "paid", "all"], true)) $back = "all";
+    header("Location: order-admin.php?filter=" . urlencode($back) . "&msg=" . urlencode($flash));
+    exit;
+}
+
 if (isset($_GET["msg"])) $flash = (string)$_GET["msg"];
 
 /* ---------- Data ---------- */
@@ -126,6 +161,8 @@ foreach ($all as $o) {
   .row-actions button { background: var(--brown-deep); color: var(--gold); border:none; padding: 6px 10px; border-radius: 5px; cursor:pointer; font-size: 12px; font-weight:600; width: 100%; }
   .row-actions button.paid  { background: #1f5a1f; color: #fff; }
   .row-actions button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .row-actions button.danger{ background: transparent; color: #8a1a1a; border: 1px solid #d8b4b4; }
+  .row-actions button.danger:hover { background: #fbe9e9; }
 
   .empty { padding: 40px 20px; text-align: center; color: var(--muted); background: var(--cream-card); border:1px dashed var(--border); border-radius: 8px; }
 
@@ -250,6 +287,15 @@ foreach ($all as $o) {
                     <input type="hidden" name="action" value="cancelled">
                     <input type="hidden" name="id" value="<?= htmlspecialchars($o["id"]) ?>">
                     <button type="submit" class="ghost">Cancel</button>
+                  </form>
+                <?php endif; ?>
+                <?php if (($me["role"] ?? "") === "super_admin"): ?>
+                  <form method="post" action="order-admin.php"
+                        onsubmit="return confirm('Permanently delete order <?= htmlspecialchars($o["id"]) ?>?\n\nThis removes it from the orders dashboard for good. The audit log keeps a record of the deletion.');">
+                    <input type="hidden" name="action" value="delete">
+                    <input type="hidden" name="id" value="<?= htmlspecialchars($o["id"]) ?>">
+                    <input type="hidden" name="filter" value="<?= htmlspecialchars($filter) ?>">
+                    <button type="submit" class="danger">Delete</button>
                   </form>
                 <?php endif; ?>
               </div>
