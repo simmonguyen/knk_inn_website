@@ -245,6 +245,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex,nofollow">
@@ -759,7 +760,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker-inner {
     display: inline-block;
     padding-left: 100%;
-    animation: tv-ticker-scroll 160s linear infinite;
+    animation: tv-ticker-scroll 240s linear infinite;
   }
   @keyframes tv-ticker-scroll {
     0%   { transform: translateX(0); }
@@ -1485,10 +1486,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * the YouTube video id in localStorage so it sticks for future
    * plays. Positive offset = lyrics shown LATER than LRC says.
    * Keyed by row.video_id, NOT row.id, so the offset is shared
-   * across guests who queue the same song. */
-  var LYRIC_OFFSETS_KEY = "tvLyricOffsets";
-  var lyricsOffsetSec   = 0;
-  var lyricsOffsetVid   = null;      // video_id this offset applies to
+   * across guests who queue the same song.
+   *
+   * LYRIC_DEFAULT_OFFSET is applied to songs that don't have a
+   * per-song offset stored yet — LRCLIB tends to run a touch behind
+   * what we want on the rooftop TV (lyrics feel slightly slow), so
+   * we nudge globally by -0.4s. Per-song +/- overrides still win. */
+  var LYRIC_OFFSETS_KEY    = "tvLyricOffsets";
+  var LYRIC_DEFAULT_OFFSET = -0.4;
+  var lyricsOffsetSec      = LYRIC_DEFAULT_OFFSET;
+  var lyricsOffsetVid      = null;   // video_id this offset applies to
   function loadLyricOffsets() {
     try {
       var raw = localStorage.getItem(LYRIC_OFFSETS_KEY);
@@ -1847,7 +1854,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     lyricsOffsetVid = row.video_id || null;
     var offsets = loadLyricOffsets();
     lyricsOffsetSec = (lyricsOffsetVid && typeof offsets[lyricsOffsetVid] === "number")
-      ? offsets[lyricsOffsetVid] : 0;
+      ? offsets[lyricsOffsetVid] : LYRIC_DEFAULT_OFFSET;
 
     /* Adaptive pre-roll. The radio (or previous song's post-roll)
      * keeps playing during the wait, so there's no dead air — we
