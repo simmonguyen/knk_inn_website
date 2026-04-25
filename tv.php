@@ -499,22 +499,27 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .jbx-up li .t { font-weight: 600; line-height: 1.2; }
   .jbx-up li .who { color: var(--muted); font-size: 0.68rem; display: block; margin-top: 2px; }
 
-  /* KnK Bar logo + scan link (sits at the bottom of the jukebox
+  /* KnK Bar QR + scan link (sits at the bottom of the jukebox
    * column). Wrapped in a white frame so the SVG renders as the
    * intended black-on-white QR-style mark — without the frame the
-   * unfilled black-default shapes blend into the dark page. */
+   * unfilled black-default shapes blend into the dark page.
+   *
+   * Stacked vertically so the QR can be a comfortable scan size
+   * (a phone needs ~80% of its screen width to focus on a small QR
+   * from a bar-distance away). */
   .jbx-logo {
     margin-top: auto;          /* pin to bottom of the jukebox column */
     padding-top: 0.7rem;
     border-top: 1px solid var(--line);
-    display: flex; align-items: center; gap: 0.7rem;
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0.5rem;
   }
   .jbx-logo .qr-frame {
     flex: 0 0 auto;
-    width: 64px; height: 64px;
+    width: 130px; height: 130px;
     background: #fff;
-    border-radius: 6px;
-    padding: 4px;
+    border-radius: 8px;
+    padding: 6px;
     display: flex; align-items: center; justify-content: center;
   }
   .jbx-logo .qr-frame img {
@@ -523,17 +528,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   .jbx-logo .tagline {
     color: var(--fg);
-    font-size: 0.72rem; line-height: 1.3;
+    font-size: 0.78rem; line-height: 1.35;
+    text-align: center;
     min-width: 0;
   }
-  .jbx-logo .tagline strong {
-    color: var(--gold); font-weight: 700;
-    display: block; font-size: 0.8rem;
-    letter-spacing: 0.04em;
-    margin-bottom: 1px;
-  }
   .jbx-logo .tagline .url {
-    color: var(--fg); font-weight: 600;
+    color: var(--gold); font-weight: 700;
     word-break: break-all;
   }
 
@@ -632,14 +632,20 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     display: block;
     background: var(--bg2);
     border-top: 1px solid var(--line);
-    min-height: 44px;
+    /* Bumped to fit the bigger lyric font without resizing the
+     * panels above when the ticker mode flips. */
+    min-height: 64px;
   }
 
-  /* Scrolling ticker. Three competing messages, in priority order:
+  /* Footer ticker. Three competing messages, in priority order:
    *   1. Crash announcement (drink price collapse).
    *   2. Live lyric line (synced to the YouTube playhead).
    *   3. Now-playing song info.
-   * Hidden state collapses the column without removing it. */
+   *
+   * Crash and song info SCROLL right-to-left (marquee).
+   * Lyric lines FADE IN at the centre and stay until the next
+   * line replaces them — easier to read along to than a moving
+   * marquee. Hidden state collapses the column without removing it. */
   .tv-ticker {
     overflow: hidden;
     white-space: nowrap;
@@ -647,6 +653,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     font-family: "Archivo Black", sans-serif;
     font-size: 0.92rem; letter-spacing: 0.06em;
     display: flex; align-items: center;
+    min-height: 64px;
   }
   .tv-ticker.is-hidden .tv-ticker-inner {
     visibility: hidden;
@@ -654,16 +661,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker.is-crash {
     background: var(--down); color: #fff;
   }
-  .tv-ticker.is-lyric {
-    color: var(--gold);
-    font-family: "Inter", system-ui, sans-serif;
-    font-weight: 600;
-    font-style: italic;
-    letter-spacing: 0.02em;
-  }
   .tv-ticker.is-song .accent { color: var(--gold); }
-  /* Inner span scrolls right-to-left. padding-left: 100% so the start
-   * of the message slides in from the right edge. */
+  /* Marquee inner (used by is-crash and is-song). padding-left:100%
+   * pushes the start of the message past the right edge so it
+   * slides in. */
   .tv-ticker-inner {
     display: inline-block;
     padding-left: 100%;
@@ -672,12 +673,36 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker.is-crash .tv-ticker-inner {
     animation-duration: 22s;
   }
-  .tv-ticker.is-lyric .tv-ticker-inner {
-    animation-duration: 28s;
-  }
   @keyframes tv-ticker-scroll {
     0%   { transform: translateX(0); }
     100% { transform: translateX(-100%); }
+  }
+
+  /* Lyric mode: centred, larger, italic, fades in (no scroll).
+   * The fade triggers because refreshTicker() resets the inline
+   * animation style on every text change, which retriggers the
+   * keyframe. Each new line replaces the previous in place. */
+  .tv-ticker.is-lyric {
+    color: var(--gold);
+    font-family: "Inter", system-ui, sans-serif;
+    font-weight: 600;
+    font-style: italic;
+    font-size: 1.55rem;
+    letter-spacing: 0.01em;
+    justify-content: center;
+    text-align: center;
+  }
+  .tv-ticker.is-lyric .tv-ticker-inner {
+    display: block;
+    padding-left: 0;
+    white-space: normal;        /* allow long lines to wrap */
+    max-width: 90%;
+    animation: tv-lyric-fade 0.55s ease-out both;
+  }
+  @keyframes tv-lyric-fade {
+    0%   { opacity: 0; transform: translateY(8px) scale(0.96); }
+    60%  { opacity: 1; transform: translateY(0)   scale(1);    }
+    100% { opacity: 1; transform: translateY(0)   scale(1);    }
   }
 
   /* ============================================================
@@ -797,8 +822,8 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       </ol>
     </div>
 
-    <!-- KnK Bar logo + scan link. Pinned to the bottom of this column
-         via margin-top:auto so it always sits in the same place
+    <!-- KnK Bar scan QR. Pinned to the bottom of this column via
+         margin-top:auto so it always sits in the same place
          regardless of which other cards (now/radio/up-next) are
          visible above it. The .qr-frame's white background is what
          makes the SVG render correctly — the logo has unfilled
@@ -808,10 +833,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         <img src="/assets/img/knk-bar-logo.svg" alt="">
       </div>
       <div class="tagline">
-        <strong>KnK Bar</strong>
-        Scan or visit
+        To queue Music, order a Drink or find a Darts Partner,
+        scan the QR or goto
         <span class="url">knkinn.com/bar.php</span>
-        to request a song, order a drink or throw some darts.
       </div>
     </div>
   </section>
@@ -1426,6 +1450,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     .catch(function (e) { advancing = false; console.warn(e); });
   }
 
+  /* Pre-roll delay before the YouTube video actually starts, so
+   * synced lyrics from LRCLIB (which fetchLyrics() kicks off via
+   * renderJukebox the moment the new song id is seen) have time to
+   * come back. Without this, the first 1–2 lines fly past before
+   * we know what to display. */
+  var PLAYROW_PREROLL_MS = 1800;
+
   function playRow(row) {
     currentRow = row;
     /* Keep the video/radio cards in sync with the playing state right
@@ -1444,10 +1475,18 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     }
     if (videoEl) videoEl.hidden = false;
     if (radioCard) radioCard.hidden = true;
-    stopRadio();
-    if (ytPlayer && ytPlayer.loadVideoById) {
-      try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
-    }
+    /* Defer the actual loadVideoById by the pre-roll window. During
+     * this gap the previous source (radio or the previous video's
+     * post-roll) keeps running so there's no dead-air pop. The
+     * race-guard (currentRow !== row) bails if a newer song has
+     * already taken the slot before the timeout fires. */
+    setTimeout(function () {
+      if (currentRow !== row) return;
+      stopRadio();
+      if (ytPlayer && ytPlayer.loadVideoById) {
+        try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
+      }
+    }, PLAYROW_PREROLL_MS);
   }
 
   // ---- Splash / start gesture (autoplay unblock) ----
