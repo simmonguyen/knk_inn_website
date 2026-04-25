@@ -281,8 +281,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     color: var(--fg);
     font-family: "Inter", system-ui, sans-serif;
     display: grid;
-    /* [header strip] [3-up panels — flexible] [footer: logo + ticker] */
-    grid-template-rows: auto 1fr auto;
+    /* [crash strip — collapses when no crash]
+     * [header strip]
+     * [3-up panels — flexible]
+     * [footer: lyrics / sports ticker]
+     *
+     * Crash announcements moved to the TOP so they're not competing
+     * with the bottom lyric/sports ticker. When there's no crash the
+     * row is display:none and folds away with no leftover gap. */
+    grid-template-rows: auto auto 1fr auto;
   }
 
   /* ---- Header strip ---- */
@@ -643,12 +650,38 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   /* ============================================================
+   * Top crash strip — only visible when one or more drinks have
+   * crashed. A slim red marquee that slides the crash announcement
+   * right-to-left across the top of the screen. Collapses to 0
+   * height when there's nothing to say so the panels below don't
+   * jump when the crash clears.
+   * ========================================================== */
+  .tv-crashbar {
+    overflow: hidden;
+    white-space: nowrap;
+    background: var(--down); color: #fff;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.95rem; letter-spacing: 0.08em;
+    display: flex; align-items: center;
+    min-height: 38px;
+    border-bottom: 1px solid #6e1d15;
+  }
+  .tv-crashbar.is-hidden { display: none; }
+  .tv-crashbar-inner {
+    display: inline-block;
+    padding-left: 100%;
+    animation: tv-ticker-scroll 22s linear infinite;
+  }
+
+  /* ============================================================
    * Footer bar — runs along the bottom of the screen.
    *
-   * Holds the scrolling ticker (crash announcements, now-playing
-   * song info, live lyrics). The KnK Bar logo used to live here
-   * too — it's now in the jukebox column so patrons can scan it
-   * from a closer viewpoint.
+   * Reserved for live lyrics (centred fade) — and, when no synced
+   * lyrics are available, a marquee of upcoming sports fixtures
+   * pulled from the same JSON the homepage's #sports section uses.
+   * Crash announcements are NOT shown here any more; they live in
+   * the top crash strip so they don't fight with lyrics for the
+   * same slot.
    * ========================================================== */
   .tv-footer {
     display: block;
@@ -659,15 +692,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     min-height: 64px;
   }
 
-  /* Footer ticker. Three competing messages, in priority order:
-   *   1. Crash announcement (drink price collapse).
-   *   2. Live lyric line (synced to the YouTube playhead).
-   *   3. Now-playing song info.
-   *
-   * Crash and song info SCROLL right-to-left (marquee).
-   * Lyric lines FADE IN at the centre and stay until the next
-   * line replaces them — easier to read along to than a moving
-   * marquee. Hidden state collapses the column without removing it. */
+  /* Bottom ticker — lyric or sports. Lyric fades in at centre;
+   * sports scrolls right-to-left as a marquee. Hidden state keeps
+   * the row reserved so the panels above don't reflow. */
   .tv-ticker {
     overflow: hidden;
     white-space: nowrap;
@@ -680,20 +707,21 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker.is-hidden .tv-ticker-inner {
     visibility: hidden;
   }
-  .tv-ticker.is-crash {
-    background: var(--down); color: #fff;
+  /* Sports mode: scrolls a "•"-separated list of upcoming fixtures
+   * across the bottom whenever no synced lyric line is showing.
+   * The .accent spans (sport tag + kickoff) are gilded so the
+   * eye can pick events out of the stream. */
+  .tv-ticker.is-sports {
+    color: var(--fg);
   }
-  .tv-ticker.is-song .accent { color: var(--gold); }
-  /* Marquee inner (used by is-crash and is-song). padding-left:100%
-   * pushes the start of the message past the right edge so it
-   * slides in. */
+  .tv-ticker.is-sports .accent { color: var(--gold); font-weight: 700; }
+  .tv-ticker.is-sports .sep    { color: var(--muted); margin: 0 0.6rem; }
+  /* Marquee inner (used by is-sports). padding-left:100% pushes the
+   * start of the message past the right edge so it slides in. */
   .tv-ticker-inner {
     display: inline-block;
     padding-left: 100%;
-    animation: tv-ticker-scroll 36s linear infinite;
-  }
-  .tv-ticker.is-crash .tv-ticker-inner {
-    animation-duration: 22s;
+    animation: tv-ticker-scroll 60s linear infinite;
   }
   @keyframes tv-ticker-scroll {
     0%   { transform: translateX(0); }
@@ -701,7 +729,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   /* Lyric mode: centred, larger, italic, fades in (no scroll).
-   * The fade triggers because refreshTicker() resets the inline
+   * The fade triggers because refreshTickerBot() resets the inline
    * animation style on every text change, which retriggers the
    * keyframe. Each new line replaces the previous in place. */
   .tv-ticker.is-lyric {
@@ -780,6 +808,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
      the jukebox panel — see <div class="jbx-video"> below — because
      browsers don't reliably autoplay video in tiny off-screen iframes. -->
 <audio id="tv-radio" preload="none"></audio>
+
+<!-- Top crash strip — full-width red marquee shown only when one or
+     more drinks have crashed (price collapsed). Hidden state collapses
+     to 0 height so the panels below don't reflow when the crash clears.
+     Lives at the TOP so it doesn't fight with the bottom lyric/sports
+     ticker for the same row. -->
+<div class="tv-crashbar is-hidden" id="tv-crashbar">
+  <span class="tv-crashbar-inner" id="tv-crashbar-inner"></span>
+</div>
 
 <header class="tv-bar">
   <div class="brand">KnK <em>Inn</em></div>
@@ -941,11 +978,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
 </main>
 
-<!-- Footer bar — full-width scrolling ticker. Always rendered so
-     the panels above keep a stable height; the ticker just hides
-     its content when there's nothing to say. JS sets the inner
-     text + a mode class ("is-crash" / "is-lyric" / "is-song") on
-     .tv-ticker. Crash > lyric > song in priority order. -->
+<!-- Footer bar — bottom ticker, lyric or sports. Always rendered so
+     the panels above keep a stable height; the ticker just hides its
+     content when there's nothing to say. JS sets the inner text +
+     a mode class ("is-lyric" / "is-sports") on .tv-ticker. Lyrics
+     win — sports fixtures fill the gap whenever no synced lyric is
+     showing. Crash announcements live in the TOP strip, not here. -->
 <footer class="tv-footer">
   <div class="tv-ticker is-hidden" id="tv-ticker">
     <span class="tv-ticker-inner" id="tv-ticker-inner"></span>
@@ -1007,65 +1045,178 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   function safeText(s) { return escapeHtml(decodeHtml(s)); }
 
   // ============================================================
-  // FOOTER TICKER — multipurpose scrolling marquee.
+  // TICKERS — top crash strip + bottom lyric/sports strip.
   //
-  // Three competing message sources, in priority order:
-  //   1. setTickerCrash(text) — drink crash announcement
-  //   2. setTickerLyric(text) — current synced lyric line
-  //   3. setTickerSong(text)  — now-playing info
+  // Two independent slots:
   //
-  // Whoever calls with a non-null string wins the slot until they
-  // call again with null. Crash always wins.
+  //   TOP    .tv-crashbar  — only ever shows crash announcements.
+  //                          Hidden (display:none) when no crash.
+  //                          Driven by setTickerCrash(text).
   //
-  // The animation is restarted on each text change so the new text
-  // starts from the right edge (otherwise it'd join mid-scroll).
+  //   BOTTOM .tv-ticker    — lyrics OR sports fixtures.
+  //                          Priority: lyric > sports.
+  //                          Driven by setTickerLyric(text) +
+  //                          setTickerSports(htmlString) — sports
+  //                          accepts pre-built HTML so kickoff/sport
+  //                          tags can be highlighted in gold.
+  //
+  // Animation: each text change resets the inline animation style so
+  // the new message enters from the right edge rather than picking
+  // up the previous frame's offset. Lyric mode uses the fade-in
+  // keyframe instead of the scroll keyframe (handled via CSS).
   // ============================================================
-  var tickerEl       = document.getElementById("tv-ticker");
-  var tickerInner    = document.getElementById("tv-ticker-inner");
-  var tickerCrashTxt = null;
-  var tickerLyricTxt = null;
-  var tickerSongTxt  = null;
-  var tickerCurrent  = null;   // what's actually on screen right now
-  var tickerCurMode  = null;
+  var crashBarEl    = document.getElementById("tv-crashbar");
+  var crashBarInner = document.getElementById("tv-crashbar-inner");
+  var crashCurrent  = null;
 
-  function refreshTicker() {
-    var nextTxt, nextMode;
-    if (tickerCrashTxt)      { nextTxt = tickerCrashTxt; nextMode = "crash"; }
-    else if (tickerLyricTxt) { nextTxt = tickerLyricTxt; nextMode = "lyric"; }
-    else if (tickerSongTxt)  { nextTxt = tickerSongTxt;  nextMode = "song";  }
-    else                     { nextTxt = null;           nextMode = null;    }
+  var tickerEl        = document.getElementById("tv-ticker");
+  var tickerInner     = document.getElementById("tv-ticker-inner");
+  var tickerLyricTxt  = null;
+  var tickerSportsHtml = null;
+  var tickerCurrent   = null;
+  var tickerCurMode   = null;
 
-    if (nextTxt === tickerCurrent && nextMode === tickerCurMode) return;
-    tickerCurrent = nextTxt;
+  /* ----- TOP: crash strip ----- */
+  function setTickerCrash(text) {
+    var t = text || null;
+    if (t === crashCurrent) return;
+    crashCurrent = t;
+    if (!t) {
+      crashBarEl.classList.add("is-hidden");
+      crashBarInner.textContent = "";
+      return;
+    }
+    crashBarEl.classList.remove("is-hidden");
+    crashBarInner.textContent = t;
+    crashBarInner.style.animation = "none";
+    void crashBarInner.offsetHeight;
+    crashBarInner.style.animation = "";
+  }
+
+  /* ----- BOTTOM: lyric/sports strip ----- */
+  function refreshTickerBot() {
+    var nextHtml, nextTxt, nextMode;
+    if (tickerLyricTxt) {
+      nextTxt = tickerLyricTxt; nextHtml = null; nextMode = "lyric";
+    } else if (tickerSportsHtml) {
+      nextTxt = null; nextHtml = tickerSportsHtml; nextMode = "sports";
+    } else {
+      nextTxt = null; nextHtml = null; nextMode = null;
+    }
+
+    var key = nextMode + "\u0001" + (nextTxt || nextHtml || "");
+    if (key === tickerCurrent && nextMode === tickerCurMode) return;
+    tickerCurrent = key;
     tickerCurMode = nextMode;
 
-    if (!nextTxt) {
+    if (!nextMode) {
       tickerEl.classList.add("is-hidden");
-      tickerEl.classList.remove("is-crash", "is-lyric", "is-song");
+      tickerEl.classList.remove("is-lyric", "is-sports");
       tickerInner.textContent = "";
       return;
     }
-    tickerEl.classList.remove("is-hidden", "is-crash", "is-lyric", "is-song");
+    tickerEl.classList.remove("is-hidden", "is-lyric", "is-sports");
     tickerEl.classList.add("is-" + nextMode);
-    tickerInner.textContent = nextTxt;
-    /* Restart the scroll animation so the new message enters from
-     * the right rather than picking up the previous frame's offset. */
+    if (nextHtml !== null) {
+      tickerInner.innerHTML = nextHtml;
+    } else {
+      tickerInner.textContent = nextTxt;
+    }
+    /* Restart the animation (scroll for sports, fade for lyric) so
+     * the new message starts cleanly rather than mid-frame. */
     tickerInner.style.animation = "none";
-    void tickerInner.offsetHeight;   // force reflow
+    void tickerInner.offsetHeight;
     tickerInner.style.animation = "";
-  }
-  function setTickerCrash(text) {
-    tickerCrashTxt = text || null;
-    refreshTicker();
   }
   function setTickerLyric(text) {
     tickerLyricTxt = text || null;
-    refreshTicker();
+    refreshTickerBot();
   }
-  function setTickerSong(text) {
-    tickerSongTxt = text || null;
-    refreshTicker();
+  function setTickerSports(html) {
+    tickerSportsHtml = html || null;
+    refreshTickerBot();
   }
+
+  // ============================================================
+  // SPORTS FIXTURES — fallback content for the bottom ticker.
+  //
+  // Reads the same JSON that powers knkinn.com/#sports
+  // (/assets/data/fixtures.json), filters to upcoming events within
+  // the next 30 days, formats each as
+  //   "<Sport>  <Sat 25 Apr 12:20 SGT>  Title · subtitle"
+  // and concatenates them with " • " separators into a single long
+  // marquee string. Sport tag + kickoff are wrapped in <span class
+  // ="accent"> so they render in gold.
+  //
+  // Refreshed every 30 minutes so a long evening rotates fixtures
+  // out as their kickoffs pass. The fetched HTML is cached on the
+  // module and pushed into setTickerSports() each refresh — but the
+  // ticker only displays it when no synced lyric is up.
+  // ============================================================
+  var SAIGON_TZ_TV    = "Asia/Ho_Chi_Minh";
+  var FIXTURES_URL    = "/assets/data/fixtures.json";
+  var FIXTURES_REFRESH_MS = 30 * 60 * 1000;
+  var SPORT_ICONS_TV = {
+    "Cricket": "\uD83C\uDFCF", "Formula 1": "\uD83C\uDFCE", "Boxing": "\uD83E\uDD4A",
+    "AFL": "\uD83C\uDFC8",     "NRL": "\uD83C\uDFC9",       "Soccer": "\u26BD",
+    "Rugby Union": "\uD83C\uDFC9", "Tennis": "\uD83C\uDFBE",
+    "Olympics": "\uD83C\uDFC5", "World Cup": "\uD83C\uDFC6"
+  };
+
+  function fmtKickoffTV(iso) {
+    if (!iso) return "";
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var date = new Intl.DateTimeFormat("en-GB", {
+      timeZone: SAIGON_TZ_TV, weekday: "short", day: "2-digit", month: "short"
+    }).format(d);
+    var time = new Intl.DateTimeFormat("en-GB", {
+      timeZone: SAIGON_TZ_TV, hour: "2-digit", minute: "2-digit", hour12: false
+    }).format(d);
+    return time + " " + date + " SGT";
+  }
+
+  function buildSportsHtml(fixtures) {
+    if (!fixtures || !fixtures.length) return null;
+    var now = new Date();
+    var horizon = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    var upcoming = fixtures
+      .filter(function (e) {
+        if (!e.kickoff) return true;       /* tentative entries — keep */
+        var k = new Date(e.kickoff);
+        return k >= now && k <= horizon;
+      })
+      .sort(function (a, b) {
+        if (!a.kickoff) return 1;
+        if (!b.kickoff) return -1;
+        return new Date(a.kickoff) - new Date(b.kickoff);
+      })
+      .slice(0, 14);                       /* match the homepage cap */
+    if (!upcoming.length) return null;
+
+    var pieces = upcoming.map(function (ev) {
+      var icon = SPORT_ICONS_TV[ev.sport] || "\uD83C\uDFC6";
+      var ko   = fmtKickoffTV(ev.kickoff);
+      var sub  = ev.subtitle ? "  \u00B7  " + escapeHtml(ev.subtitle) : "";
+      var koHtml = ko ? '<span class="accent">' + escapeHtml(ko) + '</span>  ' : "";
+      return icon + '  <span class="accent">' + escapeHtml(ev.sport) + '</span>  ' +
+             koHtml + escapeHtml(ev.title || "") + sub;
+    });
+    return pieces.join('<span class="sep">\u2022</span>');
+  }
+
+  function loadFixtures() {
+    fetch(FIXTURES_URL, { cache: "no-cache" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j || !Array.isArray(j.fixtures)) return;
+        var html = buildSportsHtml(j.fixtures);
+        setTickerSports(html);
+      })
+      .catch(function (e) { /* offline — leave whatever's already up */ });
+  }
+  loadFixtures();
+  setInterval(loadFixtures, FIXTURES_REFRESH_MS);
 
   // ============================================================
   // MARKET (centre — always visible, but state can be "closed" or "empty")
@@ -1675,26 +1826,19 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       upEl.hidden = true;
     }
 
-    /* Feed song info to the footer ticker. Lower priority than crash
-     * announcements (and live lyrics) — setTickerSong() is a no-op
-     * while either of those is up. */
+    /* Lyrics: fetch once per song id. The bottom ticker is reserved
+     * for synced lyrics (with sports fixtures filling the gap when
+     * no lyric line is up); the now-playing song info is shown
+     * under the video instead, so we don't push it to the ticker
+     * any more. */
     if (hasNow) {
       var n2 = s.now_playing;
-      var t  = decodeHtml(n2.title || "");
-      var rq = (n2.name || "").trim();
-      var msg = "\u266B  Now playing:  " + t;
-      if (rq) msg += "    \u2014  Requested by " + rq;
-      setTickerSong(msg);
-
-      /* Lyrics: fetch once per song id. If we already fetched for
-       * this id, just keep the existing tick-loop running. */
       if (lyricsForId !== n2.id) {
         clearLyrics();
         lyricsForId = n2.id;
         fetchLyrics(n2.id, decodeHtml(n2.title || ""), decodeHtml(n2.channel || ""));
       }
     } else {
-      setTickerSong(null);
       if (lyricsForId !== null) clearLyrics();
     }
 
