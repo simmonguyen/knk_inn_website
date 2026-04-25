@@ -41,7 +41,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
     <a href="index.php" class="nav-logo">KnK Inn</a>
     <ul class="nav-links">
       <li><a href="index.php" class="active" data-i18n="nav.home">Home</a></li>
-      <li><a href="rooms.html" data-i18n="nav.rooms">Rooms</a></li>
+      <li><a href="rooms.php" data-i18n="nav.rooms">Rooms</a></li>
       <li><a href="drinks.php" data-i18n="nav.drinks">Drinks</a></li>
       <li><a href="gallery.php" data-i18n="nav.gallery">Gallery</a></li>
       <li><a href="#sports" data-i18n="nav.sports">Sports</a></li>
@@ -59,7 +59,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
 
 <div class="mobile-menu">
   <a href="index.php" data-i18n="nav.home">Home</a>
-  <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+  <a href="rooms.php" data-i18n="nav.rooms">Rooms</a>
   <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
   <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
   <a href="#sports" data-i18n="nav.sports">Sports</a>
@@ -88,7 +88,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
     </p>
     <p class="hero-desc" data-i18n="hero.desc">Boutique rooms. Proper coffee. Good wine. Every game on every screen. A rooftop that makes Saigon feel small.</p>
     <div class="hero-actions">
-      <a href="rooms.html" class="btn-primary" data-i18n="hero.ctaRooms">Explore Rooms</a>
+      <a href="rooms.php" class="btn-primary" data-i18n="hero.ctaRooms">Explore Rooms</a>
       <a href="#sports" class="btn-ghost" data-i18n="hero.ctaSports">What's On</a>
     </div>
   </div>
@@ -142,7 +142,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
             <div class="stat-label" data-i18n="about.stat3">Front Desk</div>
           </div>
         </div>
-        <a href="rooms.html" class="btn-primary" data-i18n="about.cta">See The Rooms</a>
+        <a href="rooms.php" class="btn-primary" data-i18n="about.cta">See The Rooms</a>
       </div>
     </div>
   </div>
@@ -415,7 +415,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
     <h2 class="display-lg" data-i18n="cta.title">Come in. <em>Stay a while.</em></h2>
     <p data-i18n="cta.desc">Message us any time — we'll hold a room, a table, or a pint of whatever's cold.</p>
     <div class="hero-actions" style="justify-content:center;">
-      <a href="rooms.html" class="btn-primary" data-i18n="cta.btn1">Book a Room</a>
+      <a href="rooms.php" class="btn-primary" data-i18n="cta.btn1">Book a Room</a>
       <a href="drinks.php" class="btn-ghost" data-i18n="cta.btn2">See the drinks list</a>
     </div>
   </div>
@@ -485,7 +485,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
     <div class="footer-col">
       <h4 data-i18n="footer.explore">Explore</h4>
       <a href="index.php" data-i18n="nav.home">Home</a>
-      <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+      <a href="rooms.php" data-i18n="nav.rooms">Rooms</a>
       <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
       <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
     </div>

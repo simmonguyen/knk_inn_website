@@ -222,7 +222,7 @@ if (file_exists($configPath)) {
             $gBody .= "<p style=\"margin:0 0 10px 0;color:#3d1f0d;\">Thanks so much for your interest in KnK Inn. Unfortunately we can't confirm the dates below — the room's either already taken or it's a bad fit on our side for that window.</p>";
             $gBody .= knk_email_details_table($guestDetails);
             $gBody .= "<p style=\"margin:10px 0;color:#3d1f0d;\">If you've got any flexibility, we'd still love to host you. Reply to this email with alternate dates, or send a fresh enquiry and we'll sort it out.</p>";
-            $gBody .= knk_email_button("Try different dates", "https://knkinn.com/rooms.html", "primary");
+            $gBody .= knk_email_button("Try different dates", "https://knkinn.com/rooms.php", "primary");
             $gBody .= "<p style=\"margin:18px 0 0 0;color:#3d1f0d;\">Apologies for the shuffle — hope to see you soon.</p>";
 
             $gHtml = knk_email_html($gSubject, $gPreheader, $gBody);

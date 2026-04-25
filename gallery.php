@@ -91,7 +91,7 @@ $chip_i18n = [
     <a href="index.php" class="nav-logo">KnK Inn</a>
     <ul class="nav-links">
       <li><a href="index.php" data-i18n="nav.home">Home</a></li>
-      <li><a href="rooms.html" data-i18n="nav.rooms">Rooms</a></li>
+      <li><a href="rooms.php" data-i18n="nav.rooms">Rooms</a></li>
       <li><a href="drinks.php" data-i18n="nav.drinks">Drinks</a></li>
       <li><a href="gallery.php" class="active" data-i18n="nav.gallery">Gallery</a></li>
       <li><a href="index.php#sports" data-i18n="nav.sports">Sports</a></li>
@@ -109,7 +109,7 @@ $chip_i18n = [
 
 <div class="mobile-menu">
   <a href="index.php" data-i18n="nav.home">Home</a>
-  <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+  <a href="rooms.php" data-i18n="nav.rooms">Rooms</a>
   <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
   <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
   <a href="index.php#sports" data-i18n="nav.sports">Sports</a>
@@ -173,7 +173,7 @@ $chip_i18n = [
     <div class="footer-col">
       <h4 data-i18n="footer.explore">Explore</h4>
       <a href="index.php" data-i18n="nav.home">Home</a>
-      <a href="rooms.html" data-i18n="nav.rooms">Rooms</a>
+      <a href="rooms.php" data-i18n="nav.rooms">Rooms</a>
       <a href="drinks.php" data-i18n="nav.drinks">Drinks</a>
       <a href="gallery.php" data-i18n="nav.gallery">Gallery</a>
     </div>

@@ -100,6 +100,33 @@ function knk_photo_sections(): array {
             "slots"   => 2,
             "labels"  => [1 => "Banner", 2 => "Contact card photo"],
         ],
+        [
+            "key"     => "rooms_types",
+            "display" => "Rooms page — room cards",
+            "where"   => "rooms.php — the three big room-type cards near the top",
+            "blurb"   => "One hero photo per room type. Shown on the Rooms page and as the link image guests click to open each room.",
+            "slots"   => 3,
+            "labels"  => [
+                1 => "Standard · No Window",
+                2 => "Standard · Balcony",
+                3 => "VIP · Private Bathtub",
+            ],
+        ],
+        [
+            "key"     => "rooms_common",
+            "display" => "Rooms page — common spaces",
+            "where"   => "rooms.php — the six tiles under ‘Common spaces’",
+            "blurb"   => "Six photos that show off the shared parts of the building: street, bars, lift, darts room, rooftop.",
+            "slots"   => 6,
+            "labels"  => [
+                1 => "Street",
+                2 => "Ground Bar",
+                3 => "Elevator",
+                4 => "5th Floor Bar",
+                5 => "Darts Room",
+                6 => "Rooftop",
+            ],
+        ],
     ];
 }
 
@@ -132,6 +159,15 @@ function knk_slot_defaults(): array {
         "sports_look_around#8" => "nw_69.jpg",
         "find_us#1"            => "nw_05.jpg",
         "find_us#2"            => "nw_33.jpg",
+        "rooms_types#1"        => "rm_00.jpg",
+        "rooms_types#2"        => "rm_02.jpg",
+        "rooms_types#3"        => "rm_04.jpg",
+        "rooms_common#1"       => "ex_01.jpg",
+        "rooms_common#2"       => "ex_10.jpg",
+        "rooms_common#3"       => "nw_57.jpg",
+        "rooms_common#4"       => "nw_11.jpg",
+        "rooms_common#5"       => "rm_15.jpg",
+        "rooms_common#6"       => "ex_08.jpg",
     ];
 }
 

@@ -332,7 +332,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     <a href="index.php" class="nav-logo">KnK Inn</a>
     <ul class="nav-links">
       <li><a href="index.php">Home</a></li>
-      <li><a href="rooms.html">Rooms</a></li>
+      <li><a href="rooms.php">Rooms</a></li>
       <li><a href="drinks.php">Drinks</a></li>
       <li><a href="gallery.php">Gallery</a></li>
       <li><a href="order.php" class="active">Order</a></li>
