@@ -11,8 +11,9 @@
  *   3. Up next      (+ Skip per row)
  *   4. Pending approvals (only when auto_approve = 0)
  *   5. Settings (caps + cooldown + polling)
- *   6. Blocklist (videos + keywords)
- *   7. Recent activity (last 30 played/skipped/rejected)
+ *   6. Radio fallback (MP3 stream when queue is empty)
+ *   7. Blocklist (videos + keywords)
+ *   8. Recent activity (last 30 played/skipped/rejected)
  */
 
 declare(strict_types=1);
@@ -61,6 +62,27 @@ try {
         knk_jukebox_config_update($updates, $me_id);
         knk_audit("jukebox.config", "jukebox_config", "1", ["fields" => array_keys($updates)]);
         $flash = "Settings saved.";
+    }
+    elseif ($action === "save_radio") {
+        // Radio fallback — plays an MP3 stream when the queue is empty
+        // and nothing is currently playing, so the bar isn't silent.
+        $updates = [];
+        $updates["radio_enabled"] = !empty($_POST["radio_enabled"]) ? 1 : 0;
+        $url = trim((string)($_POST["radio_url"] ?? ""));
+        if ($url !== "") {
+            // Only http/https schemes; everything else is rejected.
+            if (!preg_match('~^https?://~i', $url)) {
+                throw new RuntimeException("Stream URL must start with http:// or https://");
+            }
+            // VARCHAR(400) cap.
+            if (strlen($url) > 400) {
+                throw new RuntimeException("Stream URL is too long (max 400 chars).");
+            }
+            $updates["radio_url"] = $url;
+        }
+        knk_jukebox_config_update($updates, $me_id);
+        knk_audit("jukebox.radio", "jukebox_config", "1", ["fields" => array_keys($updates)]);
+        $flash = "Radio fallback saved.";
     }
     elseif ($action === "skip") {
         $id = (int)($_POST["id"] ?? 0);
@@ -435,6 +457,37 @@ function ja_when($s): string {
           </div>
         </div>
         <button type="submit">Save settings</button>
+      </form>
+    </section>
+
+    <!-- RADIO FALLBACK -->
+    <section class="card">
+      <h2>Radio fallback</h2>
+      <p class="explain">
+        When the queue is empty <em>and</em> nothing is playing, the player TV streams this MP3 station so the bar isn't silent. The radio stops the moment a request starts playing. Default is Triple J (Australia).
+      </p>
+      <form method="post">
+        <input type="hidden" name="action" value="save_radio">
+        <div class="grid">
+          <div>
+            <label>Radio fallback</label>
+            <label class="cb" style="margin-top:0.5rem">
+              <input type="checkbox" name="radio_enabled" value="1" <?= !empty($cfg["radio_enabled"]) ? "checked" : "" ?>>
+              Play a radio stream when nothing is queued
+            </label>
+          </div>
+          <div style="grid-column: 1 / -1">
+            <label>Stream URL (MP3)</label>
+            <input type="url" name="radio_url" value="<?= htmlspecialchars((string)($cfg["radio_url"] ?? ""), ENT_QUOTES, "UTF-8") ?>" placeholder="https://live-radio01.mediahubaustralia.com/6TJW/mp3/" style="font-family:monospace;font-size:0.85rem">
+            <p class="explain" style="margin-top:0.4rem">
+              Must start with <code>http://</code> or <code>https://</code>. Tip: pick a station with an HTTPS URL — knkinn.com is HTTPS, so plain <code>http://</code> streams may be blocked by the browser as mixed content.
+              <?php if (!empty($cfg["radio_url"])): ?>
+                <a href="<?= htmlspecialchars((string)$cfg["radio_url"], ENT_QUOTES, "UTF-8") ?>" target="_blank" rel="noopener" style="color:var(--gold);margin-left:0.3rem">Test stream &rarr;</a>
+              <?php endif; ?>
+            </p>
+          </div>
+        </div>
+        <button type="submit">Save radio fallback</button>
       </form>
     </section>
 

@@ -39,6 +39,8 @@ function knk_jukebox_config_fields(): array {
         "require_table_no",
         "max_queue_length",
         "board_poll_seconds",
+        "radio_enabled",
+        "radio_url",
     ];
 }
 
@@ -51,6 +53,8 @@ function knk_jukebox_defaults(): array {
         "require_table_no"        => 0,
         "max_queue_length"        => 50,
         "board_poll_seconds"      => 5,
+        "radio_enabled"           => 1,
+        "radio_url"               => "https://live-radio01.mediahubaustralia.com/6TJW/mp3/",
     ];
 }
 

@@ -29,6 +29,14 @@ $cfg     = knk_jukebox_config();
 $enabled = !empty($cfg["enabled"]);
 $poll    = max(2, (int)$cfg["board_poll_seconds"]);
 
+// Radio fallback (migration 009). Always upgrade http:// to https://
+// so the browser doesn't block mixed content on the live site.
+$radio_enabled = !empty($cfg["radio_enabled"]);
+$radio_url     = (string)($cfg["radio_url"] ?? "");
+if ($radio_url !== "" && stripos($radio_url, "http://") === 0) {
+    $radio_url = "https://" . substr($radio_url, 7);
+}
+
 // Initial state for first paint (avoids empty flash).
 $now     = knk_jukebox_now_playing();
 $upnext  = knk_jukebox_up_next(8);
@@ -36,6 +44,10 @@ $upnext  = knk_jukebox_up_next(8);
 $initial = [
     "enabled"     => $enabled,
     "poll_seconds"=> $poll,
+    "radio"       => [
+        "enabled" => $radio_enabled,
+        "url"     => $radio_url,
+    ],
     "now_playing" => $now ? [
         "id"         => (int)$now["id"],
         "video_id"   => (string)$now["youtube_video_id"],
@@ -219,6 +231,41 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
 
     /* Hide layout while splash is up */
     body.splash-on .stage { visibility: hidden; }
+
+    /* Radio fallback overlay — sits over the YT iframe when nothing is queued. */
+    .radio-overlay {
+      position: absolute; inset: 0;
+      background: radial-gradient(circle at center, #1b0f04 0%, #000 70%);
+      display: none;
+      align-items: center; justify-content: center;
+      z-index: 10;
+    }
+    .radio-overlay.show { display: flex; }
+    .radio-overlay .inner { text-align: center; padding: 2rem; max-width: 80%; }
+    .radio-overlay .pulse {
+      width: 90px; height: 90px; border-radius: 50%;
+      background: var(--gold); color: var(--brown-deep);
+      display: inline-flex; align-items: center; justify-content: center;
+      font-size: 3rem; margin-bottom: 1.4rem;
+      box-shadow: 0 0 0 0 rgba(201,170,113,0.7);
+      animation: radioPulse 2s infinite;
+    }
+    @keyframes radioPulse {
+      0%   { box-shadow: 0 0 0 0 rgba(201,170,113,0.6); }
+      70%  { box-shadow: 0 0 0 28px rgba(201,170,113,0); }
+      100% { box-shadow: 0 0 0 0 rgba(201,170,113,0); }
+    }
+    .radio-overlay h2 {
+      font-family: "Archivo Black", sans-serif;
+      font-size: 2.6rem; margin: 0 0 0.6rem; color: var(--cream);
+      letter-spacing: 0.06em;
+    }
+    .radio-overlay h2 .accent { color: var(--gold); }
+    .radio-overlay .sub { color: var(--cream-dim); font-size: 1.1rem; margin: 0.4rem 0; }
+    .radio-overlay .hint {
+      margin-top: 1.6rem; color: var(--gold); font-size: 0.95rem;
+      letter-spacing: 0.06em;
+    }
   </style>
 </head>
 <body class="splash-on">
@@ -241,13 +288,22 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
 
   <div class="stage" id="stage">
     <div class="video">
-      <div class="badge">KnK Jukebox</div>
+      <div class="badge" id="modeBadge">KnK Jukebox</div>
       <div id="player"></div>
+      <div class="radio-overlay" id="radioOverlay">
+        <div class="inner">
+          <div class="pulse">📻</div>
+          <h2>ON THE <span class="accent">RADIO</span></h2>
+          <div class="sub">Triple J · Australia</div>
+          <div class="hint">Request a song at <?= jph($REQUEST_URL) ?></div>
+        </div>
+      </div>
       <div class="credit" id="credit" style="display:none">
         <div class="t" id="creditTitle"></div>
         <div id="creditWho"></div>
       </div>
     </div>
+    <audio id="radio" preload="none" loop crossorigin="anonymous"></audio>
 
     <aside class="sidebar">
       <h2>Now playing</h2>
@@ -276,6 +332,42 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
     var pollTimer = null;
     var advancing = false;
 
+    // ---- Radio fallback ----
+    var RADIO = INITIAL.radio || { enabled: false, url: "" };
+    var radioEl = document.getElementById("radio");
+    if (RADIO.enabled && RADIO.url) {
+      radioEl.src = RADIO.url;
+      radioEl.volume = 0.7;
+    }
+    var radioPlaying = false;
+
+    function startRadioIfIdle() {
+      if (!RADIO.enabled || !RADIO.url) return;
+      if (currentRow) return;             // YouTube has the floor
+      try {
+        // If the stream stalled, reseat the source so it reconnects.
+        if (radioEl.error || radioEl.ended || !radioEl.src) {
+          radioEl.src = RADIO.url;
+        }
+        var p = radioEl.play();
+        if (p && p.catch) p.catch(function (e) {
+          console.warn("radio play blocked", e);
+        });
+      } catch (e) { console.warn(e); }
+      radioPlaying = true;
+      document.getElementById("radioOverlay").classList.add("show");
+      document.getElementById("modeBadge").textContent = "📻 On the radio";
+      document.getElementById("nowTitle").textContent = "📻 Radio fallback";
+      document.getElementById("nowChannel").textContent = "Triple J — request a song to take over";
+    }
+    function stopRadio() {
+      if (!radioPlaying && radioEl.paused) return;
+      try { radioEl.pause(); } catch (_) {}
+      radioPlaying = false;
+      document.getElementById("radioOverlay").classList.remove("show");
+      document.getElementById("modeBadge").textContent = "KnK Jukebox";
+    }
+
     // ---- Initial sidebar render ----
     renderSidebar(INITIAL.now_playing, INITIAL.up_next);
 
@@ -285,6 +377,15 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
       startBtn.addEventListener("click", function () {
         document.getElementById("splash").style.display = "none";
         document.body.classList.remove("splash-on");
+        // Prime the audio element with the user gesture so later .play()
+        // calls aren't blocked by the autoplay policy.
+        if (RADIO.enabled && RADIO.url) {
+          try {
+            radioEl.play().then(function () {
+              if (currentRow) { try { radioEl.pause(); } catch (_) {} }
+            }).catch(function () {});
+          } catch (_) {}
+        }
         loadYouTubeAPI();
       });
     }
@@ -363,13 +464,19 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
     function playRow(row) {
       currentRow = row;
       if (!row) {
-        // Queue empty. Hide the credit and let polling refresh us.
+        // Queue empty. Hide the credit and start the radio fallback.
         document.getElementById("credit").style.display = "none";
         if (ytPlayer && ytPlayer.stopVideo) try { ytPlayer.stopVideo(); } catch (_) {}
-        document.getElementById("nowTitle").textContent = "Waiting for the next song";
-        document.getElementById("nowChannel").textContent = "";
+        if (RADIO.enabled && RADIO.url) {
+          startRadioIfIdle();
+        } else {
+          document.getElementById("nowTitle").textContent = "Waiting for the next song";
+          document.getElementById("nowChannel").textContent = "";
+        }
         return;
       }
+      // We've got a song — radio steps aside.
+      stopRadio();
       if (ytPlayer && ytPlayer.loadVideoById) {
         try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
       }
@@ -404,10 +511,11 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
       if (now) {
         document.getElementById("nowTitle").textContent = now.title || "";
         document.getElementById("nowChannel").textContent = now.channel || "";
-      } else if (!currentRow) {
+      } else if (!currentRow && !radioPlaying) {
         document.getElementById("nowTitle").textContent = "Waiting for the next song";
         document.getElementById("nowChannel").textContent = "";
       }
+      // If radio is on, leave the "📻 Radio fallback" labels alone.
 
       // Up Next list
       upnext = upnext || [];
@@ -468,6 +576,9 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
             // Nothing playing locally or on server, but a new song
             // landed in the queue — pick it up.
             advanceNow();
+          } else if (!currentRow && !queueHas) {
+            // Idle. Make sure the radio is on (no-op if already playing).
+            startRadioIfIdle();
           }
           renderSidebar(serverNow || currentRow, j.up_next || []);
         })
