@@ -10,16 +10,19 @@
  *   │          │                              │  right)  │
  *   └──────────┴──────────────────────────────┴──────────┘
  *
- * Auto-detect layout: panels appear/disappear based on activity.
- *   - Market is always there.
- *   - Jukebox panel hides if no track playing AND queue is empty.
- *   - Darts panel hides if no boards are mid-game (lobby doesn't count).
+ * All three panels are ALWAYS visible — the layout never reflows.
+ * If a feature is "off" (kill switch flipped, or just nothing
+ * happening), the panel shows a friendly fallback card instead of
+ * disappearing:
  *
- * Layout reflows to fill the screen as panels come and go:
- *   3 panels  →  jukebox | market | darts             (1fr 2fr 1fr)
- *   J+M       →  jukebox | market                     (1fr 3fr)
- *   M+D       →  market  | darts                      (3fr 1fr)
- *   M only    →  market full width
+ *   - Market    : if disabled / no eligible drinks → "Market closed"
+ *                 / "Warming up" message in the same panel.
+ *   - Jukebox   : if nothing playing AND queue empty → "ON THE RADIO"
+ *                 (Triple J · Australia) advert card with a hint to
+ *                 request a song. Same fallback when kill-switched.
+ *   - Darts     : if no boards mid-game → "Waiting for players"
+ *                 advert card with a hint to start a game. Same
+ *                 fallback when kill-switched.
  *
  * The standalone TV pages stay around for setups that want a single
  * focused view per screen:
@@ -81,8 +84,11 @@ $jbx_enabled   = !empty($jbx_cfg["enabled"]);
 $jbx_poll      = $jbx_enabled ? max(2, (int)$jbx_cfg["board_poll_seconds"]) : 60;
 $jbx_now       = $jbx_enabled ? knk_jukebox_now_playing() : null;
 $jbx_up_next   = $jbx_enabled ? knk_jukebox_up_next(5) : [];
-$jbx_queue_n   = $jbx_enabled ? knk_jukebox_queue_length() : 0;
-$jbx_visible   = ($jbx_now !== null) || ($jbx_queue_n > 0);
+/* Build the request URL for the radio fallback card so we can show
+ * patrons where to send their song request when nothing is queued. */
+$_scheme = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off") ? "https" : "http";
+$_host   = (string)($_SERVER["HTTP_HOST"] ?? "knkinn.com");
+$JUKEBOX_REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
 
 /* ---- Darts ---- */
 $darts_cfg     = knk_darts_config();
@@ -125,12 +131,9 @@ if ($darts_enabled) {
         ];
     }
 }
-$darts_visible = !empty($darts_games);
-
-/* ---- Layout class on <body> ---- */
-$body_classes = ["tv"];
-if ($jbx_visible)   $body_classes[] = "has-jukebox";
-if ($darts_visible) $body_classes[] = "has-darts";
+/* The URL on the bar QR codes / "scan to play" cards for darts.
+ * Falls back to /darts.php which lists the boards. */
+$DARTS_LOBBY_URL = $_scheme . "://" . $_host . "/darts.php";
 
 /* ---- Helpers ---- */
 function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
@@ -249,21 +252,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     font-size: 1.1rem; letter-spacing: 0.06em;
   }
 
-  /* ---- Main grid (the panels) ---- */
+  /* ---- Main grid (the panels) ----
+   * Always 3-up: jukebox | market | darts. Panels never disappear;
+   * they show a fallback card when their feature is idle or off. */
   .tv-main {
     display: grid;
-    grid-template-columns: 1fr;       /* default: market only */
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
     gap: 0;
     min-height: 0;
-  }
-  body.has-jukebox.has-darts .tv-main {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
-  }
-  body.has-jukebox:not(.has-darts) .tv-main {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 3fr);
-  }
-  body.has-darts:not(.has-jukebox) .tv-main {
-    grid-template-columns: minmax(0, 3fr) minmax(0, 1fr);
   }
 
   .panel {
@@ -279,7 +275,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     color: var(--gold);
     margin: 0 0 0.6rem;
   }
-  .panel.is-hidden { display: none; }
 
   /* ============================================================
    * Market panel (centre)
@@ -367,9 +362,42 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   .jbx-now .channel { color: var(--muted); font-size: 0.9rem; }
   .jbx-now .who { color: var(--gold); font-size: 0.95rem; font-weight: 600; }
-  .jbx-empty {
-    color: var(--muted); font-size: 1rem;
-    padding: 1rem 0; line-height: 1.4;
+  /* "ON THE RADIO" fallback — shown when nothing is playing or queued
+   * (and also when the kill switch is off). Mirrors the bigger overlay
+   * on /jukebox-player.php in spirit, but compact for the side panel. */
+  .jbx-radio {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0.4rem;
+    padding: 1.4rem 0.6rem;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
+    text-align: center;
+  }
+  .jbx-radio .pulse {
+    font-size: 2.4rem;
+    animation: jbx-pulse 2s ease-in-out infinite;
+  }
+  @keyframes jbx-pulse {
+    0%, 100% { transform: scale(1);    opacity: 0.85; }
+    50%      { transform: scale(1.12); opacity: 1; }
+  }
+  .jbx-radio h3 {
+    font-family: "Archivo Black", sans-serif;
+    font-size: 1.25rem; letter-spacing: 0.08em;
+    margin: 0; color: var(--fg);
+  }
+  .jbx-radio h3 .accent { color: var(--gold); }
+  .jbx-radio .station {
+    color: var(--gold); font-size: 0.95rem; font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .jbx-radio .hint {
+    color: var(--muted); font-size: 0.82rem;
+    line-height: 1.4; margin-top: 0.2rem;
+  }
+  .jbx-radio .hint .url {
+    color: var(--fg); font-weight: 600;
   }
   .jbx-up h3 {
     font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase;
@@ -443,6 +471,39 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-row.active .name::before {
     content: "▸ "; color: var(--gold);
   }
+  /* "Waiting for players" advert — shown when no boards are mid-game,
+   * or when the darts kill switch is off. Same visual weight as a
+   * single live card so the panel doesn't look broken. */
+  .darts-empty {
+    flex: 1 1 auto; min-height: 0;
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 0.5rem;
+    text-align: center;
+    background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 1.4rem 0.8rem;
+  }
+  .darts-empty .pulse {
+    font-size: 2.6rem;
+    animation: jbx-pulse 2.4s ease-in-out infinite;
+  }
+  .darts-empty h3 {
+    font-family: "Archivo Black", sans-serif;
+    font-size: 1.15rem; letter-spacing: 0.06em;
+    color: var(--fg); margin: 0;
+  }
+  .darts-empty h3 .accent { color: var(--gold); }
+  .darts-empty .sub {
+    color: var(--gold); font-weight: 600; font-size: 0.92rem;
+  }
+  .darts-empty .hint {
+    color: var(--muted); font-size: 0.82rem;
+    line-height: 1.4; max-width: 16rem;
+  }
+  .darts-empty .hint .url {
+    color: var(--fg); font-weight: 600;
+  }
 
   /* ============================================================
    * Footer crash banner — only when something crashed
@@ -457,7 +518,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .crash-banner.is-hidden { display: none; }
 </style>
 </head>
-<body class="<?= h(implode(" ", $body_classes)) ?>">
+<body class="tv">
 
 <header class="tv-bar">
   <div class="brand">KnK <em>Inn</em></div>
@@ -469,8 +530,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   <!-- =========================================================
        Jukebox panel (left)
        ======================================================= -->
-  <section class="panel panel-jukebox<?= $jbx_visible ? "" : " is-hidden" ?>" id="panel-jukebox" aria-label="Jukebox">
+  <section class="panel panel-jukebox" id="panel-jukebox" aria-label="Jukebox">
     <h2>🎵 Jukebox</h2>
+
+    <?php
+    /* Decide first paint:
+     *   - If a track is playing, show "now playing" + up-next list.
+     *   - If queue has tracks but nothing's playing yet, show up-next.
+     *   - Otherwise (idle OR kill switch off) show the radio card. */
+    $jbx_show_radio = ($jbx_now === null && empty($jbx_up_next));
+    ?>
 
     <div class="jbx-now" id="jbx-now"<?= $jbx_now ? "" : " hidden" ?>>
       <?php if ($jbx_now): ?>
@@ -484,12 +553,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         <?php endif; ?>
       <?php endif; ?>
     </div>
-    <div class="jbx-empty" id="jbx-empty"<?= $jbx_now ? " hidden" : "" ?>>
-      No track playing right now.<br>
-      Scan the QR to request one.
+
+    <div class="jbx-radio" id="jbx-radio"<?= $jbx_show_radio ? "" : " hidden" ?>>
+      <div class="pulse">📻</div>
+      <h3>ON THE <span class="accent">RADIO</span></h3>
+      <div class="station">Triple J · Australia</div>
+      <div class="hint">Request a song at<br><span class="url"><?= h($_host) ?>/jukebox.php</span></div>
     </div>
 
-    <div class="jbx-up">
+    <div class="jbx-up" id="jbx-up"<?= empty($jbx_up_next) ? " hidden" : "" ?>>
       <h3>Up next</h3>
       <ol id="jbx-up-list">
         <?php foreach ($jbx_up_next as $i => $u): ?>
@@ -549,26 +621,35 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   <!-- =========================================================
        Darts panel (right)
        ======================================================= -->
-  <section class="panel panel-darts<?= $darts_visible ? "" : " is-hidden" ?>" id="panel-darts" aria-label="Darts">
+  <section class="panel panel-darts" id="panel-darts" aria-label="Darts">
     <h2>🎯 Darts</h2>
 
     <div class="darts-stack" id="darts-stack">
-      <?php foreach ($darts_games as $g): ?>
-        <div class="darts-card" data-game-id="<?= (int)$g["game_id"] ?>">
-          <div class="head">
-            <span class="board"><?= h($g["board_name"]) ?></span>
-            <span class="gtype"><?= h(knk_tv_game_label((string)$g["game_type"])) ?></span>
-          </div>
-          <div class="darts-rows">
-            <?php foreach ($g["rows"] as $r): ?>
-              <div class="darts-row<?= !empty($r["is_active"]) ? " active" : "" ?>">
-                <span class="name"><?= h($r["name"]) ?></span>
-                <span class="score"><?= h($r["headline"]) ?></span>
-              </div>
-            <?php endforeach; ?>
-          </div>
+      <?php if (empty($darts_games)): ?>
+        <div class="darts-empty" id="darts-empty">
+          <div class="pulse">🎯</div>
+          <h3>WAITING FOR <span class="accent">PLAYERS</span></h3>
+          <div class="sub">Boards are free — grab some darts.</div>
+          <div class="hint">Start a game at<br><span class="url"><?= h($_host) ?>/darts.php</span></div>
         </div>
-      <?php endforeach; ?>
+      <?php else: ?>
+        <?php foreach ($darts_games as $g): ?>
+          <div class="darts-card" data-game-id="<?= (int)$g["game_id"] ?>">
+            <div class="head">
+              <span class="board"><?= h($g["board_name"]) ?></span>
+              <span class="gtype"><?= h(knk_tv_game_label((string)$g["game_type"])) ?></span>
+            </div>
+            <div class="darts-rows">
+              <?php foreach ($g["rows"] as $r): ?>
+                <div class="darts-row<?= !empty($r["is_active"]) ? " active" : "" ?>">
+                  <span class="name"><?= h($r["name"]) ?></span>
+                  <span class="score"><?= h($r["headline"]) ?></span>
+                </div>
+              <?php endforeach; ?>
+            </div>
+          </div>
+        <?php endforeach; ?>
+      <?php endif; ?>
     </div>
   </section>
 
@@ -580,11 +661,11 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 /* ============================================================
  * Bar TV polling — three panels, three independent intervals.
  *
- * Each panel owns its own re-render. If a panel becomes empty
- * (no jukebox queue / no live darts games), we hide it AND remove
- * the matching `has-*` class on <body> so the grid reflows and
- * the centre Market panel grows to fill the space. When activity
- * comes back, we reverse it.
+ * All three panels are ALWAYS visible. When a panel has nothing
+ * to show (empty queue, no live darts games, kill switch off),
+ * each render() function paints a fallback card — the radio card
+ * for jukebox, the "waiting for players" card for darts. The
+ * layout never reflows.
  *
  * Initial state was server-rendered above, so this script's job
  * is to keep it fresh, not to bootstrap from blank.
@@ -604,17 +685,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   setInterval(tickClock, 30 * 1000);
 
   // ----- Helpers -----
-  function el(html) {
-    var t = document.createElement("template");
-    t.innerHTML = html.trim();
-    return t.content.firstChild;
-  }
-  function setVisible(panelId, classOnBody, isVisible) {
-    var p = document.getElementById(panelId);
-    if (!p) return;
-    p.classList.toggle("is-hidden", !isVisible);
-    document.body.classList.toggle(classOnBody, isVisible);
-  }
+  // Hostname for fallback URL hints — matches what PHP rendered.
+  var TV_HOST = location.host;
+
   function vnd(n) {
     n = parseInt(n, 10) || 0;
     return n.toLocaleString("en-US") + "\u20AB";
@@ -696,13 +769,20 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   function renderJukebox(s) {
     if (!s) return;
 
-    var visible = (s.now_playing) || (s.up_next && s.up_next.length > 0);
-    setVisible("panel-jukebox", "has-jukebox", visible);
-    if (!visible) return;
-
     var nowEl   = document.getElementById("jbx-now");
-    var emptyEl = document.getElementById("jbx-empty");
-    if (s.now_playing) {
+    var radioEl = document.getElementById("jbx-radio");
+    var upEl    = document.getElementById("jbx-up");
+    var ol      = document.getElementById("jbx-up-list");
+
+    var hasNow  = !!s.now_playing;
+    var upNext  = (s.up_next || []).slice(0, 5);
+    var hasUp   = upNext.length > 0;
+    /* Radio card shows when nothing is playing and queue is empty —
+     * which is also the case when the kill switch is off (the API
+     * returns an empty state in that scenario). */
+    var showRadio = !hasNow && !hasUp;
+
+    if (hasNow) {
       var n = s.now_playing;
       var who = n.name ? '<div class="who">Requested by ' + escapeHtml(n.name) + '</div>' : '';
       nowEl.innerHTML =
@@ -712,26 +792,32 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         '<div class="channel">' + escapeHtml(n.channel || "") + '</div>' +
         who;
       nowEl.hidden = false;
-      emptyEl.hidden = true;
     } else {
+      nowEl.innerHTML = "";
       nowEl.hidden = true;
-      emptyEl.hidden = false;
     }
 
-    var ol = document.getElementById("jbx-up-list");
-    var html = "";
-    (s.up_next || []).slice(0, 5).forEach(function (u, i) {
-      var who = u.name ? '<span class="who">' + escapeHtml(u.name) + '</span>' : '';
-      html +=
-        '<li>' +
-          '<span class="num">' + (i + 1) + '.</span>' +
-          '<span>' +
-            '<span class="t">' + escapeHtml(u.title || "") + '</span>' +
-            who +
-          '</span>' +
-        '</li>';
-    });
-    ol.innerHTML = html;
+    radioEl.hidden = !showRadio;
+
+    if (hasUp) {
+      var html = "";
+      upNext.forEach(function (u, i) {
+        var who = u.name ? '<span class="who">' + escapeHtml(u.name) + '</span>' : '';
+        html +=
+          '<li>' +
+            '<span class="num">' + (i + 1) + '.</span>' +
+            '<span>' +
+              '<span class="t">' + escapeHtml(u.title || "") + '</span>' +
+              who +
+            '</span>' +
+          '</li>';
+      });
+      ol.innerHTML = html;
+      upEl.hidden = false;
+    } else {
+      ol.innerHTML = "";
+      upEl.hidden = true;
+    }
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== JBX_POLL) {
       JBX_POLL = Math.max(2000, s.poll_seconds * 1000);
@@ -757,32 +843,44 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   function renderDarts(s) {
     if (!s) return;
-    var games = s.games || [];
-    var visible = games.length > 0;
-    setVisible("panel-darts", "has-darts", visible);
-    if (!visible) return;
-
+    var games = (s && s.games) || [];
     var stack = document.getElementById("darts-stack");
     var html = "";
-    games.forEach(function (g) {
-      var rows = "";
-      (g.rows || []).forEach(function (r) {
-        rows +=
-          '<div class="darts-row' + (r.is_active ? " active" : "") + '">' +
-            '<span class="name">'  + escapeHtml(r.name)     + '</span>' +
-            '<span class="score">' + escapeHtml(r.headline) + '</span>' +
+
+    if (games.length === 0) {
+      /* No live games — paint the "Waiting for players" advert.
+       * Same fallback whether boards are simply free or the kill
+       * switch is off and the API returned an empty list. */
+      html =
+        '<div class="darts-empty" id="darts-empty">' +
+          '<div class="pulse">🎯</div>' +
+          '<h3>WAITING FOR <span class="accent">PLAYERS</span></h3>' +
+          '<div class="sub">Boards are free — grab some darts.</div>' +
+          '<div class="hint">Start a game at<br>' +
+            '<span class="url">' + escapeHtml(TV_HOST) + '/darts.php</span>' +
+          '</div>' +
+        '</div>';
+    } else {
+      games.forEach(function (g) {
+        var rows = "";
+        (g.rows || []).forEach(function (r) {
+          rows +=
+            '<div class="darts-row' + (r.is_active ? " active" : "") + '">' +
+              '<span class="name">'  + escapeHtml(r.name)     + '</span>' +
+              '<span class="score">' + escapeHtml(r.headline) + '</span>' +
+            '</div>';
+        });
+        var label = GAME_LABELS[g.game_type] || g.game_type;
+        html +=
+          '<div class="darts-card" data-game-id="' + (g.game_id | 0) + '">' +
+            '<div class="head">' +
+              '<span class="board">' + escapeHtml(g.board_name) + '</span>' +
+              '<span class="gtype">' + escapeHtml(label)        + '</span>' +
+            '</div>' +
+            '<div class="darts-rows">' + rows + '</div>' +
           '</div>';
       });
-      var label = GAME_LABELS[g.game_type] || g.game_type;
-      html +=
-        '<div class="darts-card" data-game-id="' + (g.game_id | 0) + '">' +
-          '<div class="head">' +
-            '<span class="board">' + escapeHtml(g.board_name) + '</span>' +
-            '<span class="gtype">' + escapeHtml(label)        + '</span>' +
-          '</div>' +
-          '<div class="darts-rows">' + rows + '</div>' +
-        '</div>';
-    });
+    }
     stack.innerHTML = html;
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== DARTS_POLL) {
