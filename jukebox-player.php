@@ -303,7 +303,7 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
         <div id="creditWho"></div>
       </div>
     </div>
-    <audio id="radio" preload="none" loop crossorigin="anonymous"></audio>
+    <audio id="radio" preload="none" loop>
 
     <aside class="sidebar">
       <h2>Now playing</h2>
@@ -340,6 +340,15 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
       radioEl.volume = 0.7;
     }
     var radioPlaying = false;
+    // Surface stream load errors in DevTools so it's obvious if a stream
+    // URL is dead or the host is blocking us.
+    radioEl.addEventListener("error", function () {
+      var err = radioEl.error;
+      console.warn("[radio] audio element error", err && err.code, RADIO.url);
+    });
+    radioEl.addEventListener("stalled", function () {
+      console.warn("[radio] stream stalled");
+    });
 
     function startRadioIfIdle() {
       if (!RADIO.enabled || !RADIO.url) return;
@@ -378,13 +387,20 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
         document.getElementById("splash").style.display = "none";
         document.body.classList.remove("splash-on");
         // Prime the audio element with the user gesture so later .play()
-        // calls aren't blocked by the autoplay policy.
+        // calls aren't blocked by the autoplay policy. If there's nothing
+        // queued right now, kick the radio overlay on directly — don't wait
+        // for the first poll tick.
         if (RADIO.enabled && RADIO.url) {
-          try {
-            radioEl.play().then(function () {
-              if (currentRow) { try { radioEl.pause(); } catch (_) {} }
-            }).catch(function () {});
-          } catch (_) {}
+          if (currentRow) {
+            // A song is already in flight — just prime then pause.
+            try {
+              radioEl.play().then(function () {
+                try { radioEl.pause(); } catch (_) {}
+              }).catch(function (e) { console.warn("[radio] prime failed", e); });
+            } catch (_) {}
+          } else {
+            startRadioIfIdle();
+          }
         }
         loadYouTubeAPI();
       });
