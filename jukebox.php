@@ -19,6 +19,10 @@ require_once __DIR__ . "/includes/jukebox.php";
 
 function jbh($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
 
+/* Self-URL (frame-aware). When included from /bar.php, KNK_BAR_FRAME is
+ * defined and self-references should keep the user inside the bar shell. */
+$KNK_SELF_URL = defined('KNK_BAR_FRAME') ? '/bar.php?tab=music' : '/jukebox.php';
+
 /* ----------- POST: submit a request ----------- */
 $post_action = (string)($_POST["action"] ?? "");
 
@@ -45,7 +49,7 @@ if ($post_action === "submit") {
             ],
         ];
     }
-    header("Location: /jukebox.php");
+    header("Location: " . $KNK_SELF_URL);
     exit;
 }
 
@@ -62,7 +66,9 @@ $now_playing = knk_jukebox_now_playing();
 $up_next     = knk_jukebox_up_next(8);
 
 $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["echo"] : [];
-?><!DOCTYPE html>
+?>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -72,6 +78,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<?php endif; ?>
   <style>
     :root {
       --gold: #c9aa71;
@@ -255,10 +262,14 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
     }
     .footer-note a { color: var(--gold); }
   </style>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
 </head>
 <body>
+<?php endif; ?>
   <main>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
     <div class="brand"><strong>KnK</strong> <em>Inn</em></div>
+<?php endif; ?>
 
     <h1>Pick a <span class="accent">song.</span></h1>
     <p class="lede">
@@ -298,7 +309,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
         </div>
       <?php endif; ?>
 
-      <form class="card" method="post" action="/jukebox.php" autocomplete="off">
+      <form class="card" method="post" action="<?= jbh($KNK_SELF_URL) ?>" autocomplete="off">
         <input type="hidden" name="action" value="submit">
 
         <div class="field">
@@ -387,9 +398,13 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
 
     <?php endif; ?>
 
+<?php if (!defined('KNK_BAR_FRAME')): ?>
     <p class="footer-note">
       KnK Inn · <a href="/">Back to site</a>
     </p>
+<?php endif; ?>
   </main>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
 </body>
 </html>
+<?php endif; ?>

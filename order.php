@@ -45,6 +45,13 @@ $SITE_URL = $_scheme . "://" . $_host;
 function h($s) { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
 function redirect($to) { header("Location: $to"); exit; }
 
+/* ---- Self-URL (frame-aware) ----
+ * When this page is included from /bar.php, KNK_BAR_FRAME is defined and
+ * we want self-references to point at /bar.php?tab=drinks so the user
+ * stays inside the unified shell. Otherwise /order.php works standalone
+ * (e.g. for QR codes), and self-references stay as "order.php". */
+$KNK_SELF_URL = defined('KNK_BAR_FRAME') ? '/bar.php?tab=drinks' : 'order.php';
+
 $flash  = "";
 $confirm_order = null;
 
@@ -62,7 +69,7 @@ if (($_GET["logout"] ?? "") !== "") {
         ]);
         unset($_COOKIE[KNK_GUEST_COOKIE]);
     }
-    redirect("order.php");
+    redirect($KNK_SELF_URL);
 }
 
 /* ---- Email login (POST) ---- */
@@ -81,7 +88,7 @@ if (($_POST["action"] ?? "") === "login") {
             "httponly" => true,
             "samesite" => "Lax",
         ]);
-        redirect("order.php");
+        redirect($KNK_SELF_URL);
     }
 }
 
@@ -105,7 +112,7 @@ $reconfirm_cart = null;   // set when we need to show "prices updated" screen
 if (($_POST["action"] ?? "") === "place_order") {
     $email = strtolower(trim($_SESSION["order_email"] ?? ""));
     if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        redirect("order.php");
+        redirect($KNK_SELF_URL);
     }
 
     $lookup    = knk_menu_lookup();
@@ -233,7 +240,9 @@ $history = $email ? orders_for_email($email) : [];
 $unpaid  = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") !== "paid" && ($o["status"] ?? "") !== "cancelled"));
 $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") === "paid" || ($o["status"] ?? "") === "cancelled"));
 
-?><!DOCTYPE html>
+?>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
@@ -244,6 +253,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="assets/css/styles.css?v=12">
+<?php endif; ?>
 <style>
   :root {
     --brown-deep:#180c03; --brown-mid:#3d1f0d; --gold:#c9aa71; --gold-dark:#9c7f4a;
@@ -324,6 +334,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
   .ok-banner { background: #1f5a1f; color: #fff; padding: 16px 20px; border-radius: 10px; text-align:center; margin: 10px 0 16px; }
   .ok-banner h2 { color: #fff; margin: 0 0 4px; font-family: 'Archivo Black'; font-size: 22px; }
 </style>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
 </head>
 <body>
 
@@ -339,6 +350,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     </ul>
   </div>
 </nav>
+<?php endif; ?>
 
 <div class="wrap">
 
@@ -377,7 +389,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
         <p class="muted">Notes: <?= h($confirm_order["notes"]) ?></p>
       <?php endif; ?>
     </div>
-    <a href="order.php" class="btn block">Place another order</a>
+    <a href="<?= h($KNK_SELF_URL) ?>" class="btn block">Place another order</a>
 
   <?php elseif ($reconfirm_cart): ?>
     <!-- ─────── PRICES UPDATED — RE-CONFIRM ─────── -->
@@ -390,7 +402,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     <div class="card">
       <h2>Prices updated</h2>
       <p class="muted">The market moved while you were browsing. Check the new numbers and confirm — or tap back to the menu.</p>
-      <form method="post" action="order.php">
+      <form method="post" action="<?= h($KNK_SELF_URL) ?>">
         <input type="hidden" name="action" value="place_order">
         <input type="hidden" name="stamp_ts" value="<?= (int)$renderTs ?>">
         <input type="hidden" name="location" value="<?= h($_POST["location"] ?? "rooftop") ?>">
@@ -421,7 +433,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
         <button type="submit" class="btn block">Confirm at new prices</button>
       </form>
       <p style="text-align:center; margin-top: 10px;">
-        <a href="order.php" class="muted">Back to the menu</a>
+        <a href="<?= h($KNK_SELF_URL) ?>" class="muted">Back to the menu</a>
       </p>
     </div>
 
@@ -430,7 +442,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     <div class="card">
       <h2>Your email</h2>
       <p class="muted">So the bar knows who's ordering and you can see your tab.</p>
-      <form method="post" action="order.php">
+      <form method="post" action="<?= h($KNK_SELF_URL) ?>">
         <input type="hidden" name="action" value="login">
         <label class="lbl" for="email">Email</label>
         <input type="email" id="email" name="email" required autocomplete="email" placeholder="you@example.com" value="<?= h($_POST["email"] ?? "") ?>">
@@ -445,7 +457,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
 
     <div class="loggedin">
       <span>Ordering as <b><?= h($email) ?></b></span>
-      <a href="order.php?logout=1">Not you?</a>
+      <a href="<?= h($KNK_SELF_URL) ?><?= strpos($KNK_SELF_URL, '?') === false ? '?' : '&' ?>logout=1">Not you?</a>
     </div>
 
     <?php if ($unpaid): ?>
@@ -472,7 +484,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     <?php endif; ?>
 
     <!-- Order form -->
-    <form method="post" action="order.php" id="orderForm">
+    <form method="post" action="<?= h($KNK_SELF_URL) ?>" id="orderForm">
       <input type="hidden" name="action" value="place_order">
       <input type="hidden" name="stamp_ts" value="<?= (int)$renderTs ?>">
 
@@ -627,5 +639,7 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
   })();
 </script>
 
+<?php if (!defined('KNK_BAR_FRAME')): ?>
 </body>
 </html>
+<?php endif; ?>

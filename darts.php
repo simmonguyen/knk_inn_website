@@ -25,6 +25,22 @@ require_once __DIR__ . "/includes/darts.php";
 
 function dh($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
 
+/* Self-URL helper (frame-aware).
+ *
+ * Standalone: returns "/darts.php" (or "/darts.php?game=42").
+ * Framed inside /bar.php: returns "/bar.php?tab=darts" (or "/bar.php?tab=darts&game=42").
+ *
+ * The QR codes in the darts room point at /darts.php?board=N directly;
+ * this helper only matters for in-page navigation links and redirects.
+ */
+function knk_darts_url(array $params = []): string {
+    if (defined('KNK_BAR_FRAME')) {
+        $params = array_merge(['tab' => 'darts'], $params);
+        return '/bar.php?' . http_build_query($params);
+    }
+    return '/darts.php' . (!empty($params) ? '?' . http_build_query($params) : '');
+}
+
 /* ----- Resolve which view we're rendering ----- */
 $view = 'pick_board';
 $board   = null;
@@ -44,7 +60,7 @@ $qs_board = (int)($_GET['board'] ?? 0);
 if ($qs_join !== '' && $qs_game === 0) {
     $g = knk_darts_game_by_join_code($qs_join);
     if ($g) {
-        header("Location: /darts.php?game=" . (int)$g['id'] . "&join=1");
+        header("Location: " . knk_darts_url(['game' => (int)$g['id'], 'join' => 1]));
         exit;
     }
     $view = 'pick_board'; // bad code, fall back
@@ -55,7 +71,7 @@ if ($qs_game > 0) {
     $st->execute([$qs_game]);
     $game = $st->fetch();
     if (!$game) {
-        header("Location: /darts.php");
+        header("Location: " . knk_darts_url());
         exit;
     }
     $cookie_name = "darts_token_{$qs_game}";
@@ -72,24 +88,26 @@ if ($qs_game > 0) {
 } elseif ($qs_board > 0) {
     foreach ($boards as $b) if ((int)$b['id'] === $qs_board) { $board = $b; break; }
     if (!$board) {
-        header("Location: /darts.php");
+        header("Location: " . knk_darts_url());
         exit;
     }
     $active = knk_darts_active_game_on_board((int)$board['id']);
     if ($active) {
         if ($active['status'] === 'lobby') {
             // Drop them into the lobby view (as a joiner).
-            header("Location: /darts.php?game=" . (int)$active['id']);
+            header("Location: " . knk_darts_url(['game' => (int)$active['id']]));
             exit;
         }
         // A game is already playing on this board — let them watch.
-        header("Location: /darts.php?game=" . (int)$active['id']);
+        header("Location: " . knk_darts_url(['game' => (int)$active['id']]));
         exit;
     }
     $view = 'host_setup';
 }
 
-?><!DOCTYPE html>
+?>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -99,6 +117,7 @@ if ($qs_game > 0) {
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<?php endif; ?>
   <style>
     :root {
       --gold: #c9aa71;
@@ -381,10 +400,14 @@ if ($qs_game > 0) {
     .small-link { color: var(--gold); text-decoration: none; font-size: 0.9rem; }
     .small-link:hover { text-decoration: underline; }
   </style>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
 </head>
 <body>
+<?php endif; ?>
   <main>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
     <div class="brand">KnK <em>Inn</em> · Darts</div>
+<?php endif; ?>
 
     <?php if (!$enabled): ?>
       <div class="card" style="text-align:center">
@@ -401,7 +424,7 @@ if ($qs_game > 0) {
             $bid = (int)$b['id'];
             $en  = !empty($b['enabled']);
             $active = $en ? knk_darts_active_game_on_board($bid) : null;
-            $href = $en ? ("/darts.php?board=" . $bid) : "#";
+            $href = $en ? knk_darts_url(['board' => $bid]) : "#";
             $is_busy = $active !== null;
             $tile_class = "board-tile" . (!$en ? " disabled" : "");
           ?>
@@ -425,7 +448,10 @@ if ($qs_game > 0) {
       <div class="card" style="margin-top:1.4rem">
         <h2 style="margin-top:0">Got a join code?</h2>
         <p class="lede" style="margin-bottom:0.6rem">If you've been given a 6-letter code by the host, type it here.</p>
-        <form method="get" action="/darts.php" style="display:flex; gap:0.4rem">
+        <form method="get" action="<?= defined('KNK_BAR_FRAME') ? '/bar.php' : '/darts.php' ?>" style="display:flex; gap:0.4rem">
+          <?php if (defined('KNK_BAR_FRAME')): ?>
+          <input type="hidden" name="tab" value="darts">
+          <?php endif; ?>
           <input type="text" name="join" placeholder="ABCDEF" maxlength="6" autocapitalize="characters" style="flex:1">
           <button type="submit" style="width:auto; padding:0.65rem 1rem">Join</button>
         </form>
@@ -477,7 +503,7 @@ if ($qs_game > 0) {
         <div id="setupError" class="err" style="display:none"></div>
 
         <button type="button" id="hostStartBtn" style="margin-top:1rem">Open the lobby</button>
-        <a class="small-link" href="/darts.php" style="display:block; text-align:center; margin-top:0.7rem">← Pick a different board</a>
+        <a class="small-link" href="<?= dh(knk_darts_url()) ?>" style="display:block; text-align:center; margin-top:0.7rem">← Pick a different board</a>
       </form>
 
     <?php elseif ($view === 'name_entry'): ?>
@@ -489,7 +515,7 @@ if ($qs_game > 0) {
         <input type="text" name="name" id="joinName" placeholder="e.g. Brian" maxlength="40" autocapitalize="words">
         <div id="joinError" class="err" style="display:none"></div>
         <button type="button" id="joinBtn" style="margin-top:1rem">Join the lobby</button>
-        <a class="small-link" href="/darts.php" style="display:block; text-align:center; margin-top:0.7rem">← Cancel</a>
+        <a class="small-link" href="<?= dh(knk_darts_url()) ?>" style="display:block; text-align:center; margin-top:0.7rem">← Cancel</a>
       </form>
 
     <?php else: /* in_game */ ?>
@@ -506,6 +532,22 @@ if ($qs_game > 0) {
     var BOARD_ID   = <?= (int)($board['id'] ?? 0) ?>;
     var BOARD_NAME = <?= json_encode($board['name'] ?? '', JSON_UNESCAPED_UNICODE) ?>;
     var VIEW       = <?= json_encode($view) ?>;
+
+    /* Frame-aware URL builder.
+     * Standalone:    dartsUrl({game: 7})  →  "/darts.php?game=7"
+     * Inside /bar.php: dartsUrl({game: 7})  →  "/bar.php?tab=darts&game=7" */
+    var DARTS_BASE_PATH = <?= json_encode(defined('KNK_BAR_FRAME') ? '/bar.php' : '/darts.php') ?>;
+    var DARTS_BASE_PARAMS = <?= defined('KNK_BAR_FRAME') ? "{tab: 'darts'}" : "{}" ?>;
+    function dartsUrl(extra) {
+      var all = {}, k;
+      for (k in DARTS_BASE_PARAMS) all[k] = DARTS_BASE_PARAMS[k];
+      if (extra) for (k in extra) all[k] = extra[k];
+      var qs = '';
+      for (k in all) {
+        qs += (qs ? '&' : '?') + encodeURIComponent(k) + '=' + encodeURIComponent(all[k]);
+      }
+      return DARTS_BASE_PATH + qs;
+    }
 
     function $(s, root) { return (root || document).querySelector(s); }
     function $$(s, root) { return Array.prototype.slice.call((root || document).querySelectorAll(s)); }
@@ -588,7 +630,7 @@ if ($qs_game > 0) {
           .then(function (j) {
             if (!j.ok) throw new Error(j.error || 'Could not create the game.');
             setCookie('darts_token_' + j.game_id, j.session_token);
-            window.location.href = '/darts.php?game=' + j.game_id;
+            window.location.href = dartsUrl({game: j.game_id});
           })
           .catch(function (e) {
             err.textContent = e.message; err.style.display = 'block';
@@ -676,6 +718,8 @@ if ($qs_game > 0) {
         var byslot = {};
         s.players.forEach(function (p) { byslot[p.slot_no] = p; });
 
+        /* QR codes always point to the standalone /darts.php — guests
+         * scan from another phone that hasn't been browsing /bar.php yet. */
         var qrUrl = location.origin + '/darts.php?join=' + encodeURIComponent(g.join_code);
         var qrSrc = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=0&data=' + encodeURIComponent(qrUrl);
 
@@ -687,7 +731,7 @@ if ($qs_game > 0) {
           html += '<div class="card qr-card">';
           html += '<h2 style="margin-top:0">Players join here</h2>';
           html += '<img src="' + qrSrc + '" alt="QR code">';
-          html += '<div class="muted" style="margin-top:0.5rem">or type this code on /darts.php</div>';
+          html += '<div class="muted" style="margin-top:0.5rem">or type this code on the Darts page</div>';
           html += '<div class="code">' + escapeHtml(g.join_code) + '</div>';
           html += '</div>';
         } else {
@@ -720,7 +764,7 @@ if ($qs_game > 0) {
           html += '<div id="lobbyErr" class="err" style="display:none"></div>';
         }
 
-        html += '<a class="small-link" href="/darts.php" style="display:block; text-align:center; margin-top:0.9rem">← Leave the lobby</a>';
+        html += '<a class="small-link" href="' + dartsUrl() + '" style="display:block; text-align:center; margin-top:0.9rem">← Leave the lobby</a>';
 
         root.innerHTML = html;
 
@@ -966,7 +1010,7 @@ if ($qs_game > 0) {
         });
         html += '</div>';
 
-        html += '<a href="/darts.php" class="btn" style="display:block; text-align:center; text-decoration:none; margin-top:1rem">Play another game</a>';
+        html += '<a href="' + dartsUrl() + '" class="btn" style="display:block; text-align:center; text-decoration:none; margin-top:1rem">Play another game</a>';
 
         root.innerHTML = html;
         if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
@@ -977,5 +1021,7 @@ if ($qs_game > 0) {
       pollTimer = setInterval(poll, POLL_MS);
     })();
   </script>
+<?php if (!defined('KNK_BAR_FRAME')): ?>
 </body>
 </html>
+<?php endif; ?>
