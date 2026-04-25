@@ -93,11 +93,13 @@ if ($radio_url !== "" && stripos($radio_url, "http://") === 0) {
     $radio_url = "https://" . substr($radio_url, 7);
 }
 
-/* Build the request URL for the radio fallback card so we can show
- * patrons where to send their song request when nothing is queued. */
+/* The "Request a song at..." pointer on the splash card. Points
+ * at /bar.php (the unified bar shell) rather than /jukebox.php so
+ * one URL covers music + drinks + darts. Display without the
+ * scheme — bar punters don't need to see "https://". */
 $_scheme = (!empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off") ? "https" : "http";
 $_host   = (string)($_SERVER["HTTP_HOST"] ?? "knkinn.com");
-$JUKEBOX_REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
+$JUKEBOX_REQUEST_URL = $_host . "/bar.php";
 
 /* Audio-engine bootstrap payload — same shape as /jukebox-player.php
  * uses, so the JS audio loop is a near-copy of that page's. */
@@ -329,15 +331,26 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * Market panel (centre)
    * ========================================================== */
   .panel-market { background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%); }
+  /* Header row: the section heading on the left, the band label
+   * ("Off-peak / Peak / Custom — live drink prices") right-justified
+   * on the same line. Replaces the old stacked layout where the
+   * band sat below the heading. */
+  .market-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: 0.75rem;
+    margin: 0 0 0.45rem;
+  }
+  .market-head h2 { margin: 0; }
   .market-band {
-    display: flex; align-items: baseline; gap: 0.5rem;
-    margin: -0.15rem 0 0.45rem;
+    display: flex; align-items: baseline; gap: 0.4rem;
+    margin: 0;
   }
   .market-band .label {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.05rem; color: var(--gold);
+    font-size: 0.78rem; color: var(--gold);
+    letter-spacing: 0.04em;
   }
-  .market-band .sub { color: var(--muted); font-size: 0.78rem; }
+  .market-band .sub { color: var(--muted); font-size: 0.72rem; }
   .market-table {
     flex: 1 1 auto;
     overflow: hidden;     /* never scroll on the TV */
@@ -408,19 +421,27 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .panel-jukebox { background: #0f0905; }
   .jbx-now {
     display: flex; flex-direction: column;
-    gap: 0.3rem;
-    padding-bottom: 0.6rem;
+    gap: 0.15rem;
+    padding-bottom: 0.5rem;
     border-bottom: 1px solid var(--line);
-    margin-bottom: 0.6rem;
+    margin-bottom: 0.5rem;
   }
   /* Visible YT player — replaces the static thumbnail. The browser
    * autoplay policy + iframe heuristics dislike off-screen 1×1 iframes,
    * so we put it where the user can see it. The audio is the main
-   * point, but having a small video makes "stuck at startup" go away. */
+   * point, but having a small video makes "stuck at startup" go away.
+   *
+   * Bled to true column width with negative margins matching the
+   * panel's horizontal padding, so the video edges hit the column
+   * edges instead of being inset by the panel's body padding. */
   .jbx-video {
-    width: 100%; aspect-ratio: 16/9;
+    width: calc(100% + 1.7rem);
+    margin-left: -0.85rem;
+    margin-right: -0.85rem;
+    margin-bottom: 0.45rem;
+    aspect-ratio: 16/9;
     background: #000;
-    border-radius: 6px;
+    border-radius: 0;
     overflow: hidden;
     position: relative;
   }
@@ -443,16 +464,17 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     width: 100%; height: 100%; border: 0; display: block;
     z-index: 2;
   }
-  .jbx-now .meta-label {
-    font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--gold); font-weight: 700;
-  }
+  /* Slim now-playing strip: just artist/title + (optionally) the
+   * requester. The "Now playing" label and YouTube channel were
+   * dropped so the video can take the full column width and the
+   * caption stays unobtrusive underneath it. */
   .jbx-now .title {
-    font-family: "Archivo Black", sans-serif;
-    font-size: 0.95rem; line-height: 1.2;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    color: var(--muted);
+    font-weight: 500;
   }
-  .jbx-now .channel { color: var(--muted); font-size: 0.78rem; }
-  .jbx-now .who { color: var(--gold); font-size: 0.82rem; font-weight: 600; }
+  .jbx-now .who { color: var(--gold); font-size: 0.72rem; font-weight: 600; }
   /* "ON THE RADIO" fallback — shown when nothing is playing or queued
    * (and also when the kill switch is off). Mirrors the bigger overlay
    * on /jukebox-player.php in spirit, but compact for the side panel. */
@@ -788,9 +810,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
     <div class="jbx-now" id="jbx-now"<?= $jbx_now ? "" : " hidden" ?>>
       <?php if ($jbx_now): ?>
-        <div class="meta-label">Now playing</div>
         <div class="title"><?= h($jbx_now["youtube_title"] ?? "") ?></div>
-        <div class="channel"><?= h($jbx_now["youtube_channel"] ?? "") ?></div>
         <?php $rn = trim((string)($jbx_now["requester_name"] ?? "")); ?>
         <?php if ($rn !== ""): ?>
           <div class="who">Requested by <?= h($rn) ?></div>
@@ -844,11 +864,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
        Market panel (centre, always shown)
        ======================================================= -->
   <section class="panel panel-market" aria-label="Beer Stock Market">
-    <h2>📈 Beer Stock Market</h2>
-
-    <div class="market-band" id="mkt-band">
-      <span class="label" id="mkt-band-label"><?= h($market_band_lbl) ?></span>
-      <span class="sub">live drink prices</span>
+    <!-- Heading + band sit on the same line: title left, "<Band> —
+         live drink prices" right-justified on the same row. -->
+    <div class="market-head">
+      <h2>📈 Beer Stock Market</h2>
+      <div class="market-band" id="mkt-band">
+        <span class="label" id="mkt-band-label"><?= h($market_band_lbl) ?></span>
+        <span class="sub">live drink prices</span>
+      </div>
     </div>
 
     <div class="market-table" id="mkt-table">
@@ -1299,7 +1322,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (idx < 0) {
       setTickerLyric(null);
     } else {
-      setTickerLyric("\u266B  " + lyricsLines[idx].text);
+      /* No music-note prefix — the centred fade animation already
+       * reads as a "lyric line" and the glyph just adds visual noise
+       * Ben asked us to drop. */
+      setTickerLyric(lyricsLines[idx].text);
     }
   }
 
@@ -1454,8 +1480,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * synced lyrics from LRCLIB (which fetchLyrics() kicks off via
    * renderJukebox the moment the new song id is seen) have time to
    * come back. Without this, the first 1–2 lines fly past before
-   * we know what to display. */
-  var PLAYROW_PREROLL_MS = 1800;
+   * we know what to display. Bumped to 3.0s after Ben asked for a
+   * bigger gap — LRCLIB cold-cache fetches were sometimes still
+   * outstanding at 1.8s. */
+  var PLAYROW_PREROLL_MS = 3000;
 
   function playRow(row) {
     currentRow = row;
@@ -1619,9 +1647,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       var n = s.now_playing;
       var who = n.name ? '<div class="who">Requested by ' + safeText(n.name) + '</div>' : '';
       nowEl.innerHTML =
-        '<div class="meta-label">Now playing</div>' +
-        '<div class="title">'   + safeText(n.title   || "") + '</div>' +
-        '<div class="channel">' + safeText(n.channel || "") + '</div>' +
+        '<div class="title">' + safeText(n.title || "") + '</div>' +
         who;
       nowEl.hidden = false;
     } else {
