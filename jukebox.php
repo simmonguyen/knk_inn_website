@@ -18,6 +18,14 @@ session_start();
 require_once __DIR__ . "/includes/jukebox.php";
 
 function jbh($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
+/* For YouTube-sourced text (titles, channel names) — decode once first
+ * to flatten any HTML entities the API embedded (`&quot;`, `&amp;`,
+ * `&#39;`), then re-encode for safe HTML insertion. Idempotent: titles
+ * stored decoded by the new ingestion path also pass through cleanly. */
+function jbh_yt($s): string {
+    $decoded = html_entity_decode((string)$s, ENT_QUOTES | ENT_HTML5, "UTF-8");
+    return htmlspecialchars($decoded, ENT_QUOTES, "UTF-8");
+}
 
 /* Self-URL (frame-aware). When included from /bar.php, KNK_BAR_FRAME is
  * defined and self-references should keep the user inside the bar shell. */
@@ -71,6 +79,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
@@ -296,9 +305,9 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
               <img src="<?= jbh($d["thumb"]) ?>" alt="">
             <?php endif; ?>
             <div class="meta">
-              <div class="t"><?= jbh($d["youtube_title"]) ?></div>
+              <div class="t"><?= jbh_yt($d["youtube_title"]) ?></div>
               <div class="c">
-                <?= jbh($d["channel"]) ?> · <?= jbh(knk_jukebox_fmt_duration((int)$d["duration"])) ?>
+                <?= jbh_yt($d["channel"]) ?> · <?= jbh(knk_jukebox_fmt_duration((int)$d["duration"])) ?>
               </div>
             </div>
           </div>
@@ -360,8 +369,8 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
               <img src="<?= jbh($now_playing["thumbnail_url"]) ?>" alt="">
             <?php endif; ?>
             <div class="np-meta">
-              <div class="t"><?= jbh($now_playing["youtube_title"]) ?></div>
-              <div class="c"><?= jbh($now_playing["youtube_channel"]) ?></div>
+              <div class="t"><?= jbh_yt($now_playing["youtube_title"]) ?></div>
+              <div class="c"><?= jbh_yt($now_playing["youtube_channel"]) ?></div>
             </div>
           </div>
         </div>
@@ -379,7 +388,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
                   <img src="<?= jbh($row["thumbnail_url"]) ?>" alt="">
                 <?php endif; ?>
                 <div class="meta">
-                  <div class="t"><?= jbh($row["youtube_title"]) ?></div>
+                  <div class="t"><?= jbh_yt($row["youtube_title"]) ?></div>
                   <?php
                     $who = trim((string)$row["requester_name"]);
                     $tbl = trim((string)$row["table_no"]);

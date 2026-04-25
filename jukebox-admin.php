@@ -151,6 +151,14 @@ $blocks  = knk_jukebox_blocklist_list();
 $api_key = knk_jukebox_api_key();
 
 function jah($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
+/* For YouTube-sourced text (titles, channel names) — decode any
+ * pre-encoded HTML entities (`&quot;`, `&amp;`, `&#39;`) the API
+ * returned, then re-encode for safe HTML insert. Idempotent on
+ * already-decoded titles stored by the new ingestion path. */
+function jah_yt($s): string {
+    $decoded = html_entity_decode((string)$s, ENT_QUOTES | ENT_HTML5, "UTF-8");
+    return htmlspecialchars($decoded, ENT_QUOTES, "UTF-8");
+}
 function ja_when($s): string {
     if (!$s) return "—";
     $t = strtotime((string)$s);
@@ -164,6 +172,7 @@ function ja_when($s): string {
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
@@ -326,9 +335,9 @@ function ja_when($s): string {
             <img src="<?= jah($now["thumbnail_url"]) ?>" alt="">
           <?php endif; ?>
           <div class="meta">
-            <div class="t"><?= jah($now["youtube_title"]) ?></div>
+            <div class="t"><?= jah_yt($now["youtube_title"]) ?></div>
             <div class="c">
-              <?= jah($now["youtube_channel"]) ?> · <?= jah(knk_jukebox_fmt_duration((int)$now["duration_seconds"])) ?>
+              <?= jah_yt($now["youtube_channel"]) ?> · <?= jah(knk_jukebox_fmt_duration((int)$now["duration_seconds"])) ?>
               · requested <?= jah(ja_when($now["submitted_at"])) ?>
             </div>
             <?php if (trim((string)$now["requester_name"]) !== "" || trim((string)$now["table_no"]) !== ""): ?>
@@ -360,9 +369,9 @@ function ja_when($s): string {
               <img src="<?= jah($row["thumbnail_url"]) ?>" alt="">
             <?php endif; ?>
             <div class="meta">
-              <div class="t"><?= jah($row["youtube_title"]) ?></div>
+              <div class="t"><?= jah_yt($row["youtube_title"]) ?></div>
               <div class="c">
-                <?= jah($row["youtube_channel"]) ?> · <?= jah(knk_jukebox_fmt_duration((int)$row["duration_seconds"])) ?>
+                <?= jah_yt($row["youtube_channel"]) ?> · <?= jah(knk_jukebox_fmt_duration((int)$row["duration_seconds"])) ?>
                 · <?= jah(ja_when($row["submitted_at"])) ?>
               </div>
               <?php if (trim((string)$row["requester_name"]) !== "" || trim((string)$row["table_no"]) !== ""): ?>
@@ -397,9 +406,9 @@ function ja_when($s): string {
               <img src="<?= jah($row["thumbnail_url"]) ?>" alt="">
             <?php endif; ?>
             <div class="meta">
-              <div class="t"><?= jah($row["youtube_title"]) ?></div>
+              <div class="t"><?= jah_yt($row["youtube_title"]) ?></div>
               <div class="c">
-                <?= jah($row["youtube_channel"]) ?> · <?= jah(knk_jukebox_fmt_duration((int)$row["duration_seconds"])) ?>
+                <?= jah_yt($row["youtube_channel"]) ?> · <?= jah(knk_jukebox_fmt_duration((int)$row["duration_seconds"])) ?>
                 · requested <?= jah(ja_when($row["submitted_at"])) ?>
               </div>
               <div class="who">
@@ -566,7 +575,7 @@ function ja_when($s): string {
             <tr>
               <td><?= jah(ja_when($when)) ?></td>
               <td class="status <?= jah($status) ?>"><?= jah($status) ?></td>
-              <td><?= jah($r["youtube_title"]) ?></td>
+              <td><?= jah_yt($r["youtube_title"]) ?></td>
               <td style="color:var(--cream-dim,#d8c9ab)"><?= jah($r["artist_text"]) ?> — <?= jah($r["title_text"]) ?></td>
               <td><?= jah($whoStr) ?></td>
             </tr>

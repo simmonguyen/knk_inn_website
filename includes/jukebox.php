@@ -291,10 +291,15 @@ function knk_jukebox_search(string $artist, string $title): array {
                 ?? $sn["thumbnails"]["default"]["url"]
                 ?? ""
         );
+        // YouTube returns titles/channels with HTML entities already encoded
+        // (e.g. `She said &quot;hi&quot;` or `Drake &amp; Future`). If we
+        // store them as-is the htmlspecialchars() on render double-encodes
+        // (`&amp;quot;`) and the literal `&quot;` shows up in the UI. Decode
+        // once on the way in so the DB holds the human-readable form. */
         $candidates[$vid] = [
             "video_id" => $vid,
-            "title"    => (string)($sn["title"] ?? ""),
-            "channel"  => (string)($sn["channelTitle"] ?? ""),
+            "title"    => html_entity_decode((string)($sn["title"]        ?? ""), ENT_QUOTES | ENT_HTML5, "UTF-8"),
+            "channel"  => html_entity_decode((string)($sn["channelTitle"] ?? ""), ENT_QUOTES | ENT_HTML5, "UTF-8"),
             "thumb"    => $thumb,
         ];
     }
