@@ -267,31 +267,38 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     --flat:      #8a7858;
   }
   * { box-sizing: border-box; }
+  /* The native `hidden` attribute is `display: none`, but our flex/grid
+   * panels use `display: flex` which has higher specificity and beats it.
+   * Force the attribute back to actually hiding things — without this,
+   * a "line above Radio box" leaks through when .jbx-now is meant to be
+   * hidden (the panel's border-bottom remains rendered). */
+  [hidden] { display: none !important; }
   html, body { margin: 0; padding: 0; height: 100vh; overflow: hidden; }
   body {
     background: var(--bg);
     color: var(--fg);
     font-family: "Inter", system-ui, sans-serif;
     display: grid;
-    grid-template-rows: auto 1fr;
+    /* [header strip] [3-up panels — flexible] [footer: logo + ticker] */
+    grid-template-rows: auto 1fr auto;
   }
 
   /* ---- Header strip ---- */
   .tv-bar {
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0.6rem 1.2rem;
+    padding: 0.4rem 1rem;
     background: var(--bg2);
     border-bottom: 1px solid var(--line);
   }
   .tv-bar .brand {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.3rem; letter-spacing: 0.04em;
+    font-size: 1.05rem; letter-spacing: 0.04em;
   }
   .tv-bar .brand em { color: var(--gold); font-style: normal; }
   .tv-bar .clock {
     font-variant-numeric: tabular-nums;
     color: var(--gold); font-weight: 700;
-    font-size: 1.1rem; letter-spacing: 0.06em;
+    font-size: 0.95rem; letter-spacing: 0.06em;
   }
 
   /* ---- Main grid (the panels) ----
@@ -306,16 +313,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
   .panel {
     border-left: 1px solid var(--line);
-    padding: 1rem 1.1rem;
+    padding: 0.7rem 0.85rem;
     min-height: 0; min-width: 0;
     display: flex; flex-direction: column;
   }
   .panel:first-child { border-left: 0; }
   .panel h2 {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.05rem; letter-spacing: 0.08em; text-transform: uppercase;
+    font-size: 0.85rem; letter-spacing: 0.08em; text-transform: uppercase;
     color: var(--gold);
-    margin: 0 0 0.6rem;
+    margin: 0 0 0.45rem;
   }
 
   /* ============================================================
@@ -323,39 +330,49 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * ========================================================== */
   .panel-market { background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%); }
   .market-band {
-    display: flex; align-items: baseline; gap: 0.6rem;
-    margin: -0.2rem 0 0.6rem;
+    display: flex; align-items: baseline; gap: 0.5rem;
+    margin: -0.15rem 0 0.45rem;
   }
   .market-band .label {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.4rem; color: var(--gold);
+    font-size: 1.05rem; color: var(--gold);
   }
-  .market-band .sub { color: var(--muted); font-size: 0.95rem; }
+  .market-band .sub { color: var(--muted); font-size: 0.78rem; }
   .market-table {
     flex: 1 1 auto;
     overflow: hidden;     /* never scroll on the TV */
     display: flex; flex-direction: column;
     font-variant-numeric: tabular-nums;
   }
+  /* Grid columns: name | sparkline | price | move% | arrow.
+   * The sparkline column is the new addition (mirrors /market.php). */
   .market-row {
     display: grid;
-    grid-template-columns: 1fr 7rem 6rem 3rem;
+    grid-template-columns: minmax(0, 1fr) 6rem 5.2rem 3.2rem 2rem;
     align-items: center;
-    gap: 0.6rem;
-    padding: 0.6rem 0.2rem;
+    gap: 0.5rem;
+    padding: 0.35rem 0.2rem;
     border-bottom: 1px solid var(--line);
   }
   .market-row.head {
-    color: var(--muted); font-size: 0.78rem;
+    color: var(--muted); font-size: 0.65rem;
     text-transform: uppercase; letter-spacing: 0.1em;
     border-bottom: 2px solid var(--line);
-    padding: 0.4rem 0.2rem;
+    padding: 0.3rem 0.2rem;
   }
-  .market-row .name { font-weight: 700; font-size: 1.5rem; }
+  .market-row .name { font-weight: 700; font-size: 1.1rem; line-height: 1.15; }
   .market-row .name small { color: var(--muted); font-weight: 400; font-size: 0.7em; display: block; }
-  .market-row .price { text-align: right; font-size: 1.6rem; font-weight: 700; }
-  .market-row .pct { text-align: right; font-size: 1.2rem; font-weight: 700; }
-  .market-row .arrow { text-align: center; font-size: 1.3rem; }
+  .market-row .price { text-align: right; font-size: 1.15rem; font-weight: 700; }
+  .market-row .pct { text-align: right; font-size: 0.95rem; font-weight: 700; }
+  .market-row .arrow { text-align: center; font-size: 1.05rem; }
+  /* SVG sparkline cell — fixed height, scales horizontally to fit. */
+  .market-row .spark {
+    height: 36px;
+    width: 100%;
+    display: block;
+    overflow: hidden;
+  }
+  .market-row .spark svg { width: 100%; height: 100%; display: block; }
   .market-row.up    .price, .market-row.up    .pct, .market-row.up    .arrow { color: var(--up); }
   .market-row.down  .price, .market-row.down  .pct, .market-row.down  .arrow { color: var(--down); }
   .market-row.flat  .price, .market-row.flat  .pct, .market-row.flat  .arrow { color: var(--flat); }
@@ -373,8 +390,8 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     letter-spacing: 0.1em;
   }
   .market-empty {
-    padding: 2rem; text-align: center;
-    color: var(--muted); font-size: 1.2rem;
+    padding: 1.4rem; text-align: center;
+    color: var(--muted); font-size: 0.9rem;
   }
 
   /* ============================================================
@@ -383,41 +400,65 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .panel-jukebox { background: #0f0905; }
   .jbx-now {
     display: flex; flex-direction: column;
-    gap: 0.4rem;
-    padding-bottom: 0.8rem;
+    gap: 0.3rem;
+    padding-bottom: 0.6rem;
     border-bottom: 1px solid var(--line);
-    margin-bottom: 0.8rem;
+    margin-bottom: 0.6rem;
   }
-  .jbx-now .thumb {
+  /* Visible YT player — replaces the static thumbnail. The browser
+   * autoplay policy + iframe heuristics dislike off-screen 1×1 iframes,
+   * so we put it where the user can see it. The audio is the main
+   * point, but having a small video makes "stuck at startup" go away. */
+  .jbx-video {
     width: 100%; aspect-ratio: 16/9;
     background: #000;
     border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+  /* Static thumb fallback — first paint, sits behind the YT iframe.
+   * The iframe covers it once YT.Player has loaded the video, so
+   * there's no layout shift when the player takes over. */
+  .jbx-video .thumb-fallback {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
     object-fit: cover;
+    background: #000;
+    z-index: 1;
+  }
+  /* The YT iframe sits ON TOP of the thumb. Before the API replaces
+   * the div with an actual iframe, the div is empty/transparent so
+   * the thumb shows through. */
+  .jbx-video #tv-yt-player,
+  .jbx-video #tv-yt-player iframe {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%; border: 0; display: block;
+    z-index: 2;
   }
   .jbx-now .meta-label {
-    font-size: 0.72rem; letter-spacing: 0.12em; text-transform: uppercase;
+    font-size: 0.62rem; letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--gold); font-weight: 700;
   }
   .jbx-now .title {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.2rem; line-height: 1.2;
+    font-size: 0.95rem; line-height: 1.2;
   }
-  .jbx-now .channel { color: var(--muted); font-size: 0.9rem; }
-  .jbx-now .who { color: var(--gold); font-size: 0.95rem; font-weight: 600; }
+  .jbx-now .channel { color: var(--muted); font-size: 0.78rem; }
+  .jbx-now .who { color: var(--gold); font-size: 0.82rem; font-weight: 600; }
   /* "ON THE RADIO" fallback — shown when nothing is playing or queued
    * (and also when the kill switch is off). Mirrors the bigger overlay
    * on /jukebox-player.php in spirit, but compact for the side panel. */
   .jbx-radio {
     display: flex; flex-direction: column; align-items: center;
-    gap: 0.4rem;
-    padding: 1.4rem 0.6rem;
+    gap: 0.3rem;
+    padding: 1rem 0.5rem;
     border: 1px solid var(--line);
     border-radius: 8px;
     background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
     text-align: center;
   }
   .jbx-radio .pulse {
-    font-size: 2.4rem;
+    font-size: 1.9rem;
     animation: jbx-pulse 2s ease-in-out infinite;
   }
   @keyframes jbx-pulse {
@@ -426,36 +467,36 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   .jbx-radio h3 {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.25rem; letter-spacing: 0.08em;
+    font-size: 1rem; letter-spacing: 0.08em;
     margin: 0; color: var(--fg);
   }
   .jbx-radio h3 .accent { color: var(--gold); }
   .jbx-radio .station {
-    color: var(--gold); font-size: 0.95rem; font-weight: 600;
+    color: var(--gold); font-size: 0.82rem; font-weight: 600;
     letter-spacing: 0.04em;
   }
   .jbx-radio .hint {
-    color: var(--muted); font-size: 0.82rem;
-    line-height: 1.4; margin-top: 0.2rem;
+    color: var(--muted); font-size: 0.72rem;
+    line-height: 1.4; margin-top: 0.15rem;
   }
   .jbx-radio .hint .url {
     color: var(--fg); font-weight: 600;
   }
   .jbx-up h3 {
-    font-size: 0.78rem; letter-spacing: 0.12em; text-transform: uppercase;
-    color: var(--gold); margin: 0 0 0.4rem;
+    font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
+    color: var(--gold); margin: 0 0 0.3rem;
   }
   .jbx-up ol { list-style: none; margin: 0; padding: 0; }
   .jbx-up li {
-    padding: 0.45rem 0;
+    padding: 0.32rem 0;
     border-bottom: 1px solid var(--line);
-    display: grid; grid-template-columns: 1.4rem 1fr; gap: 0.4rem;
-    font-size: 0.95rem;
+    display: grid; grid-template-columns: 1.2rem 1fr; gap: 0.35rem;
+    font-size: 0.78rem;
   }
   .jbx-up li:last-child { border-bottom: 0; }
   .jbx-up li .num { color: var(--muted); font-weight: 700; }
   .jbx-up li .t { font-weight: 600; line-height: 1.2; }
-  .jbx-up li .who { color: var(--muted); font-size: 0.78rem; display: block; margin-top: 2px; }
+  .jbx-up li .who { color: var(--muted); font-size: 0.68rem; display: block; margin-top: 2px; }
 
   /* ============================================================
    * Darts panel (right)
@@ -464,7 +505,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-stack {
     flex: 1 1 auto; min-height: 0;
     display: flex; flex-direction: column;
-    gap: 0.7rem;
+    gap: 0.55rem;
     overflow: hidden;
   }
   .darts-card {
@@ -474,19 +515,19 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     background: #1b0f04;
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 0.7rem 0.85rem;
+    padding: 0.5rem 0.7rem;
   }
   .darts-card .head {
     display: flex; justify-content: space-between; align-items: baseline;
     border-bottom: 1px solid var(--line);
-    padding-bottom: 0.35rem; margin-bottom: 0.5rem;
+    padding-bottom: 0.3rem; margin-bottom: 0.4rem;
   }
   .darts-card .head .board {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1rem; color: var(--gold); letter-spacing: 0.04em;
+    font-size: 0.85rem; color: var(--gold); letter-spacing: 0.04em;
   }
   .darts-card .head .gtype {
-    font-size: 0.78rem; color: var(--muted);
+    font-size: 0.65rem; color: var(--muted);
     text-transform: uppercase; letter-spacing: 0.08em;
   }
   .darts-rows {
@@ -498,15 +539,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-row {
     display: grid; grid-template-columns: 1fr auto;
     align-items: center;
-    padding: 0.18rem 0;
+    padding: 0.15rem 0;
   }
   .darts-row .name {
-    font-weight: 600; font-size: 1.05rem;
+    font-weight: 600; font-size: 0.85rem;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .darts-row .score {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.5rem; color: var(--fg);
+    font-size: 1.2rem; color: var(--fg);
   }
   .darts-row.active .name { color: var(--gold); }
   .darts-row.active .score { color: var(--gold); }
@@ -519,28 +560,28 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-empty {
     flex: 1 1 auto; min-height: 0;
     display: flex; flex-direction: column; align-items: center;
-    justify-content: center; gap: 0.5rem;
+    justify-content: center; gap: 0.4rem;
     text-align: center;
     background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
     border: 1px solid var(--line);
     border-radius: 8px;
-    padding: 1.4rem 0.8rem;
+    padding: 1rem 0.6rem;
   }
   .darts-empty .pulse {
-    font-size: 2.6rem;
+    font-size: 2.1rem;
     animation: jbx-pulse 2.4s ease-in-out infinite;
   }
   .darts-empty h3 {
     font-family: "Archivo Black", sans-serif;
-    font-size: 1.15rem; letter-spacing: 0.06em;
+    font-size: 0.95rem; letter-spacing: 0.06em;
     color: var(--fg); margin: 0;
   }
   .darts-empty h3 .accent { color: var(--gold); }
   .darts-empty .sub {
-    color: var(--gold); font-weight: 600; font-size: 0.92rem;
+    color: var(--gold); font-weight: 600; font-size: 0.78rem;
   }
   .darts-empty .hint {
-    color: var(--muted); font-size: 0.82rem;
+    color: var(--muted); font-size: 0.7rem;
     line-height: 1.4; max-width: 16rem;
   }
   .darts-empty .hint .url {
@@ -548,16 +589,78 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   /* ============================================================
-   * Footer crash banner — only when something crashed
+   * Footer bar — runs along the bottom of the screen.
+   *
+   * Two children:
+   *   - .tv-corner-logo: KnK Bar SVG + tagline (left)
+   *   - .tv-ticker:      scrolling marquee for crash/song info (right)
+   *
+   * Always present in the layout so the panels above keep a stable
+   * height.
    * ========================================================== */
-  .crash-banner {
-    background: var(--down); color: #fff;
-    padding: 0.5rem 1rem;
-    font-family: "Archivo Black", sans-serif;
-    text-align: center;
-    letter-spacing: 0.06em;
+  .tv-footer {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: stretch;
+    background: var(--bg2);
+    border-top: 1px solid var(--line);
+    min-height: 60px;
   }
-  .crash-banner.is-hidden { display: none; }
+
+  /* KnK Bar logo + tagline (left side of the footer). */
+  .tv-corner-logo {
+    display: flex; align-items: center; gap: 0.7rem;
+    padding: 0.4rem 0.9rem;
+    border-right: 1px solid var(--line);
+  }
+  .tv-corner-logo img {
+    width: 48px; height: 48px;
+    display: block;
+  }
+  .tv-corner-logo .tagline {
+    color: var(--fg);
+    font-size: 0.7rem; line-height: 1.25;
+    max-width: 12rem;
+  }
+  .tv-corner-logo .tagline strong {
+    color: var(--gold); font-weight: 700;
+    display: block; font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    margin-bottom: 1px;
+  }
+
+  /* Scrolling ticker (right side of the footer). Two competing
+   * messages: crash announcements (priority) and now-playing song
+   * info. Hidden state collapses the column without removing it. */
+  .tv-ticker {
+    overflow: hidden;
+    white-space: nowrap;
+    color: var(--fg);
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.92rem; letter-spacing: 0.06em;
+    display: flex; align-items: center;
+  }
+  .tv-ticker.is-hidden .tv-ticker-inner {
+    visibility: hidden;
+  }
+  .tv-ticker.is-crash {
+    background: var(--down); color: #fff;
+  }
+  .tv-ticker.is-song .accent { color: var(--gold); }
+  /* Inner span scrolls right-to-left. padding-left: 100% so the start
+   * of the message slides in from the right edge. */
+  .tv-ticker-inner {
+    display: inline-block;
+    padding-left: 100%;
+    animation: tv-ticker-scroll 36s linear infinite;
+  }
+  .tv-ticker.is-crash .tv-ticker-inner {
+    animation-duration: 22s;
+  }
+  @keyframes tv-ticker-scroll {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-100%); }
+  }
 
   /* ============================================================
    * Splash gate — tap to unblock browser autoplay.
@@ -586,19 +689,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-splash .request-url { margin-top: 2rem; color: var(--muted); font-size: 0.95rem; }
   .tv-splash .request-url strong { color: var(--gold); font-weight: 700; }
   body.tv:not(.splash-on) .tv-splash { display: none; }
-
-  /* Hidden audio engine — YouTube iframe scaled to 1×1, parked
-   * off-screen. The user sees the jukebox info in the side panel
-   * (thumbnail + title) and hears the audio from this element. */
-  .tv-audio {
-    position: fixed;
-    width: 1px; height: 1px;
-    left: -9999px; top: -9999px;
-    overflow: hidden; opacity: 0;
-    pointer-events: none;
-  }
-  .tv-audio #tv-yt-player,
-  .tv-audio #tv-yt-player iframe { width: 100%; height: 100%; border: 0; }
 </style>
 </head>
 <body class="tv splash-on">
@@ -620,15 +710,11 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 </div>
 <?php endif; ?>
 
-<!-- Hidden audio engine. The YouTube iframe is sized 1×1 and tucked
-     off-screen — /tv.php is dominated by the market/darts panels and
-     the song info already lives in the jukebox panel, so we only need
-     the audio. /jukebox-player.php still exists if you want a big
-     video screen instead. -->
-<div class="tv-audio" aria-hidden="true">
-  <div id="tv-yt-player"></div>
-  <audio id="tv-radio" preload="none"></audio>
-</div>
+<!-- Triple J radio fallback. Plays when nothing's queued (after the
+     splash gate is dismissed). The YouTube player itself lives inside
+     the jukebox panel — see <div class="jbx-video"> below — because
+     browsers don't reliably autoplay video in tiny off-screen iframes. -->
+<audio id="tv-radio" preload="none"></audio>
 
 <header class="tv-bar">
   <div class="brand">KnK <em>Inn</em></div>
@@ -651,9 +737,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     $jbx_show_radio = ($jbx_now === null && empty($jbx_up_next));
     ?>
 
+    <!-- Persistent slot for the YouTube iframe. Hidden until the
+         splash gate is dismissed (so the YT.Player is created in a
+         normal-flow visible element — browsers don't reliably play
+         video in 1×1 off-screen iframes). After dismiss the JS shows
+         this and YT.Player swaps #tv-yt-player for the live iframe. -->
+    <div class="jbx-video" id="jbx-video"<?= $jbx_now ? "" : " hidden" ?>>
+      <?php if ($jbx_now && !empty($jbx_now["thumbnail_url"])): ?>
+        <img class="thumb-fallback"
+             src="<?= h($jbx_now["thumbnail_url"]) ?>"
+             alt="">
+      <?php endif; ?>
+      <div id="tv-yt-player"></div>
+    </div>
+
     <div class="jbx-now" id="jbx-now"<?= $jbx_now ? "" : " hidden" ?>>
       <?php if ($jbx_now): ?>
-        <img class="thumb" src="<?= h($jbx_now["thumbnail_url"] ?? "") ?>" alt="">
         <div class="meta-label">Now playing</div>
         <div class="title"><?= h($jbx_now["youtube_title"] ?? "") ?></div>
         <div class="channel"><?= h($jbx_now["youtube_channel"] ?? "") ?></div>
@@ -709,6 +808,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       <?php else: ?>
         <div class="market-row head">
           <span>Drink</span>
+          <span></span>
           <span style="text-align:right;">Price</span>
           <span style="text-align:right;">Move</span>
           <span></span>
@@ -719,6 +819,8 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         ?>
           <div class="market-row <?= h($cls) ?>" data-code="<?= h($it["item_code"]) ?>">
             <span class="name"><?= h($it["name"]) ?></span>
+            <!-- Sparkline cell — JS fills it on first poll. -->
+            <span class="spark"></span>
             <span class="price"><?= number_format($it["price_vnd"], 0, ".", ",") ?>₫</span>
             <span class="pct"><?= ($it["pct_vs_base"] >= 0 ? "+" : "") . (int)$it["pct_vs_base"] ?>%</span>
             <span class="arrow"><?= knk_tv_arrow((string)$it["trend"]) ?></span>
@@ -765,7 +867,24 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
 </main>
 
-<div class="crash-banner is-hidden" id="crash-banner"></div>
+<!-- Footer bar — KnK Bar logo on the left, scrolling ticker on
+     the right. Always rendered so the panels above keep a stable
+     height; the ticker just hides its content when there's nothing
+     to say. JS sets the inner text + a mode class ("is-crash" /
+     "is-song") on .tv-ticker. Crash messages take priority. -->
+<footer class="tv-footer">
+  <div class="tv-corner-logo" aria-hidden="true">
+    <img src="/assets/img/knk-bar-logo.svg" alt="">
+    <div class="tagline">
+      <strong>KnK Bar</strong>
+      Scan to request a song,<br>
+      order a drink or throw some darts.
+    </div>
+  </div>
+  <div class="tv-ticker is-hidden" id="tv-ticker">
+    <span class="tv-ticker-inner" id="tv-ticker-inner"></span>
+  </div>
+</footer>
 
 <script>
 /* ============================================================
@@ -808,11 +927,107 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
       .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
+  /* YouTube titles arrive HTML-encoded from oEmbed (so a song title
+   * like "Rock & Roll" comes back as "Rock &amp; Roll"). If we then
+   * escapeHtml() that, the ampersand becomes "&amp;amp;" and shows
+   * up as a literal "&amp;" on screen. Round-trip through a textarea
+   * to decode entities first, then re-escape for safe HTML insert. */
+  var _decoder = document.createElement("textarea");
+  function decodeHtml(s) {
+    if (s == null) return "";
+    _decoder.innerHTML = String(s);
+    return _decoder.value;
+  }
+  function safeText(s) { return escapeHtml(decodeHtml(s)); }
+
+  // ============================================================
+  // FOOTER TICKER — multipurpose scrolling marquee.
+  //
+  // Two competing message sources:
+  //   - setTickerCrash(text)  — drink crash announcement (priority)
+  //   - setTickerSong(text)   — now-playing info (lower priority)
+  //
+  // Whoever calls with a non-null string wins the slot until they
+  // call again with null. Crash always wins over song.
+  //
+  // The animation is restarted on each text change so the new text
+  // starts from the right edge (otherwise it'd join mid-scroll).
+  // ============================================================
+  var tickerEl       = document.getElementById("tv-ticker");
+  var tickerInner    = document.getElementById("tv-ticker-inner");
+  var tickerCrashTxt = null;
+  var tickerSongTxt  = null;
+  var tickerCurrent  = null;   // what's actually on screen right now
+  var tickerCurMode  = null;
+
+  function refreshTicker() {
+    var nextTxt, nextMode;
+    if (tickerCrashTxt) { nextTxt = tickerCrashTxt; nextMode = "crash"; }
+    else if (tickerSongTxt) { nextTxt = tickerSongTxt; nextMode = "song"; }
+    else { nextTxt = null; nextMode = null; }
+
+    if (nextTxt === tickerCurrent && nextMode === tickerCurMode) return;
+    tickerCurrent = nextTxt;
+    tickerCurMode = nextMode;
+
+    if (!nextTxt) {
+      tickerEl.classList.add("is-hidden");
+      tickerEl.classList.remove("is-crash", "is-song");
+      tickerInner.textContent = "";
+      return;
+    }
+    tickerEl.classList.remove("is-hidden", "is-crash", "is-song");
+    tickerEl.classList.add("is-" + nextMode);
+    tickerInner.textContent = nextTxt;
+    /* Restart the scroll animation so the new message enters from
+     * the right rather than picking up the previous frame's offset. */
+    tickerInner.style.animation = "none";
+    void tickerInner.offsetHeight;   // force reflow
+    tickerInner.style.animation = "";
+  }
+  function setTickerCrash(text) {
+    tickerCrashTxt = text || null;
+    refreshTicker();
+  }
+  function setTickerSong(text) {
+    tickerSongTxt = text || null;
+    refreshTicker();
+  }
 
   // ============================================================
   // MARKET (centre — always visible, but state can be "closed" or "empty")
   // ============================================================
   var MARKET_POLL = <?= (int)$market_poll * 1000 ?>;
+
+  /* Sparkline renderer — port of the same function in /market.php.
+   * Renders a tiny SVG line chart (last ~24 ticks) coloured by trend
+   * direction. Used to fill each row's .spark cell after each poll. */
+  function renderSpark(el, points, trend) {
+    if (!el) return;
+    if (!points || points.length < 2) { el.innerHTML = ""; return; }
+    var color = trend === "up" ? "#20c97a"
+              : trend === "down" ? "#e4564a"
+              : "#8a7858";
+    var w = el.clientWidth || 120;
+    var h = el.clientHeight || 36;
+    var min = Math.min.apply(null, points);
+    var max = Math.max.apply(null, points);
+    var range = Math.max(1, max - min);
+    var stepX = w / Math.max(1, points.length - 1);
+    var path = "";
+    for (var i = 0; i < points.length; i++) {
+      var x = i * stepX;
+      var y = h - ((points[i] - min) / range) * (h - 6) - 3;
+      path += (i === 0 ? "M" : "L") + x.toFixed(1) + " " + y.toFixed(1) + " ";
+    }
+    var fillPath = path + "L" + w + " " + h + " L0 " + h + " Z";
+    el.innerHTML =
+      '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+        '<path d="' + fillPath + '" fill="' + color + '" fill-opacity="0.12"/>' +
+        '<path d="' + path + '" fill="none" stroke="' + color +
+              '" stroke-width="2" stroke-linejoin="round"/>' +
+      '</svg>';
+  }
 
   function pollMarket() {
     fetch("/api/market_state.php", { cache: "no-store" })
@@ -833,6 +1048,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     } else {
       var rows = ['<div class="market-row head">' +
         '<span>Drink</span>' +
+        '<span></span>' +
         '<span style="text-align:right;">Price</span>' +
         '<span style="text-align:right;">Move</span>' +
         '<span></span></div>'];
@@ -843,6 +1059,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         rows.push(
           '<div class="market-row ' + cls + '" data-code="' + escapeHtml(it.item_code) + '">' +
             '<span class="name">' + escapeHtml(it.name) + '</span>' +
+            '<span class="spark"></span>' +
             '<span class="price">' + vnd(it.price_vnd) + '</span>' +
             '<span class="pct">' + pct + '</span>' +
             '<span class="arrow">' + arrow(it.trend) + '</span>' +
@@ -850,19 +1067,36 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         );
       });
       table.innerHTML = rows.join("");
+
+      /* Fill in each sparkline. Done after the rows are in the DOM
+       * so .clientWidth/.clientHeight return real numbers. */
+      s.items.forEach(function (it) {
+        var row = table.querySelector('.market-row[data-code="' + cssEscape(it.item_code) + '"]');
+        if (!row) return;
+        var cell = row.querySelector('.spark');
+        renderSpark(cell, it.sparkline || [], it.trend);
+      });
     }
 
-    var banner = document.getElementById("crash-banner");
+    /* Crash → ticker. Crash takes priority over song info. */
     if (s.any_crash && s.crash_names && s.crash_names.length) {
-      banner.textContent = "Crash! " + s.crash_names.join(", ") + " — grab them before they bounce back.";
-      banner.classList.remove("is-hidden");
+      setTickerCrash("\u26A0 CRASH! " + s.crash_names.join(", ") +
+                     " \u2014 grab them before they bounce back.");
     } else {
-      banner.classList.add("is-hidden");
+      setTickerCrash(null);
     }
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== MARKET_POLL) {
       MARKET_POLL = Math.max(2000, s.poll_seconds * 1000);
     }
+  }
+
+  /* CSS-escape an item_code for a querySelector. Drink codes are
+   * tame in practice, but cheap insurance against quotes/spaces. */
+  function cssEscape(s) {
+    return String(s == null ? "" : s).replace(/[^a-zA-Z0-9_-]/g, function (c) {
+      return "\\" + c;
+    });
   }
 
   // ============================================================
@@ -1031,6 +1265,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     startBtn.addEventListener("click", function () {
       audioStarted = true;
       document.body.classList.remove("splash-on");
+
+      /* Make the YT player container visible BEFORE creating the
+       * iframe. Browsers don't reliably autoplay video in display:none
+       * iframes, and we keep .jbx-video visible from now on so the
+       * iframe's parent never goes display:none mid-playback. */
+      var videoEl = document.getElementById("jbx-video");
+      if (videoEl) videoEl.hidden = false;
+
       // Prime audio inside the user gesture so later .play() calls
       // aren't blocked. If nothing is queued, fire up the radio
       // overlay directly — don't wait for the first poll tick.
@@ -1054,6 +1296,35 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     audioStarted = false;
   }
 
+  /* ---- Pause audio when the page is backgrounded ----
+   *
+   * On the smart TV, pressing Home doesn't kill the browser tab — it
+   * keeps running in the background. Without this, the radio (and
+   * any playing YouTube audio) keeps streaming over whatever app the
+   * user switches to, and they have to power-cycle the TV to get
+   * silence. This is the bug Ben flagged ("trips Simmo up"). */
+  function pauseAllAudio() {
+    try { radioEl.pause(); } catch (_) {}
+    radioPlaying = false;
+    if (ytPlayer && ytPlayer.pauseVideo) {
+      try { ytPlayer.pauseVideo(); } catch (_) {}
+    }
+  }
+  function resumeAllAudio() {
+    if (!audioStarted) return;
+    if (currentRow && ytPlayer && ytPlayer.playVideo) {
+      try { ytPlayer.playVideo(); } catch (_) {}
+    } else {
+      startRadioIfIdle();
+    }
+  }
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) pauseAllAudio();
+    else                 resumeAllAudio();
+  });
+  // pagehide: backwards-belt for older browsers / true navigation away.
+  window.addEventListener("pagehide", pauseAllAudio);
+
   function pollJukebox() {
     fetch("/api/jukebox_state.php", { cache: "no-store" })
       .then(function (r) { return r.json(); })
@@ -1063,6 +1334,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   function renderJukebox(s) {
     if (!s) return;
 
+    var videoEl   = document.getElementById("jbx-video");
     var nowEl     = document.getElementById("jbx-now");
     var radioCard = document.getElementById("jbx-radio");
     var upEl      = document.getElementById("jbx-up");
@@ -1099,14 +1371,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       }
     }
 
+    /* The video panel (with the YT iframe) stays visible whenever
+     * audio has been started OR a song is playing — keeping the
+     * iframe's parent visible avoids autoplay hiccups. Before the
+     * splash gate is cleared we keep it hidden to avoid an empty
+     * black box on first paint. */
+    if (videoEl) {
+      videoEl.hidden = !(audioStarted || hasNow);
+    }
+
     if (hasNow) {
       var n = s.now_playing;
-      var who = n.name ? '<div class="who">Requested by ' + escapeHtml(n.name) + '</div>' : '';
+      var who = n.name ? '<div class="who">Requested by ' + safeText(n.name) + '</div>' : '';
       nowEl.innerHTML =
-        '<img class="thumb" src="' + escapeHtml(n.thumb || "") + '" alt="">' +
         '<div class="meta-label">Now playing</div>' +
-        '<div class="title">'   + escapeHtml(n.title   || "") + '</div>' +
-        '<div class="channel">' + escapeHtml(n.channel || "") + '</div>' +
+        '<div class="title">'   + safeText(n.title   || "") + '</div>' +
+        '<div class="channel">' + safeText(n.channel || "") + '</div>' +
         who;
       nowEl.hidden = false;
     } else {
@@ -1119,12 +1399,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (hasUp) {
       var html = "";
       upNext.forEach(function (u, i) {
-        var who = u.name ? '<span class="who">' + escapeHtml(u.name) + '</span>' : '';
+        var who = u.name ? '<span class="who">' + safeText(u.name) + '</span>' : '';
         html +=
           '<li>' +
             '<span class="num">' + (i + 1) + '.</span>' +
             '<span>' +
-              '<span class="t">' + escapeHtml(u.title || "") + '</span>' +
+              '<span class="t">' + safeText(u.title || "") + '</span>' +
               who +
             '</span>' +
           '</li>';
@@ -1134,6 +1414,19 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     } else {
       ol.innerHTML = "";
       upEl.hidden = true;
+    }
+
+    /* Feed song info to the footer ticker. Lower priority than crash
+     * announcements — setTickerSong() is a no-op while a crash is up. */
+    if (hasNow) {
+      var n2 = s.now_playing;
+      var t  = decodeHtml(n2.title || "");
+      var rq = (n2.name || "").trim();
+      var msg = "\u266B  Now playing:  " + t;
+      if (rq) msg += "    \u2014  Requested by " + rq;
+      setTickerSong(msg);
+    } else {
+      setTickerSong(null);
     }
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== JBX_POLL) {
