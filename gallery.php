@@ -1,15 +1,75 @@
 <?php
-/* Live photos Simmo uploads via photos.php land in /assets/img/gallery-live/
-   and are prepended to the masonry below. Newest first. */
-$live_photos = [];
-$live_dir = __DIR__ . '/assets/img/gallery-live';
-if (is_dir($live_dir)) {
-  foreach (glob($live_dir . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE) as $f) {
-    $live_photos[] = ['name' => basename($f), 'mtime' => filemtime($f)];
-  }
-  usort($live_photos, function ($a, $b) { return $b['mtime'] <=> $a['mtime']; });
+/*
+ * Public gallery page.
+ *
+ * Single source of truth = the photo_library table managed via /photos.php.
+ * That means:
+ *   - Order on this page == sort_order set by Ben dragging tiles in admin
+ *   - Filter chips      == knk_photo_tags() whitelist used in admin
+ *   - Hidden photos      are excluded
+ *   - "Latest" chip      shows only photos uploaded via the gallery (source = gallery_live)
+ *
+ * If the DB / migration 011 isn't available we fall back to a direct disk
+ * scan so the page still renders something rather than blank.
+ */
+
+require_once __DIR__ . '/includes/photo_library_store.php';
+
+// Refresh the library from disk on every page load — cheap, idempotent.
+// Means new files Ben drops via FTP show up without an admin visit.
+@knk_photo_library_scan();
+
+$lib_photos = knk_photo_library_list(['include_hidden' => false]);
+
+// Disk fallback if DB returned nothing (pre-migration or DB blip).
+if (empty($lib_photos)) {
+    $lib_photos = [];
+    $img_root = __DIR__ . '/assets/img';
+    $sub_dirs = ['', 'gallery-live'];
+    foreach ($sub_dirs as $sub) {
+        $dir = $sub === '' ? $img_root : $img_root . '/' . $sub;
+        if (!is_dir($dir)) continue;
+        foreach (glob($dir . '/*.{jpg,jpeg,png,webp}', GLOB_BRACE) as $f) {
+            $rel = $sub === '' ? basename($f) : $sub . '/' . basename($f);
+            $auto = knk_photo_auto_tags($rel, $sub === 'gallery-live' ? 'gallery_live' : 'seed');
+            $lib_photos[] = [
+                'filename' => $rel,
+                'source'   => $sub === 'gallery-live' ? 'gallery_live' : 'seed',
+                'tags'     => $auto,
+                'hidden'   => 0,
+                'url'      => 'assets/img/' . $rel,
+            ];
+        }
+    }
 }
-$live_count = count($live_photos);
+
+$total_photos = count($lib_photos);
+$has_live     = false;
+foreach ($lib_photos as $p) {
+    if (($p['source'] ?? '') === 'gallery_live') { $has_live = true; break; }
+}
+
+/* The chip filter logic in main.js does a lowercase match against tokens
+   in data-cat (split on spaces). So data-filter and data-cat tokens are
+   stored in lowercase here, while the visible chip label stays cased. */
+function gal_slug(string $tag): string {
+    return strtolower(preg_replace('/[^a-z0-9]+/i', '', $tag));
+}
+
+$tag_whitelist = knk_photo_tags();
+
+// i18n keys for chips. Existing keys we keep using: rooms, rooftop, exterior,
+// people. New ones added in i18n.js: lounge, darts, sports, other.
+$chip_i18n = [
+    'rooms'    => 'gallery.filter.rooms',
+    'rooftop'  => 'gallery.filter.rooftop',
+    'lounge'   => 'gallery.filter.lounge',
+    'darts'    => 'gallery.filter.darts',
+    'exterior' => 'gallery.filter.exterior',
+    'sports'   => 'gallery.filter.sports',
+    'people'   => 'gallery.filter.people',
+    'other'    => 'gallery.filter.other',
+];
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -21,7 +81,7 @@ $live_count = count($live_photos);
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/css/styles.css?v=12">
+<link rel="stylesheet" href="assets/css/styles.css?v=13">
 </head>
 <body>
 
@@ -68,135 +128,37 @@ $live_count = count($live_photos);
 <section class="section" id="gallery" style="padding-top:2rem;">
   <div class="container">
     <div class="gallery-head">
-      <span class="gallery-count"><span id="gallery-count"><?= 104 + $live_count ?></span> <span data-i18n="gallery.photosLabel">photos</span></span>
+      <span class="gallery-count"><span id="gallery-count"><?= (int)$total_photos ?></span> <span data-i18n="gallery.photosLabel">photos</span></span>
     </div>
 
     <div class="gallery-filter filter-bar">
       <button class="gallery-chip chip active" data-filter="all" data-i18n="gallery.filter.all">All</button>
-      <?php if ($live_count > 0): ?><button class="gallery-chip chip" data-filter="new" data-i18n="gallery.filter.latest">Latest</button><?php endif; ?>
-      <button class="gallery-chip chip" data-filter="rooms" data-i18n="gallery.filter.rooms">Rooms</button>
-      <button class="gallery-chip chip" data-filter="rooftop" data-i18n="gallery.filter.rooftop">Rooftop</button>
-      <button class="gallery-chip chip" data-filter="bar" data-i18n="gallery.filter.bar">Bar &amp; Sports</button>
-      <button class="gallery-chip chip" data-filter="exterior" data-i18n="gallery.filter.exterior">Street &amp; Exterior</button>
-      <button class="gallery-chip chip" data-filter="interior" data-i18n="gallery.filter.interior">Interiors</button>
-      <button class="gallery-chip chip" data-filter="people" data-i18n="gallery.filter.people">People</button>
+      <?php if ($has_live): ?>
+        <button class="gallery-chip chip" data-filter="new" data-i18n="gallery.filter.latest">Latest</button>
+      <?php endif; ?>
+      <?php foreach ($tag_whitelist as $tag):
+        $slug = gal_slug($tag);
+        $i18n = $chip_i18n[$slug] ?? '';
+      ?>
+        <button class="gallery-chip chip" data-filter="<?= htmlspecialchars($slug) ?>"<?php if ($i18n): ?> data-i18n="<?= htmlspecialchars($i18n) ?>"<?php endif; ?>><?= htmlspecialchars($tag) ?></button>
+      <?php endforeach; ?>
     </div>
 
     <div class="masonry" id="masonry">
-      <?php /* Live uploads from Simmo — newest first */ foreach ($live_photos as $lp):
-        $src = 'assets/img/gallery-live/' . rawurlencode($lp['name']);
+      <?php foreach ($lib_photos as $p):
+        $src       = 'assets/img/' . $p['filename'];
+        $tag_slugs = [];
+        foreach (($p['tags'] ?? []) as $t) {
+            $s = gal_slug((string)$t);
+            if ($s !== '') $tag_slugs[] = $s;
+        }
+        // gallery_live photos always carry the "new" token so the
+        // Latest chip picks them up, regardless of their tags.
+        if (($p['source'] ?? '') === 'gallery_live') $tag_slugs[] = 'new';
+        $cat_attr = implode(' ', array_unique($tag_slugs));
       ?>
-      <div class="masonry-item" data-cat="new" data-lb data-lb-src="<?= htmlspecialchars($src) ?>"><img src="<?= htmlspecialchars($src) ?>" alt="" loading="lazy"></div>
+        <div class="masonry-item" data-cat="<?= htmlspecialchars($cat_attr) ?>" data-lb data-lb-src="<?= htmlspecialchars($src) ?>"><img src="<?= htmlspecialchars($src) ?>" alt="" loading="lazy"></div>
       <?php endforeach; ?>
-
-      <!-- existing photos (ex_) -->
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_01.jpg"><img src="assets/img/ex_01.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_03.jpg"><img src="assets/img/ex_03.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_04.jpg"><img src="assets/img/ex_04.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_05.jpg"><img src="assets/img/ex_05.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_06.jpg"><img src="assets/img/ex_06.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_07.jpg"><img src="assets/img/ex_07.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_08.jpg"><img src="assets/img/ex_08.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_09.jpg"><img src="assets/img/ex_09.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_10.jpg"><img src="assets/img/ex_10.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_11.jpg"><img src="assets/img/ex_11.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_12.jpg"><img src="assets/img/ex_12.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_13.jpg"><img src="assets/img/ex_13.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_14.jpg"><img src="assets/img/ex_14.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_15.jpg"><img src="assets/img/ex_15.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_16.jpg"><img src="assets/img/ex_16.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_17.jpg"><img src="assets/img/ex_17.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_18.jpg"><img src="assets/img/ex_18.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/ex_19.jpg"><img src="assets/img/ex_19.jpg" alt=""></div>
-
-      <!-- new photos (nw_) -->
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_00.jpg"><img src="assets/img/nw_00.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_01.jpg"><img src="assets/img/nw_01.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_02.jpg"><img src="assets/img/nw_02.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_03.jpg"><img src="assets/img/nw_03.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_04.jpg"><img src="assets/img/nw_04.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_05.jpg"><img src="assets/img/nw_05.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_06.jpg"><img src="assets/img/nw_06.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_07.jpg"><img src="assets/img/nw_07.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_08.jpg"><img src="assets/img/nw_08.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_09.jpg"><img src="assets/img/nw_09.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_10.jpg"><img src="assets/img/nw_10.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_11.jpg"><img src="assets/img/nw_11.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_12.jpg"><img src="assets/img/nw_12.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_13.jpg"><img src="assets/img/nw_13.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_15.jpg"><img src="assets/img/nw_15.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_16.jpg"><img src="assets/img/nw_16.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_18.jpg"><img src="assets/img/nw_18.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_19.jpg"><img src="assets/img/nw_19.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_20.jpg"><img src="assets/img/nw_20.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_21.jpg"><img src="assets/img/nw_21.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_22.jpg"><img src="assets/img/nw_22.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_23.jpg"><img src="assets/img/nw_23.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_24.jpg"><img src="assets/img/nw_24.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_25.jpg"><img src="assets/img/nw_25.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_26.jpg"><img src="assets/img/nw_26.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_27.jpg"><img src="assets/img/nw_27.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_28.jpg"><img src="assets/img/nw_28.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_29.jpg"><img src="assets/img/nw_29.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_30.jpg"><img src="assets/img/nw_30.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="bar" data-lb data-lb-src="assets/img/nw_31.jpg"><img src="assets/img/nw_31.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_33.jpg"><img src="assets/img/nw_33.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_34.jpg"><img src="assets/img/nw_34.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_35.jpg"><img src="assets/img/nw_35.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_36.jpg"><img src="assets/img/nw_36.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_37.jpg"><img src="assets/img/nw_37.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="people" data-lb data-lb-src="assets/img/nw_38.jpg"><img src="assets/img/nw_38.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_39.jpg"><img src="assets/img/nw_39.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_40.jpg"><img src="assets/img/nw_40.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_41.jpg"><img src="assets/img/nw_41.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_42.jpg"><img src="assets/img/nw_42.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_43.jpg"><img src="assets/img/nw_43.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_44.jpg"><img src="assets/img/nw_44.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_45.jpg"><img src="assets/img/nw_45.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_46.jpg"><img src="assets/img/nw_46.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_47.jpg"><img src="assets/img/nw_47.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_48.jpg"><img src="assets/img/nw_48.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_49.jpg"><img src="assets/img/nw_49.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_50.jpg"><img src="assets/img/nw_50.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_51.jpg"><img src="assets/img/nw_51.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_52.jpg"><img src="assets/img/nw_52.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_54.jpg"><img src="assets/img/nw_54.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="exterior" data-lb data-lb-src="assets/img/nw_55.jpg"><img src="assets/img/nw_55.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_56.jpg"><img src="assets/img/nw_56.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_57.jpg"><img src="assets/img/nw_57.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_58.jpg"><img src="assets/img/nw_58.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_59.jpg"><img src="assets/img/nw_59.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_60.jpg"><img src="assets/img/nw_60.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_61.jpg"><img src="assets/img/nw_61.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_62.jpg"><img src="assets/img/nw_62.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_64.jpg"><img src="assets/img/nw_64.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="interior" data-lb data-lb-src="assets/img/nw_65.jpg"><img src="assets/img/nw_65.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/nw_66.jpg"><img src="assets/img/nw_66.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_67.jpg"><img src="assets/img/nw_67.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_68.jpg"><img src="assets/img/nw_68.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_69.jpg"><img src="assets/img/nw_69.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_70.jpg"><img src="assets/img/nw_70.jpg" alt=""></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/nw_71.jpg"><img src="assets/img/nw_71.jpg" alt=""></div>
-
-      <!-- new room photos (rm_) -->
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_02.jpg"><img src="assets/img/rm_02.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_03.jpg"><img src="assets/img/rm_03.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_09.jpg"><img src="assets/img/rm_09.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_11.jpg"><img src="assets/img/rm_11.jpg" alt="Deluxe Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_13.jpg"><img src="assets/img/rm_13.jpg" alt="Room with sofa"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_14.jpg"><img src="assets/img/rm_14.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_15.jpg"><img src="assets/img/rm_15.jpg" alt="Room with city view"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_17.jpg"><img src="assets/img/rm_17.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_18.jpg"><img src="assets/img/rm_18.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_19.jpg"><img src="assets/img/rm_19.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_20.jpg"><img src="assets/img/rm_20.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_23.jpg"><img src="assets/img/rm_23.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_24.jpg"><img src="assets/img/rm_24.jpg" alt="Room"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_04.jpg"><img src="assets/img/rm_04.jpg" alt="VIP Room bathroom"></div>
-      <div class="masonry-item" data-cat="rooms" data-lb data-lb-src="assets/img/rm_16.jpg"><img src="assets/img/rm_16.jpg" alt="VIP bathtub"></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/rm_01.jpg"><img src="assets/img/rm_01.jpg" alt="Rooftop terrace"></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/rm_06.jpg"><img src="assets/img/rm_06.jpg" alt="Rooftop with city view"></div>
-      <div class="masonry-item" data-cat="rooftop" data-lb data-lb-src="assets/img/rm_12.jpg"><img src="assets/img/rm_12.jpg" alt="Rooftop garden at night"></div>
     </div>
   </div>
 </section>
@@ -236,8 +198,8 @@ $live_count = count($live_photos);
   <div class="lb-counter"></div>
 </div>
 
-<script src="assets/js/i18n.js?v=12"></script>
-<script src="assets/js/main.js?v=12"></script>
+<script src="assets/js/i18n.js?v=13"></script>
+<script src="assets/js/main.js?v=13"></script>
 <script>
   // Update visible count on filter
   (function() {
