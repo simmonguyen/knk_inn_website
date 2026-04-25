@@ -281,15 +281,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     color: var(--fg);
     font-family: "Inter", system-ui, sans-serif;
     display: grid;
-    /* [crash strip — collapses when no crash]
-     * [header strip]
-     * [3-up panels — flexible]
-     * [footer: lyrics / sports ticker]
+    /* Body grid rows, in DOM order:
+     *   [audio  — 0px Triple J fallback element, always claims a row]
+     *   [crash strip — collapses when no crash]
+     *   [header strip]
+     *   [3-up panels — flexible, takes all remaining vertical space]
+     *   [footer: lyrics / sports ticker]
      *
-     * Crash announcements moved to the TOP so they're not competing
+     * .tv-splash and .tv-sync-toast are position:fixed so they don't
+     * take grid slots. The 1fr MUST sit on the main row — if it shifts
+     * to header/crashbar the panels collapse to content height and the
+     * jukebox column visually stretches across the screen.
+     *
+     * Crash announcements live at the TOP so they're not competing
      * with the bottom lyric/sports ticker. When there's no crash the
      * row is display:none and folds away with no leftover gap. */
-    grid-template-rows: auto auto 1fr auto;
+    grid-template-rows: auto auto auto 1fr auto;
   }
 
   /* ---- Header strip ---- */
@@ -717,11 +724,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker.is-sports .accent { color: var(--gold); font-weight: 700; }
   .tv-ticker.is-sports .sep    { color: var(--muted); margin: 0 0.6rem; }
   /* Marquee inner (used by is-sports). padding-left:100% pushes the
-   * start of the message past the right edge so it slides in. */
+   * start of the message past the right edge so it slides in.
+   * Duration tuned for readability — fixture strings are long and
+   * staff need to be able to glance up and read kickoff times, so
+   * we run slow. The crashbar reuses the same keyframe but overrides
+   * its own (much shorter) duration above. */
   .tv-ticker-inner {
     display: inline-block;
     padding-left: 100%;
-    animation: tv-ticker-scroll 60s linear infinite;
+    animation: tv-ticker-scroll 160s linear infinite;
   }
   @keyframes tv-ticker-scroll {
     0%   { transform: translateX(0); }
@@ -737,7 +748,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     font-family: "Inter", system-ui, sans-serif;
     font-weight: 600;
     font-style: italic;
-    font-size: 1.55rem;
+    font-size: 1.15rem;
     letter-spacing: 0.01em;
     justify-content: center;
     text-align: center;
