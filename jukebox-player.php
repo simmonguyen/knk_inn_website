@@ -303,7 +303,7 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
         <div id="creditWho"></div>
       </div>
     </div>
-    <audio id="radio" preload="none" loop>
+    <audio id="radio" preload="none">
 
     <aside class="sidebar">
       <h2>Now playing</h2>
@@ -349,18 +349,42 @@ $REQUEST_URL = $_scheme . "://" . $_host . "/jukebox.php";
     radioEl.addEventListener("stalled", function () {
       console.warn("[radio] stream stalled");
     });
+    // A real radio stream never ends. If the browser sees `ended` it means
+    // the connection dropped (network hiccup, server restart, chunked
+    // transfer cut short). Re-seat the src so we open a fresh connection
+    // instead of looping whatever buffered chunk the browser is holding.
+    // We bust caches with a cache-busting query string too.
+    radioEl.addEventListener("ended", function () {
+      if (!RADIO.enabled || !RADIO.url) return;
+      if (currentRow) return; // a song just took over
+      console.warn("[radio] stream ended — reconnecting");
+      var sep = RADIO.url.indexOf("?") >= 0 ? "&" : "?";
+      radioEl.src = RADIO.url + sep + "_=" + Date.now();
+      var p = radioEl.play();
+      if (p && p.catch) p.catch(function (e) {
+        console.warn("[radio] reconnect play failed", e);
+      });
+    });
 
     function startRadioIfIdle() {
       if (!RADIO.enabled || !RADIO.url) return;
       if (currentRow) return;             // YouTube has the floor
+      // True no-op if we're already streaming. Calling play() repeatedly
+      // on some streams causes the browser to restart the buffered chunk,
+      // which sounds like a short loop.
+      if (radioPlaying && !radioEl.paused && !radioEl.ended && !radioEl.error) {
+        return;
+      }
       try {
-        // If the stream stalled, reseat the source so it reconnects.
+        // If the stream errored or got disconnected, reseat with a cache
+        // buster so we get a fresh connection instead of replaying buffer.
         if (radioEl.error || radioEl.ended || !radioEl.src) {
-          radioEl.src = RADIO.url;
+          var sep = RADIO.url.indexOf("?") >= 0 ? "&" : "?";
+          radioEl.src = RADIO.url + sep + "_=" + Date.now();
         }
         var p = radioEl.play();
         if (p && p.catch) p.catch(function (e) {
-          console.warn("radio play blocked", e);
+          console.warn("[radio] play blocked", e);
         });
       } catch (e) { console.warn(e); }
       radioPlaying = true;
