@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  KnK Inn favicon.
+
+  Kept deliberately simple because the full bar logo is intricate
+  (QR-style finder squares + cells) and would mush together at
+  16x16 / 32x32 tab sizes. Brown rounded square + bold gold "KK"
+  reads at any size and matches the bar palette (#1b0f04 / #c9aa71).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="12" ry="12" fill="#1b0f04"/>
+  <text x="32" y="46"
+        text-anchor="middle"
+        font-family="Archivo Black, Impact, sans-serif"
+        font-weight="900"
+        font-size="36"
+        fill="#c9aa71"
+        letter-spacing="-2">KK</text>
+</svg>

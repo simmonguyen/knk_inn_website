@@ -41,7 +41,7 @@ function is_ymd($s)     { return (bool)preg_match('/^\d{4}-\d{2}-\d{2}$/', $s) &
 function vnd($n)        { return number_format((int)$n, 0, ".", ",") . " VND"; }
 function fail($msg) {
     http_response_code(400);
-    echo "<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Oops — KnK Inn</title>";
+    echo "<!DOCTYPE html><html><head><link rel='icon' type='image/svg+xml' href='/favicon.svg'><meta charset='UTF-8'><title>Oops — KnK Inn</title>";
     echo "<link rel='stylesheet' href='assets/css/styles.css'></head><body style='padding:4rem;text-align:center;'>";
     echo "<h1>Something went wrong</h1><p>$msg</p>";
     echo "<p><a href='index.php' class='btn-primary'>Back</a></p></body></html>";

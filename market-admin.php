@@ -172,6 +172,7 @@ function mkt_h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UT
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="robots" content="noindex, nofollow">
