@@ -34,11 +34,16 @@ session_start();
 /* Tell the included page it's running inside the bar shell. */
 define('KNK_BAR_FRAME', 1);
 
-/* Resolve which tab to show. */
-$BAR_TAB = (string)($_GET['tab'] ?? 'drinks');
+/* Resolve which tab to show.
+ *
+ * No ?tab= (or an unknown value) → "home" launcher screen with three
+ * big buttons. The guest decides what they want to do FIRST, then the
+ * tab opens. Bottom nav still works on the launcher — it's just that
+ * none of the three tabs are highlighted as active. */
+$BAR_TAB = (string)($_GET['tab'] ?? '');
 $BAR_VALID_TABS = ['drinks', 'music', 'darts'];
 if (!in_array($BAR_TAB, $BAR_VALID_TABS, true)) {
-    $BAR_TAB = 'drinks';
+    $BAR_TAB = 'home';
 }
 
 $BAR_TAB_PAGE = [
@@ -48,6 +53,7 @@ $BAR_TAB_PAGE = [
 ];
 
 $BAR_TAB_LABEL = [
+    'home'   => 'Welcome',
     'drinks' => 'Drinks &amp; orders',
     'music'  => 'Jukebox',
     'darts'  => 'Darts',
@@ -60,10 +66,15 @@ $BAR_TAB_LABEL = [
  * after submit). header() still works at this point because no body
  * output has been flushed yet — only buffered. exit() will skip the rest
  * of bar.php, which is the correct behaviour for a redirect.
+ *
+ * The "home" launcher has no inner page — it's a built-in screen below.
  */
-ob_start();
-include $BAR_TAB_PAGE[$BAR_TAB];
-$BAR_INNER = ob_get_clean();
+$BAR_INNER = '';
+if ($BAR_TAB !== 'home') {
+    ob_start();
+    include $BAR_TAB_PAGE[$BAR_TAB];
+    $BAR_INNER = ob_get_clean();
+}
 
 ?><!DOCTYPE html>
 <html lang="en">
@@ -146,6 +157,58 @@ $BAR_INNER = ob_get_clean();
       filter: grayscale(0.15);
     }
     .bar-shell-tab.is-active .icon { filter: none; }
+
+    /*
+     * Home launcher — shown when /bar.php is hit with no ?tab= param.
+     * Three big buttons, full-width, generous tap targets. Kept deliberately
+     * plain: just an icon, the action name, and nothing else. Simmo's guests
+     * don't need subtitles to know what "Order Drinks" means.
+     */
+    .bar-home {
+      padding: 1.5rem 1.25rem 1rem;
+      display: flex; flex-direction: column;
+      gap: 0.9rem;
+    }
+    .bar-home-greeting {
+      font-family: "Archivo Black", sans-serif;
+      font-size: 1.6rem; line-height: 1.15;
+      letter-spacing: 0.01em;
+      color: #f5e9d1;
+      margin: 0.5rem 0 0.25rem;
+    }
+    .bar-home-greeting em { color: #c9aa71; font-style: normal; }
+    .bar-home-sub {
+      font-size: 0.95rem;
+      color: rgba(245,233,209,0.7);
+      margin: 0 0 1rem;
+    }
+    .bar-home-btn {
+      display: flex; align-items: center;
+      gap: 1rem;
+      padding: 1.15rem 1.25rem;
+      background: rgba(201,170,113,0.08);
+      border: 1px solid rgba(201,170,113,0.35);
+      border-radius: 14px;
+      color: #f5e9d1;
+      text-decoration: none;
+      font-family: "Inter", system-ui, sans-serif;
+      font-weight: 700;
+      font-size: 1.15rem;
+      letter-spacing: 0.02em;
+      transition: background 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .bar-home-btn:hover { background: rgba(201,170,113,0.16); border-color: rgba(201,170,113,0.6); }
+    .bar-home-btn:active { transform: scale(0.99); }
+    .bar-home-btn .icon {
+      font-size: 2rem; line-height: 1;
+      width: 2.4rem; text-align: center;
+    }
+    .bar-home-btn .label { flex: 1; }
+    .bar-home-btn .chev {
+      color: #c9aa71; font-size: 1.4rem; line-height: 1;
+      opacity: 0.7;
+    }
   </style>
 </head>
 <body>
@@ -156,7 +219,30 @@ $BAR_INNER = ob_get_clean();
     </header>
 
     <main class="bar-shell-main">
-      <?= $BAR_INNER ?>
+      <?php if ($BAR_TAB === 'home'): ?>
+        <div class="bar-home">
+          <h1 class="bar-home-greeting">Welcome to <em>KnK Inn</em></h1>
+          <p class="bar-home-sub">What would you like to do?</p>
+
+          <a class="bar-home-btn" href="/bar.php?tab=drinks">
+            <span class="icon">🍸</span>
+            <span class="label">Order Drinks</span>
+            <span class="chev">›</span>
+          </a>
+          <a class="bar-home-btn" href="/bar.php?tab=music">
+            <span class="icon">🎵</span>
+            <span class="label">Music Request</span>
+            <span class="chev">›</span>
+          </a>
+          <a class="bar-home-btn" href="/bar.php?tab=darts">
+            <span class="icon">🎯</span>
+            <span class="label">Throw Darts</span>
+            <span class="chev">›</span>
+          </a>
+        </div>
+      <?php else: ?>
+        <?= $BAR_INNER ?>
+      <?php endif; ?>
     </main>
 
     <nav class="bar-shell-tabnav" aria-label="Bar sections">
