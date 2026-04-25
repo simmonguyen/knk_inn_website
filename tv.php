@@ -756,6 +756,32 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   /* ============================================================
+   * Lyric-sync toast — small pill that fades in at the bottom-
+   * centre when staff nudges the offset, then fades out on its
+   * own. Sits ABOVE the bottom ticker so the lyric line stays
+   * readable while the staffer fine-tunes. Driven by JS via
+   * showSyncToast() — no other code touches it.
+   * ========================================================== */
+  .tv-sync-toast {
+    position: fixed;
+    left: 50%; bottom: 80px;
+    transform: translateX(-50%);
+    background: rgba(11, 5, 0, 0.9);
+    color: var(--gold);
+    border: 1px solid var(--gold);
+    border-radius: 999px;
+    padding: 0.5rem 1.1rem;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.95rem; letter-spacing: 0.06em;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.18s ease-out;
+    z-index: 90;
+    white-space: nowrap;
+  }
+  .tv-sync-toast.is-visible { opacity: 1; }
+
+  /* ============================================================
    * Splash gate — tap to unblock browser autoplay.
    * ========================================================== */
   .tv-splash {
@@ -808,6 +834,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
      the jukebox panel — see <div class="jbx-video"> below — because
      browsers don't reliably autoplay video in tiny off-screen iframes. -->
 <audio id="tv-radio" preload="none"></audio>
+
+<!-- Lyric-sync toast — feedback chip when staff nudge the lyric
+     offset with [ / ]. Hidden by default; JS toggles .is-visible. -->
+<div class="tv-sync-toast" id="tv-sync-toast"></div>
 
 <!-- Top crash strip — full-width red marquee shown only when one or
      more drinks have crashed (price collapsed). Hidden state collapses
@@ -1219,6 +1249,68 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   setInterval(loadFixtures, FIXTURES_REFRESH_MS);
 
   // ============================================================
+  // LYRIC-SYNC NUDGE — keyboard shortcuts so a staffer can line
+  // up the lyrics with the audio when LRCLIB's timestamps don't
+  // match the YouTube edit. Bindings:
+  //
+  //   ]            +0.25s  (lyrics later)
+  //   [            -0.25s  (lyrics earlier)
+  //   Shift+]      +1.0s
+  //   Shift+[      -1.0s
+  //   \            reset to 0
+  //
+  // The current offset is shown briefly in a toast and saved to
+  // localStorage against the YouTube video id, so the next time
+  // anyone queues that song the offset comes back automatically.
+  // ============================================================
+  var syncToastEl   = document.getElementById("tv-sync-toast");
+  var syncToastTmr  = null;
+  function showSyncToast(label) {
+    if (!syncToastEl) return;
+    syncToastEl.textContent = label;
+    syncToastEl.classList.add("is-visible");
+    if (syncToastTmr) clearTimeout(syncToastTmr);
+    syncToastTmr = setTimeout(function () {
+      syncToastEl.classList.remove("is-visible");
+    }, 1400);
+  }
+  function fmtOffsetLabel(off) {
+    if (off === 0) return "Lyric sync: 0.0s";
+    var sign = off > 0 ? "+" : "\u2212";          /* unicode minus */
+    var abs  = Math.abs(off).toFixed(2).replace(/0$/, "");
+    if (abs.charAt(abs.length - 1) === ".") abs = abs.slice(0, -1);
+    return "Lyric sync: " + sign + abs + "s";
+  }
+  function nudgeLyricOffset(deltaSec, reset) {
+    if (!lyricsOffsetVid) {
+      showSyncToast("No song playing");
+      return;
+    }
+    var next = reset ? 0 : Math.round((lyricsOffsetSec + deltaSec) * 100) / 100;
+    /* Clamp to ±30s — beyond that the LRC and the video probably
+     * aren't even the same recording. */
+    if (next >  30) next =  30;
+    if (next < -30) next = -30;
+    lyricsOffsetSec = next;
+    saveLyricOffset(lyricsOffsetVid, next);
+    /* Force the next tick to re-pick the line under the new
+     * offset, even if the playhead hasn't moved. */
+    lyricsLastIdx = -2;
+    showSyncToast(fmtOffsetLabel(next));
+  }
+  document.addEventListener("keydown", function (e) {
+    /* Don't hijack typing in form fields (the splash button is
+     * the only interactive element on this page, but be safe). */
+    var tag = (e.target && e.target.tagName) || "";
+    if (tag === "INPUT" || tag === "TEXTAREA" || e.target.isContentEditable) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    var step = e.shiftKey ? 1.0 : 0.25;
+    if (e.key === "]") { e.preventDefault(); nudgeLyricOffset( step, false); }
+    else if (e.key === "[") { e.preventDefault(); nudgeLyricOffset(-step, false); }
+    else if (e.key === "\\") { e.preventDefault(); nudgeLyricOffset(0, true); }
+  });
+
+  // ============================================================
   // MARKET (centre — always visible, but state can be "closed" or "empty")
   // ============================================================
   var MARKET_POLL = <?= (int)$market_poll * 1000 ?>;
@@ -1341,6 +1433,40 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   var lyricsForId        = null;     // jukebox.id we last fetched for
   var lyricsLastIdx      = -1;
   var lyricsTickInterval = null;
+  /* Tracks where the LRCLIB fetch is up to so playRow's adaptive
+   * pre-roll knows when it's safe to start the video. The video
+   * either waits for "ready" (lyrics found) or "none" (we know
+   * there's no synced lyrics so no point holding back the audio). */
+  var lyricsState        = "idle";   // "idle" | "fetching" | "ready" | "none"
+  /* Per-YouTube-video lyric offset in seconds. The LRCLIB
+   * timestamps are keyed to the studio recording, but YouTube
+   * videos often add an intro (silence, label sting, live count-in)
+   * that pushes the actual song start past 0:00. When that happens
+   * the lyrics drift earlier than the singing — staff nudges with
+   * "[" / "]" until it lines up, and we cache the offset against
+   * the YouTube video id in localStorage so it sticks for future
+   * plays. Positive offset = lyrics shown LATER than LRC says.
+   * Keyed by row.video_id, NOT row.id, so the offset is shared
+   * across guests who queue the same song. */
+  var LYRIC_OFFSETS_KEY = "tvLyricOffsets";
+  var lyricsOffsetSec   = 0;
+  var lyricsOffsetVid   = null;      // video_id this offset applies to
+  function loadLyricOffsets() {
+    try {
+      var raw = localStorage.getItem(LYRIC_OFFSETS_KEY);
+      var obj = raw ? JSON.parse(raw) : {};
+      return (obj && typeof obj === "object") ? obj : {};
+    } catch (_) { return {}; }
+  }
+  function saveLyricOffset(vid, offsetSec) {
+    if (!vid) return;
+    try {
+      var obj = loadLyricOffsets();
+      if (offsetSec === 0) { delete obj[vid]; }
+      else                 { obj[vid] = offsetSec; }
+      localStorage.setItem(LYRIC_OFFSETS_KEY, JSON.stringify(obj));
+    } catch (_) { /* private mode / quota — silent */ }
+  }
 
   function cleanTrack(s) {
     s = String(s || "");
@@ -1406,7 +1532,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
   function fetchLyrics(songId, title, channel) {
     var sp  = splitTitle(title, channel);
-    if (!sp.artist || !sp.track) return;
+    if (!sp.artist || !sp.track) {
+      /* No usable artist/track — skip the call and tell the
+       * pre-roll loop it's free to start the video right away. */
+      lyricsState = "none";
+      return;
+    }
+    lyricsState = "fetching";
     var url = "https://lrclib.net/api/get?artist_name=" +
               encodeURIComponent(sp.artist) +
               "&track_name=" + encodeURIComponent(sp.track);
@@ -1432,20 +1564,26 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         /* If the song changed while we were fetching, this response
          * is for a stale id — just drop it. */
         if (lyricsForId !== songId) return;
-        if (!rec || !rec.syncedLyrics) return;
+        if (!rec || !rec.syncedLyrics) { lyricsState = "none"; return; }
         var parsed = parseLRC(rec.syncedLyrics);
-        if (parsed.length === 0) return;
+        if (parsed.length === 0) { lyricsState = "none"; return; }
         lyricsLines   = parsed;
         lyricsLastIdx = -1;
+        lyricsState   = "ready";
         startLyricLoop();
       })
-      .catch(function () { /* CORS / network — silent fallback */ });
+      .catch(function () {
+        /* CORS / network — treat as "no lyrics" so the pre-roll
+         * doesn't sit on its hands waiting forever. */
+        if (lyricsForId === songId) lyricsState = "none";
+      });
   }
 
   function clearLyrics() {
     lyricsLines   = null;
     lyricsForId   = null;
     lyricsLastIdx = -1;
+    lyricsState   = "idle";
     setTickerLyric(null);
     if (lyricsTickInterval) {
       clearInterval(lyricsTickInterval);
@@ -1462,10 +1600,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     var t;
     try { t = ytPlayer.getCurrentTime(); } catch (_) { return; }
     if (typeof t !== "number" || isNaN(t)) return;
-    /* Find the latest lyric whose timestamp is <= playhead. */
+    /* Apply the per-song offset before lookup. Positive offset
+     * means the YT video has an intro before the song actually
+     * starts, so the effective song clock lags the playhead and
+     * we should display lyric lines later than LRC says. */
+    var songClock = t - lyricsOffsetSec;
+    /* Find the latest lyric whose timestamp is <= songClock. */
     var idx = -1;
     for (var i = 0; i < lyricsLines.length; i++) {
-      if (lyricsLines[i].time <= t) idx = i;
+      if (lyricsLines[i].time <= songClock) idx = i;
       else break;
     }
     if (idx === lyricsLastIdx) return;
@@ -1627,17 +1770,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     .catch(function (e) { advancing = false; console.warn(e); });
   }
 
-  /* Pre-roll delay before the YouTube video actually starts, so
-   * synced lyrics from LRCLIB (which fetchLyrics() kicks off via
-   * renderJukebox the moment the new song id is seen) have time to
-   * come back. Without this, the first 1–2 lines fly past before
-   * we know what to display. Bumped to 3.0s after Ben asked for a
-   * bigger gap — LRCLIB cold-cache fetches were sometimes still
-   * outstanding at 1.8s. */
-  var PLAYROW_PREROLL_MS = 3000;
+  /* Pre-roll bounds. The video doesn't load until the LRCLIB fetch
+   * has either succeeded or definitively failed — so songs with
+   * lyrics get the buffer they need (lyrics ready before audio
+   * starts) and songs without lyrics start as soon as we know
+   * there's nothing coming. PREROLL_MIN guarantees a baseline
+   * pause so the radio→video swap isn't jarring; PREROLL_MAX caps
+   * the wait so a slow LRCLIB call can't strand the queue. */
+  var PREROLL_MIN_MS = 1500;
+  var PREROLL_MAX_MS = 5000;
+  var prerollPoll    = null;     // setInterval handle, single-flighted
 
   function playRow(row) {
     currentRow = row;
+    /* Always cancel any in-flight pre-roll — a newer song has taken
+     * over the slot and the previous wait is moot. */
+    if (prerollPoll) { clearInterval(prerollPoll); prerollPoll = null; }
     /* Keep the video/radio cards in sync with the playing state right
      * here, so we don't rely on the next poll cycle to flip them.
      * The radio card is mutually exclusive with the video — when
@@ -1654,18 +1802,38 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     }
     if (videoEl) videoEl.hidden = false;
     if (radioCard) radioCard.hidden = true;
-    /* Defer the actual loadVideoById by the pre-roll window. During
-     * this gap the previous source (radio or the previous video's
-     * post-roll) keeps running so there's no dead-air pop. The
-     * race-guard (currentRow !== row) bails if a newer song has
-     * already taken the slot before the timeout fires. */
-    setTimeout(function () {
-      if (currentRow !== row) return;
+
+    /* Pull the saved offset for this YouTube video id (if any) so
+     * the lyric ticker is already lined up before the first line
+     * fires. Default 0 for first-time songs. */
+    lyricsOffsetVid = row.video_id || null;
+    var offsets = loadLyricOffsets();
+    lyricsOffsetSec = (lyricsOffsetVid && typeof offsets[lyricsOffsetVid] === "number")
+      ? offsets[lyricsOffsetVid] : 0;
+
+    /* Adaptive pre-roll. The radio (or previous song's post-roll)
+     * keeps playing during the wait, so there's no dead air — we
+     * just hold the new video until either:
+     *   - lyricsState is "ready" (LRC parsed) and MIN has elapsed
+     *   - lyricsState is "none"  (no LRC found) and MIN has elapsed
+     *   - MAX has elapsed (LRCLIB stalled — give up and start)
+     * Race-guard (currentRow !== row) bails the loop if a newer
+     * song has overtaken this one. */
+    var startedAt = Date.now();
+    prerollPoll = setInterval(function () {
+      if (currentRow !== row) {
+        clearInterval(prerollPoll); prerollPoll = null; return;
+      }
+      var elapsed = Date.now() - startedAt;
+      if (elapsed < PREROLL_MIN_MS) return;
+      var lyricsKnown = (lyricsState === "ready" || lyricsState === "none");
+      if (!lyricsKnown && elapsed < PREROLL_MAX_MS) return;
+      clearInterval(prerollPoll); prerollPoll = null;
       stopRadio();
       if (ytPlayer && ytPlayer.loadVideoById) {
         try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
       }
-    }, PLAYROW_PREROLL_MS);
+    }, 100);
   }
 
   // ---- Splash / start gesture (autoplay unblock) ----
