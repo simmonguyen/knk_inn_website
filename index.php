@@ -466,7 +466,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
           </div>
         </a>
         <div class="contact-photo-row">
-          <img src="assets/img/nw_33.jpg" alt="">
+          <img src="<?= p_src($slots, 'find_us', 2, 'nw_33.jpg') ?>" alt="">
           <img src="assets/img/nw_05.jpg" alt="">
         </div>
       </div>

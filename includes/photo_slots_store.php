@@ -95,10 +95,10 @@ function knk_photo_sections(): array {
         [
             "key"     => "find_us",
             "display" => "Find us (contact banner)",
-            "where"   => "index.php — the full-width banner above Contact",
-            "blurb"   => "One big photo sitting behind the ‘Come in. Stay a while.’ call-to-action.",
-            "slots"   => 1,
-            "labels"  => [1 => null],
+            "where"   => "index.php — the contact section",
+            "blurb"   => "Two photos: the small one on the contact card next to the address, and the big banner sitting behind the ‘Come in. Stay a while.’ call-to-action.",
+            "slots"   => 2,
+            "labels"  => [1 => "Banner", 2 => "Contact card photo"],
         ],
     ];
 }
@@ -131,6 +131,7 @@ function knk_slot_defaults(): array {
         "sports_look_around#7" => "nw_52.jpg",
         "sports_look_around#8" => "nw_69.jpg",
         "find_us#1"            => "nw_05.jpg",
+        "find_us#2"            => "nw_33.jpg",
     ];
 }
 
