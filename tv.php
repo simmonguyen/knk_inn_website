@@ -281,22 +281,32 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     color: var(--fg);
     font-family: "Inter", system-ui, sans-serif;
     display: grid;
-    /* Body grid rows, in DOM order:
-     *   [audio  — 0px Triple J fallback element, always claims a row]
-     *   [crash strip — collapses when no crash]
-     *   [header strip]
-     *   [3-up panels — flexible, takes all remaining vertical space]
-     *   [footer: lyrics / sports ticker]
-     *
-     * .tv-splash and .tv-sync-toast are position:fixed so they don't
-     * take grid slots. The 1fr MUST sit on the main row — if it shifts
-     * to header/crashbar the panels collapse to content height and the
-     * jukebox column visually stretches across the screen.
-     *
-     * Crash announcements live at the TOP so they're not competing
-     * with the bottom lyric/sports ticker. When there's no crash the
-     * row is display:none and folds away with no leftover gap. */
-    grid-template-rows: auto auto auto 1fr auto;
+    /* Body grid: 4 explicit rows. We pin each child to its row by
+     * `grid-row` below — DON'T rely on auto-placement. Browsers
+     * disagree on whether <audio> without controls claims a grid
+     * row (Chromium: display:none → no; Firefox: yes), and that
+     * disagreement was sliding the 1fr off main and onto footer,
+     * collapsing the 3-up panels so the jukebox column visually
+     * stretched across the screen.
+     *   row 1: crash strip (auto, collapses when no crash)
+     *   row 2: header strip
+     *   row 3: 3-up panels (1fr — takes all remaining vertical space)
+     *   row 4: footer (lyrics / sports ticker) */
+    grid-template-rows: auto auto 1fr auto;
+  }
+  /* Pin every body grid child to its row explicitly. Anything not
+   * listed here (audio, splash, sync toast) gets position:fixed
+   * or display:none so it never participates in grid track sizing. */
+  body > .tv-crashbar { grid-row: 1; }
+  body > .tv-bar      { grid-row: 2; }
+  body > .tv-main     { grid-row: 3; }
+  body > .tv-footer   { grid-row: 4; }
+  /* Force the radio audio fallback out of grid flow regardless of
+   * the browser's default audio:not([controls]) rule. */
+  body > audio#tv-radio {
+    position: absolute;
+    width: 0; height: 0;
+    visibility: hidden;
   }
 
   /* ---- Header strip ---- */
