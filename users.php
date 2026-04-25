@@ -28,8 +28,18 @@ if ($action === "create") {
     $name     = (string)($_POST["name"]     ?? "");
     $password = (string)($_POST["password"] ?? "");
     $role     = (string)($_POST["role"]     ?? "");
+    $language = (string)($_POST["language"] ?? "en");
+    if (!in_array($language, ["en", "vi"], true)) $language = "en";
     try {
         $new_id = knk_create_user($email, $name, $password, $role);
+        // Apply default language (best effort; column may not exist yet
+        // pre-migration 016).
+        try {
+            knk_db()->prepare("UPDATE users SET `language` = ? WHERE id = ?")
+                    ->execute([$language, $new_id]);
+        } catch (Throwable $e) {
+            // ignore — column missing on this environment
+        }
         $flash = "Created " . htmlspecialchars($email) . " as " . htmlspecialchars(knk_role_label($role)) . ".";
     } catch (Throwable $e) {
         $error = $e->getMessage();
@@ -37,10 +47,12 @@ if ($action === "create") {
 }
 
 elseif ($action === "update") {
-    $id    = (int)($_POST["id"] ?? 0);
-    $name  = trim((string)($_POST["name"]  ?? ""));
-    $email = strtolower(trim((string)($_POST["email"] ?? "")));
-    $role  = (string)($_POST["role"]  ?? "");
+    $id       = (int)($_POST["id"] ?? 0);
+    $name     = trim((string)($_POST["name"]  ?? ""));
+    $email    = strtolower(trim((string)($_POST["email"] ?? "")));
+    $role     = (string)($_POST["role"]  ?? "");
+    $language = (string)($_POST["language"] ?? "en");
+    if (!in_array($language, ["en", "vi"], true)) $language = "en";
 
     if ($id <= 0 || $name === "" || !in_array($role, ["super_admin","owner","reception","bartender"], true)) {
         $error = "Missing or invalid fields.";
@@ -57,12 +69,21 @@ elseif ($action === "update") {
         if ($dup->fetch()) {
             $error = "Someone else is already using that email.";
         } else {
-            $stmt = knk_db()->prepare("UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?");
-            $stmt->execute([$name, $email, $role, $id]);
+            // The `language` column is added by migration 016. Try the new
+            // shape first; fall back to the old one if the column isn't
+            // there yet so the page still works during the deploy gap.
+            try {
+                $stmt = knk_db()->prepare("UPDATE users SET name = ?, email = ?, role = ?, `language` = ? WHERE id = ?");
+                $stmt->execute([$name, $email, $role, $language, $id]);
+            } catch (Throwable $e) {
+                $stmt = knk_db()->prepare("UPDATE users SET name = ?, email = ?, role = ? WHERE id = ?");
+                $stmt->execute([$name, $email, $role, $id]);
+            }
             knk_audit("user.update", "users", (string)$id, [
-                "name"  => $name,
-                "email" => $email,
-                "role"  => $role,
+                "name"     => $name,
+                "email"    => $email,
+                "role"     => $role,
+                "language" => $language,
             ]);
             // Editing yourself? Refresh the cached email so the nav bar
             // doesn't keep showing the old one until the next login.
@@ -176,10 +197,19 @@ $error = (string)($_GET["err"] ?? "");
 /* --------------------------------------------------------------------
  * Load data
  * ------------------------------------------------------------------ */
-$users = knk_db()
-    ->query("SELECT id, email, name, role, active, created_at, last_login_at
-             FROM users ORDER BY active DESC, role, name")
-    ->fetchAll();
+// Try to read the new `language` column first; if migration 016 hasn't
+// run yet on this environment, fall back to the old shape.
+try {
+    $users = knk_db()
+        ->query("SELECT id, email, name, role, `language`, active, created_at, last_login_at
+                 FROM users ORDER BY active DESC, role, name")
+        ->fetchAll();
+} catch (Throwable $e) {
+    $users = knk_db()
+        ->query("SELECT id, email, name, role, active, created_at, last_login_at
+                 FROM users ORDER BY active DESC, role, name")
+        ->fetchAll();
+}
 
 // Load all user permissions in a single query, then group by user_id so
 // each row's <details> block can render its toggle matrix without
@@ -336,6 +366,13 @@ $role_options = [
             <label for="password">Initial password (min 8)</label>
             <input id="password" name="password" type="text" required minlength="8" autocomplete="off">
           </div>
+          <div>
+            <label for="language">Default language</label>
+            <select id="language" name="language">
+              <option value="en">English</option>
+              <option value="vi">Tiếng Việt</option>
+            </select>
+          </div>
         </div>
         <div style="margin-top:1rem; display:flex; gap:.75rem; align-items:center">
           <button type="submit">Create user</button>
@@ -394,6 +431,11 @@ $role_options = [
                       <?php foreach ($role_options as $val => $lbl): ?>
                         <option value="<?= htmlspecialchars($val) ?>" <?= $val === $u["role"] ? "selected" : "" ?>><?= htmlspecialchars($lbl) ?></option>
                       <?php endforeach; ?>
+                    </select>
+                    <?php $u_lang = !empty($u["language"]) ? (string)$u["language"] : "en"; ?>
+                    <select name="language" title="Default language">
+                      <option value="en" <?= $u_lang === "en" ? "selected" : "" ?>>English</option>
+                      <option value="vi" <?= $u_lang === "vi" ? "selected" : "" ?>>Tiếng Việt</option>
                     </select>
                     <button type="submit" class="ghost">Save</button>
                   </form>

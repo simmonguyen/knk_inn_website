@@ -35,6 +35,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/i18n.php";
 
 /* --------------------------------------------------------------------
  * Session bootstrap — long-lived cookie so Simmo isn't forced to
@@ -67,12 +68,23 @@ function knk_current_user(): ?array {
     $uid = $_SESSION["knk_user_id"] ?? null;
     if (!$uid) return $cached = null;
 
-    $stmt = knk_db()->prepare(
-        "SELECT id, email, name, role, active, created_at, last_login_at
-         FROM users WHERE id = ? LIMIT 1"
-    );
-    $stmt->execute([$uid]);
-    $row = $stmt->fetch();
+    /* `language` is best-effort — older deployments without migration 016
+     * fall back to a SELECT without it. */
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT id, email, name, role, `language`, active, created_at, last_login_at
+             FROM users WHERE id = ? LIMIT 1"
+        );
+        $stmt->execute([$uid]);
+        $row = $stmt->fetch();
+    } catch (Throwable $e) {
+        $stmt = knk_db()->prepare(
+            "SELECT id, email, name, role, active, created_at, last_login_at
+             FROM users WHERE id = ? LIMIT 1"
+        );
+        $stmt->execute([$uid]);
+        $row = $stmt->fetch();
+    }
 
     if (!$row || !(int)$row["active"]) {
         // Account vanished or was deactivated — clear the session.
@@ -202,12 +214,16 @@ function knk_render_403(array $u): void {
     http_response_code(403);
     $role_label = htmlspecialchars(knk_role_label($u["role"]));
     $home       = htmlspecialchars(knk_role_home_for($u));
-    echo "<!doctype html><meta charset=utf-8><title>403 — Not allowed</title>"
+    $title      = htmlspecialchars(knk_t("403.title"));
+    $body_html  = knk_t("403.body", ["role" => $role_label]); // already-escaped role
+    $back       = htmlspecialchars(knk_t("403.back"));
+    $logout     = htmlspecialchars(knk_t("403.logout"));
+    echo "<!doctype html><meta charset=utf-8><title>{$title}</title>"
        . "<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;color:#2a1a08}"
        . "a{color:#b38a3b}</style>"
-       . "<h1>403 — Not allowed</h1>"
-       . "<p>You're signed in as <strong>{$role_label}</strong>, which doesn't have access to this page.</p>"
-       . "<p><a href=\"{$home}\">Back to your dashboard</a> · <a href=\"/logout.php\">Log out</a></p>";
+       . "<h1>{$title}</h1>"
+       . "<p>{$body_html}</p>"
+       . "<p><a href=\"{$home}\">{$back}</a> · <a href=\"/logout.php\">{$logout}</a></p>";
     exit;
 }
 
@@ -215,12 +231,10 @@ function knk_render_403(array $u): void {
  * Small display helpers.
  * ------------------------------------------------------------------ */
 function knk_role_label(string $role): string {
-    return [
-        "super_admin" => "Super Admin",
-        "owner"       => "Owner",
-        "reception"   => "Hotel Reception",
-        "bartender"   => "Bartender / Hostess",
-    ][$role] ?? $role;
+    if (!in_array($role, ["super_admin", "owner", "reception", "bartender"], true)) {
+        return $role;
+    }
+    return knk_t("role." . $role);
 }
 
 /** Where should this role land after login? Falls back to a sensible default. */
@@ -338,23 +352,23 @@ function knk_set_user_permissions(int $user_id, array $perms): void {
  * ------------------------------------------------------------------ */
 function knk_user_nav(array $me): array {
     $items = [
-        "bookings" => ["href" => "/bookings.php",            "label" => "Bookings"],
-        "orders"   => ["href" => "/order-admin.php",         "label" => "Orders"],
-        "guests"   => ["href" => "/bookings.php?tab=guests", "label" => "Guests"],
-        "sales"    => ["href" => "/sales.php",               "label" => "Sales"],
-        "menu"     => ["href" => "/menu.php",                "label" => "Menu"],
-        "market"   => ["href" => "/market-admin.php",        "label" => "Market"],
-        "jukebox"  => ["href" => "/jukebox-admin.php",       "label" => "Jukebox"],
-        "darts"    => ["href" => "/darts-admin.php",         "label" => "Darts"],
-        "photos"   => ["href" => "/photos.php",              "label" => "Photos"],
+        "bookings" => ["href" => "/bookings.php",            "label" => knk_t("nav.bookings")],
+        "orders"   => ["href" => "/order-admin.php",         "label" => knk_t("nav.orders")],
+        "guests"   => ["href" => "/bookings.php?tab=guests", "label" => knk_t("nav.guests")],
+        "sales"    => ["href" => "/sales.php",               "label" => knk_t("nav.sales")],
+        "menu"     => ["href" => "/menu.php",                "label" => knk_t("nav.menu")],
+        "market"   => ["href" => "/market-admin.php",        "label" => knk_t("nav.market")],
+        "jukebox"  => ["href" => "/jukebox-admin.php",       "label" => knk_t("nav.jukebox")],
+        "darts"    => ["href" => "/darts-admin.php",         "label" => knk_t("nav.darts")],
+        "photos"   => ["href" => "/photos.php",              "label" => knk_t("nav.photos")],
     ];
     $out = [];
     foreach ($items as $perm => $link) {
         if (knk_user_can($me, $perm)) $out[] = $link;
     }
     if (($me["role"] ?? "") === "super_admin") {
-        $out[] = ["href" => "/settings.php", "label" => "Settings"];
-        $out[] = ["href" => "/users.php",    "label" => "Users"];
+        $out[] = ["href" => "/settings.php", "label" => knk_t("nav.settings")];
+        $out[] = ["href" => "/users.php",    "label" => knk_t("nav.users")];
     }
     return $out;
 }
@@ -469,10 +483,18 @@ function knk_render_admin_nav(array $me): void {
     // pick out the tab/filter keys from the current URL.
     $current_tab    = $_GET["tab"]    ?? "";
     $current_filter = $_GET["filter"] ?? "";
+
+    // Language toggle — links to /set-language.php?lang=…&next=current_url.
+    // We bounce back to whatever URL the user was on so the click feels in-place.
+    $cur_lang  = knk_current_lang($me);
+    $other     = ($cur_lang === "vi") ? "en" : "vi";
+    $next_url  = $_SERVER["REQUEST_URI"] ?? "/";
+    $brand_lbl = htmlspecialchars(knk_t("nav.brand_staff"));
+    $logout_l  = htmlspecialchars(knk_t("nav.logout"));
     ?>
     <nav class="knk-admin-nav">
       <div class="knk-admin-nav__brand">
-        <strong>KnK</strong> <em>Staff</em>
+        <strong>KnK</strong> <em><?= $brand_lbl ?></em>
       </div>
       <div class="knk-admin-nav__links">
         <?php foreach ($links as $l):
@@ -498,8 +520,16 @@ function knk_render_admin_nav(array $me): void {
         <?php endforeach; ?>
       </div>
       <div class="knk-admin-nav__me">
+        <a class="knk-admin-nav__lang"
+           href="/set-language.php?lang=<?= htmlspecialchars($other) ?>&amp;next=<?= htmlspecialchars(urlencode($next_url)) ?>"
+           title="<?= htmlspecialchars(knk_t("lang.tooltip")) ?>"
+           aria-label="<?= htmlspecialchars(knk_t("lang.tooltip")) ?>">
+          <span class="knk-admin-nav__lang-current"><?= htmlspecialchars(knk_lang_short($cur_lang)) ?></span>
+          <span class="knk-admin-nav__lang-sep">·</span>
+          <span class="knk-admin-nav__lang-other"><?= htmlspecialchars(knk_lang_short($other)) ?></span>
+        </a>
         <span class="knk-admin-nav__user"><?= $name ?> <span class="knk-admin-nav__role">· <?= $role ?></span></span>
-        <a class="knk-admin-nav__logout" href="/logout.php">Log out</a>
+        <a class="knk-admin-nav__logout" href="/logout.php"><?= $logout_l ?></a>
       </div>
     </nav>
     <style>
@@ -527,6 +557,17 @@ function knk_render_admin_nav(array $me): void {
         border: 1px solid rgba(201,170,113,0.35); padding: 0.3rem 0.7rem; border-radius: 4px;
       }
       .knk-admin-nav__logout:hover { background: var(--gold, #c9aa71); color: var(--brown-deep, #2a1a08); }
+      .knk-admin-nav__lang {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        text-decoration: none; font-size: 0.78rem; letter-spacing: 0.08em; font-weight: 600;
+        padding: 0.25rem 0.55rem; border-radius: 4px;
+        border: 1px solid rgba(201,170,113,0.25);
+        color: var(--cream-dim, #d8c9ab);
+      }
+      .knk-admin-nav__lang:hover { background: rgba(201,170,113,0.12); color: var(--cream, #f5e9d1); }
+      .knk-admin-nav__lang-current { color: var(--gold, #c9aa71); }
+      .knk-admin-nav__lang-sep     { opacity: 0.5; }
+      .knk-admin-nav__lang-other   { opacity: 0.7; }
       @media (max-width: 640px) {
         .knk-admin-nav { gap: 0.75rem; }
         .knk-admin-nav__me { width: 100%; justify-content: space-between; }
