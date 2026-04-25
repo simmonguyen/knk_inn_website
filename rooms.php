@@ -104,7 +104,7 @@ $slots = knk_slots_load();
     <!-- Three room types. Each links to a per-type page with photos, calendar & booking flow. -->
     <div class="rooms-grid rooms-grid-booking" style="margin-top:4rem;">
 
-      <a class="room-card room-card-link" href="rooms/standard-nowindow.html">
+      <a class="room-card room-card-link" href="rooms/standard-nowindow.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 1, 'rm_00.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 1, 'Standard room, no window')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From 600,000 ₫ / night</span>
@@ -113,7 +113,7 @@ $slots = knk_slots_load();
         </div>
       </a>
 
-      <a class="room-card room-card-link" href="rooms/standard-balcony.html">
+      <a class="room-card room-card-link" href="rooms/standard-balcony.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 2, 'rm_02.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 2, 'Standard room with balcony')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From 700,000 ₫ / night</span>
@@ -122,7 +122,7 @@ $slots = knk_slots_load();
         </div>
       </a>
 
-      <a class="room-card room-card-link" href="rooms/vip.html">
+      <a class="room-card room-card-link" href="rooms/vip.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 3, 'rm_04.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 3, 'VIP room with private bathtub')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From 900,000 ₫ / night</span>

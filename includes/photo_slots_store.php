@@ -127,6 +127,54 @@ function knk_photo_sections(): array {
                 6 => "Rooftop",
             ],
         ],
+        [
+            "key"     => "room_nowindow",
+            "display" => "Room page — Standard · No Window",
+            "where"   => "rooms/standard-nowindow.php — hero banner and the in-room gallery",
+            "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–4 are the in-room gallery tiles below.",
+            "slots"   => 4,
+            "labels"  => [
+                1 => "Hero banner",
+                2 => "Gallery 1",
+                3 => "Gallery 2",
+                4 => "Gallery 3",
+            ],
+        ],
+        [
+            "key"     => "room_balcony",
+            "display" => "Room page — Standard · Balcony",
+            "where"   => "rooms/standard-balcony.php — hero banner and the in-room gallery",
+            "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–11 are the ten in-room gallery tiles below.",
+            "slots"   => 11,
+            "labels"  => [
+                1  => "Hero banner",
+                2  => "Gallery 1",
+                3  => "Gallery 2",
+                4  => "Gallery 3",
+                5  => "Gallery 4",
+                6  => "Gallery 5",
+                7  => "Gallery 6",
+                8  => "Gallery 7",
+                9  => "Gallery 8",
+                10 => "Gallery 9",
+                11 => "Gallery 10",
+            ],
+        ],
+        [
+            "key"     => "room_vip",
+            "display" => "Room page — VIP · Private Bathtub",
+            "where"   => "rooms/vip.php — hero banner and the in-room gallery",
+            "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–6 are the five in-room gallery tiles below.",
+            "slots"   => 6,
+            "labels"  => [
+                1 => "Hero banner",
+                2 => "Gallery 1",
+                3 => "Gallery 2",
+                4 => "Gallery 3",
+                5 => "Gallery 4",
+                6 => "Gallery 5",
+            ],
+        ],
     ];
 }
 
@@ -168,6 +216,32 @@ function knk_slot_defaults(): array {
         "rooms_common#4"       => "nw_11.jpg",
         "rooms_common#5"       => "rm_15.jpg",
         "rooms_common#6"       => "ex_08.jpg",
+
+        // Per-room subpages — slot 1 is the hero banner; remaining slots
+        // are the gallery tiles in display order.
+        "room_nowindow#1"      => "rm_00.jpg",
+        "room_nowindow#2"      => "rm_00.jpg",
+        "room_nowindow#3"      => "nw_01.jpg",
+        "room_nowindow#4"      => "nw_41.jpg",
+
+        "room_balcony#1"       => "rm_02.jpg",
+        "room_balcony#2"       => "rm_02.jpg",
+        "room_balcony#3"       => "rm_00.jpg",
+        "room_balcony#4"       => "rm_09.jpg",
+        "room_balcony#5"       => "rm_14.jpg",
+        "room_balcony#6"       => "rm_18.jpg",
+        "room_balcony#7"       => "rm_03.jpg",
+        "room_balcony#8"       => "rm_13.jpg",
+        "room_balcony#9"       => "rm_17.jpg",
+        "room_balcony#10"      => "rm_20.jpg",
+        "room_balcony#11"      => "rm_24.jpg",
+
+        "room_vip#1"           => "rm_04.jpg",
+        "room_vip#2"           => "rm_04.jpg",
+        "room_vip#3"           => "rm_11.jpg",
+        "room_vip#4"           => "rm_16.jpg",
+        "room_vip#5"           => "rm_23.jpg",
+        "room_vip#6"           => "nw_39.jpg",
     ];
 }
 
