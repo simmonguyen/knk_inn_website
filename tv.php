@@ -275,12 +275,25 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * a "line above Radio box" leaks through when .jbx-now is meant to be
    * hidden (the panel's border-bottom remains rendered). */
   [hidden] { display: none !important; }
-  html, body { margin: 0; padding: 0; height: 100vh; overflow: hidden; }
+  html, body {
+    margin: 0; padding: 0;
+    width: 100vw; height: 100vh;
+    max-width: 100vw;
+    overflow: hidden;
+  }
   body {
     background: var(--bg);
     color: var(--fg);
     font-family: "Inter", system-ui, sans-serif;
     display: grid;
+    /* Single column, viewport-wide. Without explicit columns AND
+     * min-width:0 on body, a grid item with wide intrinsic content
+     * (e.g. a long ticker string or an oversized YouTube iframe)
+     * can blow the body out past 100vw. We saw .tv-main computing
+     * to 10456px on a 2576px screen — fixture strings in the
+     * bottom ticker were the culprit. */
+    grid-template-columns: minmax(0, 100vw);
+    min-width: 0;
     /* Body grid: 4 explicit rows. We pin each child to its row by
      * `grid-row` below — DON'T rely on auto-placement. Browsers
      * disagree on whether <audio> without controls claims a grid
@@ -335,6 +348,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr);
     gap: 0;
     min-height: 0;
+    min-width: 0;       /* let the grid item shrink even if a child
+                           has a wider intrinsic min-content size */
+    overflow: hidden;   /* belt-and-braces: clip anything that
+                           still tries to push past the column */
   }
 
   .panel {
