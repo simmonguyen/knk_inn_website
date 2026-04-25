@@ -207,6 +207,17 @@ if ($action === "library_delete") {
     exit;
 }
 
+if ($action === "library_reorder") {
+    header("Content-Type: application/json; charset=utf-8");
+    $filenames = $_POST["filenames"] ?? [];
+    if (is_string($filenames)) {
+        $filenames = $filenames === "" ? [] : explode(",", $filenames);
+    }
+    if (!is_array($filenames)) $filenames = [];
+    echo json_encode(knk_photo_library_reorder($filenames));
+    exit;
+}
+
 /* ----------------------------------------------------------
  * Default: render the page.
  * ---------------------------------------------------------- */
@@ -395,6 +406,30 @@ $all_tags    = knk_photo_tags();
 
     .empty { color: var(--cream-faint); text-align: center; padding: 2rem; font-size: 0.9rem; }
     .count { color: var(--cream-dim); font-size: 0.82rem; margin-bottom: 0.4rem; }
+    .reorder-hint {
+      color: var(--cream-faint); font-size: 0.78rem; margin-bottom: 0.6rem;
+      display: flex; align-items: center; gap: 0.4rem;
+    }
+    .reorder-hint .grip {
+      display: inline-block; width: 14px; height: 14px;
+      background:
+        linear-gradient(to bottom, var(--gold) 2px, transparent 2px) 0 0/100% 5px repeat-y;
+      opacity: 0.7;
+    }
+    /* Sortable.js drag states */
+    .tile.sortable-ghost { opacity: 0.3; }
+    .tile.sortable-chosen { box-shadow: 0 0 0 2px var(--gold); }
+    .tile.sortable-drag { opacity: 0.9; transform: scale(1.04); }
+    #library-grid.is-saving { opacity: 0.7; pointer-events: none; }
+    .save-flash {
+      position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+      background: rgba(127,208,138,0.95); color: #14260f;
+      padding: 0.55rem 1rem; border-radius: 4px; font-size: 0.82rem;
+      font-weight: 600; letter-spacing: 0.05em; opacity: 0; pointer-events: none;
+      transition: opacity 0.25s var(--ease-out); z-index: 200;
+    }
+    .save-flash.show { opacity: 1; }
+    .save-flash.err { background: rgba(255,154,138,0.95); color: #4a1d16; }
 
     /* ---------- Modals ---------- */
     .modal-backdrop {
@@ -610,6 +645,7 @@ $all_tags    = knk_photo_tags();
     </div>
 
     <p class="count" id="library-count"><?= count($library) ?> photo<?= count($library) === 1 ? '' : 's' ?> total</p>
+    <p class="reorder-hint"><span class="grip"></span> Drag a photo to reorder. Click it to edit tags.</p>
 
     <?php if (empty($library)): ?>
       <div class="empty">No photos yet — upload one above.</div>
@@ -711,6 +747,9 @@ $all_tags    = knk_photo_tags();
   </div>
 </div>
 
+<div id="save-flash" class="save-flash"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
 <script>
 /* Library data — used by the picker + detail modals + chip filtering. */
 window.KNK_LIBRARY = <?= json_encode($library, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) ?>;
@@ -1008,10 +1047,61 @@ function postForm(obj) {
     });
   });
 
+  // Suppress click-to-open-detail when a drag has just happened.
+  var justDragged = false;
   if (grid) {
     grid.querySelectorAll('.tile').forEach(function (t) {
-      t.addEventListener('click', function () { openDetail(t); });
+      t.addEventListener('click', function () {
+        if (justDragged) { justDragged = false; return; }
+        openDetail(t);
+      });
     });
+
+    // Drag-to-reorder via Sortable.js
+    if (typeof Sortable !== 'undefined') {
+      Sortable.create(grid, {
+        animation: 160,
+        ghostClass: 'sortable-ghost',
+        chosenClass: 'sortable-chosen',
+        dragClass: 'sortable-drag',
+        // Touch hold delay so a tap-to-open still works on mobile.
+        delay: 180,
+        delayOnTouchOnly: true,
+        touchStartThreshold: 4,
+        onStart: function () { justDragged = false; },
+        onEnd:   function (evt) {
+          if (evt.oldIndex === evt.newIndex) return;
+          justDragged = true;
+          saveReorder();
+        },
+      });
+    }
+
+    function saveReorder() {
+      var filenames = [];
+      grid.querySelectorAll('.tile').forEach(function (t) {
+        var fn = t.getAttribute('data-filename');
+        if (fn) filenames.push(fn);
+      });
+      grid.classList.add('is-saving');
+      flash('Saving order…', '');
+      postForm({ action: 'library_reorder', filenames: filenames }).then(function (res) {
+        grid.classList.remove('is-saving');
+        if (res && res.ok) flash('Order saved', 'ok');
+        else                flash('Save failed: ' + ((res && res.error) || 'unknown'), 'err');
+      }).catch(function (e) {
+        grid.classList.remove('is-saving');
+        flash('Save failed: ' + (e.message || e), 'err');
+      });
+    }
+
+    function flash(msg, kind) {
+      var el = document.getElementById('save-flash');
+      el.textContent = msg;
+      el.className = 'save-flash show' + (kind ? ' ' + kind : '');
+      clearTimeout(el._t);
+      el._t = setTimeout(function () { el.className = 'save-flash' + (kind ? ' ' + kind : ''); }, 1400);
+    }
   }
 })();
 

@@ -49,12 +49,10 @@ function knk_photo_tags(): array {
     return [
         "Rooms",
         "Rooftop",
+        "Lounge",
+        "Darts",
         "Exterior",
-        "Coffee",
-        "Wine",
-        "Cocktails",
         "Sports",
-        "Food",
         "People",
         "Other",
     ];
@@ -169,17 +167,39 @@ function knk_photo_library_scan(): int {
 
     if (empty($found)) return 0;
 
-    $stmt = $pdo->prepare(
-        "INSERT IGNORE INTO photo_library (filename, source, tags)
-              VALUES (?, ?, ?)"
-    );
+    // Find the current max sort_order so new rows get appended.
+    $next_sort = 0;
+    try {
+        $r = $pdo->query("SELECT COALESCE(MAX(sort_order), 0) AS m FROM photo_library")->fetch();
+        $next_sort = (int)($r["m"] ?? 0);
+    } catch (Throwable $e) {
+        // Pre-migration-012 schema — sort_order column doesn't exist yet.
+        $next_sort = -1;
+    }
+
+    if ($next_sort >= 0) {
+        $stmt = $pdo->prepare(
+            "INSERT IGNORE INTO photo_library (filename, source, tags, sort_order)
+                  VALUES (?, ?, ?, ?)"
+        );
+    } else {
+        $stmt = $pdo->prepare(
+            "INSERT IGNORE INTO photo_library (filename, source, tags)
+                  VALUES (?, ?, ?)"
+        );
+    }
 
     $added = 0;
     foreach ($found as $fn => $source) {
         $tags = knk_photo_auto_tags($fn, $source);
         $tags_json = json_encode($tags, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
         try {
-            $stmt->execute([$fn, $source, $tags_json]);
+            if ($next_sort >= 0) {
+                $next_sort++;
+                $stmt->execute([$fn, $source, $tags_json, $next_sort]);
+            } else {
+                $stmt->execute([$fn, $source, $tags_json]);
+            }
             if ($stmt->rowCount() > 0) $added++;
         } catch (Throwable $e) {
             // Ignore — bad row shouldn't kill the scan.
@@ -201,10 +221,22 @@ function knk_photo_library_register(string $filename, string $source, array $tag
         $pdo  = knk_db();
         $tags = knk_photo_tags_clean($tags);
         $tj   = json_encode($tags, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-        $stmt = $pdo->prepare(
-            "INSERT IGNORE INTO photo_library (filename, source, tags) VALUES (?, ?, ?)"
-        );
-        $stmt->execute([$filename, $source, $tj]);
+
+        // Assign next sort_order so the new photo appears at the end of
+        // the gallery (graceful fallback if column doesn't exist yet).
+        try {
+            $r = $pdo->query("SELECT COALESCE(MAX(sort_order), 0) + 1 AS m FROM photo_library")->fetch();
+            $next = (int)($r["m"] ?? 1);
+            $stmt = $pdo->prepare(
+                "INSERT IGNORE INTO photo_library (filename, source, tags, sort_order) VALUES (?, ?, ?, ?)"
+            );
+            $stmt->execute([$filename, $source, $tj, $next]);
+        } catch (Throwable $e) {
+            $stmt = $pdo->prepare(
+                "INSERT IGNORE INTO photo_library (filename, source, tags) VALUES (?, ?, ?)"
+            );
+            $stmt->execute([$filename, $source, $tj]);
+        }
     } catch (Throwable $e) {
         // best-effort
     }
@@ -226,7 +258,19 @@ function knk_photo_library_list(array $opts = []): array {
         return [];
     }
 
-    $sql    = "SELECT id, filename, source, tags, hidden, updated_at FROM photo_library";
+    // Pull sort_order if the column exists (post-migration-012).
+    // Falls back to a constant if not, so the page still renders before
+    // migration 012 is run.
+    $has_sort = false;
+    try {
+        $pdo->query("SELECT sort_order FROM photo_library LIMIT 0");
+        $has_sort = true;
+    } catch (Throwable $e) {
+        $has_sort = false;
+    }
+
+    $select_sort = $has_sort ? ", sort_order" : ", 0 AS sort_order";
+    $sql    = "SELECT id, filename, source, tags, hidden, updated_at" . $select_sort . " FROM photo_library";
     $where  = [];
     $params = [];
 
@@ -240,8 +284,12 @@ function knk_photo_library_list(array $opts = []): array {
     if ($where) {
         $sql .= " WHERE " . implode(" AND ", $where);
     }
-    // Source order so seed (most common) comes first. Then alpha by filename.
-    $sql .= " ORDER BY FIELD(source,'seed','gallery_live','slot_upload'), filename";
+
+    if ($has_sort) {
+        $sql .= " ORDER BY sort_order, filename";
+    } else {
+        $sql .= " ORDER BY FIELD(source,'seed','gallery_live','slot_upload'), filename";
+    }
 
     try {
         $stmt = $pdo->prepare($sql);
@@ -265,12 +313,45 @@ function knk_photo_library_list(array $opts = []): array {
     foreach ($rows as $r) {
         $tags = knk_photo_tags_decode($r["tags"] ?? "");
         if ($tag_filter_canon !== "" && !in_array($tag_filter_canon, $tags, true)) continue;
-        $r["tags"]   = $tags;
-        $r["hidden"] = (int)$r["hidden"];
-        $r["url"]    = "assets/img/" . $r["filename"];
+        $r["tags"]       = $tags;
+        $r["hidden"]     = (int)$r["hidden"];
+        $r["sort_order"] = (int)($r["sort_order"] ?? 0);
+        $r["url"]        = "assets/img/" . $r["filename"];
         $out[] = $r;
     }
     return $out;
+}
+
+/* ------------------------------------------------------------------
+ * Reorder photos. $filenames is a list of filenames in the desired
+ * order — gets assigned sort_order values 1, 2, 3, ...
+ *
+ * Anything not in the list keeps its existing sort_order (so the
+ * caller can send a partial list — e.g. only the visible filtered
+ * tiles — and the rest fall in around them).
+ *
+ * Returns ['ok' => bool, 'updated' => int, 'error' => string].
+ * ------------------------------------------------------------------ */
+function knk_photo_library_reorder(array $filenames): array {
+    if (empty($filenames)) return ["ok" => true, "updated" => 0];
+    try {
+        $pdo  = knk_db();
+        $stmt = $pdo->prepare("UPDATE photo_library SET sort_order = ? WHERE filename = ?");
+        $updated = 0;
+        $i = 0;
+        foreach ($filenames as $fn) {
+            if (!is_string($fn) || $fn === "") continue;
+            $i++;
+            $stmt->execute([$i, $fn]);
+            $updated += $stmt->rowCount();
+        }
+    } catch (Throwable $e) {
+        return ["ok" => false, "error" => "DB error during reorder."];
+    }
+    if (function_exists("knk_audit")) {
+        knk_audit("photo_library.reorder", "photo", "(batch)", ["count" => $updated]);
+    }
+    return ["ok" => true, "updated" => $updated];
 }
 
 /* Counts per tag (incl. an "(untagged)" bucket). Powers the chip badges. */
@@ -419,16 +500,26 @@ function knk_photo_library_get(string $filename): ?array {
     if ($filename === "") return null;
     try {
         $pdo  = knk_db();
-        $stmt = $pdo->prepare(
-            "SELECT id, filename, source, tags, hidden, updated_at
-               FROM photo_library WHERE filename = ? LIMIT 1"
-        );
-        $stmt->execute([$filename]);
+        // Try the post-012 schema first; fall back to the older one.
+        try {
+            $stmt = $pdo->prepare(
+                "SELECT id, filename, source, tags, hidden, sort_order, updated_at
+                   FROM photo_library WHERE filename = ? LIMIT 1"
+            );
+            $stmt->execute([$filename]);
+        } catch (Throwable $e) {
+            $stmt = $pdo->prepare(
+                "SELECT id, filename, source, tags, hidden, 0 AS sort_order, updated_at
+                   FROM photo_library WHERE filename = ? LIMIT 1"
+            );
+            $stmt->execute([$filename]);
+        }
         $r = $stmt->fetch();
         if (!$r) return null;
-        $r["tags"]   = knk_photo_tags_decode($r["tags"] ?? "");
-        $r["hidden"] = (int)$r["hidden"];
-        $r["url"]    = "assets/img/" . $r["filename"];
+        $r["tags"]       = knk_photo_tags_decode($r["tags"] ?? "");
+        $r["hidden"]     = (int)$r["hidden"];
+        $r["sort_order"] = (int)($r["sort_order"] ?? 0);
+        $r["url"]        = "assets/img/" . $r["filename"];
         return $r;
     } catch (Throwable $e) {
         return null;
