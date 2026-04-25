@@ -344,11 +344,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     display: flex; flex-direction: column;
     font-variant-numeric: tabular-nums;
   }
-  /* Grid columns: name | sparkline | price | move% | arrow.
-   * The sparkline column is the new addition (mirrors /market.php). */
+  /* Grid columns: name+spark (stacked) | price | move% | arrow.
+   * Name sits on top, sparkline is stretched underneath it across
+   * the whole first column so the chart isn't squashed into a
+   * narrow side-cell. Mirrors /market.php's "stack" treatment. */
   .market-row {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) 6rem 5.2rem 3.2rem 2rem;
+    grid-template-columns: minmax(0, 1fr) 5.2rem 3.2rem 2rem;
     align-items: center;
     gap: 0.5rem;
     padding: 0.35rem 0.2rem;
@@ -360,14 +362,20 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     border-bottom: 2px solid var(--line);
     padding: 0.3rem 0.2rem;
   }
+  /* First column: drink name on top, full-width sparkline below. */
+  .market-row .name-cell {
+    display: flex; flex-direction: column;
+    min-width: 0;
+    gap: 0.05rem;
+  }
   .market-row .name { font-weight: 700; font-size: 1.1rem; line-height: 1.15; }
   .market-row .name small { color: var(--muted); font-weight: 400; font-size: 0.7em; display: block; }
   .market-row .price { text-align: right; font-size: 1.15rem; font-weight: 700; }
   .market-row .pct { text-align: right; font-size: 0.95rem; font-weight: 700; }
   .market-row .arrow { text-align: center; font-size: 1.05rem; }
-  /* SVG sparkline cell — fixed height, scales horizontally to fit. */
+  /* SVG sparkline — stretched across the full name column width. */
   .market-row .spark {
-    height: 36px;
+    height: 22px;
     width: 100%;
     display: block;
     overflow: hidden;
@@ -475,13 +483,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     color: var(--gold); font-size: 0.82rem; font-weight: 600;
     letter-spacing: 0.04em;
   }
-  .jbx-radio .hint {
-    color: var(--muted); font-size: 0.72rem;
-    line-height: 1.4; margin-top: 0.15rem;
-  }
-  .jbx-radio .hint .url {
-    color: var(--fg); font-weight: 600;
-  }
   .jbx-up h3 {
     font-size: 0.65rem; letter-spacing: 0.12em; text-transform: uppercase;
     color: var(--gold); margin: 0 0 0.3rem;
@@ -497,6 +498,44 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .jbx-up li .num { color: var(--muted); font-weight: 700; }
   .jbx-up li .t { font-weight: 600; line-height: 1.2; }
   .jbx-up li .who { color: var(--muted); font-size: 0.68rem; display: block; margin-top: 2px; }
+
+  /* KnK Bar logo + scan link (sits at the bottom of the jukebox
+   * column). Wrapped in a white frame so the SVG renders as the
+   * intended black-on-white QR-style mark — without the frame the
+   * unfilled black-default shapes blend into the dark page. */
+  .jbx-logo {
+    margin-top: auto;          /* pin to bottom of the jukebox column */
+    padding-top: 0.7rem;
+    border-top: 1px solid var(--line);
+    display: flex; align-items: center; gap: 0.7rem;
+  }
+  .jbx-logo .qr-frame {
+    flex: 0 0 auto;
+    width: 64px; height: 64px;
+    background: #fff;
+    border-radius: 6px;
+    padding: 4px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .jbx-logo .qr-frame img {
+    width: 100%; height: 100%;
+    display: block;
+  }
+  .jbx-logo .tagline {
+    color: var(--fg);
+    font-size: 0.72rem; line-height: 1.3;
+    min-width: 0;
+  }
+  .jbx-logo .tagline strong {
+    color: var(--gold); font-weight: 700;
+    display: block; font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    margin-bottom: 1px;
+  }
+  .jbx-logo .tagline .url {
+    color: var(--fg); font-weight: 600;
+    word-break: break-all;
+  }
 
   /* ============================================================
    * Darts panel (right)
@@ -580,58 +619,27 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-empty .sub {
     color: var(--gold); font-weight: 600; font-size: 0.78rem;
   }
-  .darts-empty .hint {
-    color: var(--muted); font-size: 0.7rem;
-    line-height: 1.4; max-width: 16rem;
-  }
-  .darts-empty .hint .url {
-    color: var(--fg); font-weight: 600;
-  }
 
   /* ============================================================
    * Footer bar — runs along the bottom of the screen.
    *
-   * Two children:
-   *   - .tv-corner-logo: KnK Bar SVG + tagline (left)
-   *   - .tv-ticker:      scrolling marquee for crash/song info (right)
-   *
-   * Always present in the layout so the panels above keep a stable
-   * height.
+   * Holds the scrolling ticker (crash announcements, now-playing
+   * song info, live lyrics). The KnK Bar logo used to live here
+   * too — it's now in the jukebox column so patrons can scan it
+   * from a closer viewpoint.
    * ========================================================== */
   .tv-footer {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: stretch;
+    display: block;
     background: var(--bg2);
     border-top: 1px solid var(--line);
-    min-height: 60px;
+    min-height: 44px;
   }
 
-  /* KnK Bar logo + tagline (left side of the footer). */
-  .tv-corner-logo {
-    display: flex; align-items: center; gap: 0.7rem;
-    padding: 0.4rem 0.9rem;
-    border-right: 1px solid var(--line);
-  }
-  .tv-corner-logo img {
-    width: 48px; height: 48px;
-    display: block;
-  }
-  .tv-corner-logo .tagline {
-    color: var(--fg);
-    font-size: 0.7rem; line-height: 1.25;
-    max-width: 12rem;
-  }
-  .tv-corner-logo .tagline strong {
-    color: var(--gold); font-weight: 700;
-    display: block; font-size: 0.78rem;
-    letter-spacing: 0.04em;
-    margin-bottom: 1px;
-  }
-
-  /* Scrolling ticker (right side of the footer). Two competing
-   * messages: crash announcements (priority) and now-playing song
-   * info. Hidden state collapses the column without removing it. */
+  /* Scrolling ticker. Three competing messages, in priority order:
+   *   1. Crash announcement (drink price collapse).
+   *   2. Live lyric line (synced to the YouTube playhead).
+   *   3. Now-playing song info.
+   * Hidden state collapses the column without removing it. */
   .tv-ticker {
     overflow: hidden;
     white-space: nowrap;
@@ -646,6 +654,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker.is-crash {
     background: var(--down); color: #fff;
   }
+  .tv-ticker.is-lyric {
+    color: var(--gold);
+    font-family: "Inter", system-ui, sans-serif;
+    font-weight: 600;
+    font-style: italic;
+    letter-spacing: 0.02em;
+  }
   .tv-ticker.is-song .accent { color: var(--gold); }
   /* Inner span scrolls right-to-left. padding-left: 100% so the start
    * of the message slides in from the right edge. */
@@ -656,6 +671,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   .tv-ticker.is-crash .tv-ticker-inner {
     animation-duration: 22s;
+  }
+  .tv-ticker.is-lyric .tv-ticker-inner {
+    animation-duration: 28s;
   }
   @keyframes tv-ticker-scroll {
     0%   { transform: translateX(0); }
@@ -729,14 +747,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   <section class="panel panel-jukebox" id="panel-jukebox" aria-label="Jukebox">
     <h2>🎵 Jukebox</h2>
 
-    <?php
-    /* Decide first paint:
-     *   - If a track is playing, show "now playing" + up-next list.
-     *   - If queue has tracks but nothing's playing yet, show up-next.
-     *   - Otherwise (idle OR kill switch off) show the radio card. */
-    $jbx_show_radio = ($jbx_now === null && empty($jbx_up_next));
-    ?>
-
     <!-- Persistent slot for the YouTube iframe. Hidden until the
          splash gate is dismissed (so the YT.Player is created in a
          normal-flow visible element — browsers don't reliably play
@@ -763,11 +773,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       <?php endif; ?>
     </div>
 
-    <div class="jbx-radio" id="jbx-radio"<?= $jbx_show_radio ? "" : " hidden" ?>>
+    <div class="jbx-radio" id="jbx-radio"<?= $jbx_now ? " hidden" : "" ?>>
       <div class="pulse">📻</div>
       <h3>ON THE <span class="accent">RADIO</span></h3>
       <div class="station">Triple J · Australia</div>
-      <div class="hint">Request a song at<br><span class="url"><?= h($_host) ?>/jukebox.php</span></div>
     </div>
 
     <div class="jbx-up" id="jbx-up"<?= empty($jbx_up_next) ? " hidden" : "" ?>>
@@ -786,6 +795,24 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           </li>
         <?php endforeach; ?>
       </ol>
+    </div>
+
+    <!-- KnK Bar logo + scan link. Pinned to the bottom of this column
+         via margin-top:auto so it always sits in the same place
+         regardless of which other cards (now/radio/up-next) are
+         visible above it. The .qr-frame's white background is what
+         makes the SVG render correctly — the logo has unfilled
+         shapes that go invisible against the dark page bg. -->
+    <div class="jbx-logo" aria-hidden="true">
+      <div class="qr-frame">
+        <img src="/assets/img/knk-bar-logo.svg" alt="">
+      </div>
+      <div class="tagline">
+        <strong>KnK Bar</strong>
+        Scan or visit
+        <span class="url">knkinn.com/bar.php</span>
+        to request a song, order a drink or throw some darts.
+      </div>
     </div>
   </section>
 
@@ -808,7 +835,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       <?php else: ?>
         <div class="market-row head">
           <span>Drink</span>
-          <span></span>
           <span style="text-align:right;">Price</span>
           <span style="text-align:right;">Move</span>
           <span></span>
@@ -818,9 +844,11 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           if ($it["in_crash"]) $cls .= " crash";
         ?>
           <div class="market-row <?= h($cls) ?>" data-code="<?= h($it["item_code"]) ?>">
-            <span class="name"><?= h($it["name"]) ?></span>
-            <!-- Sparkline cell — JS fills it on first poll. -->
-            <span class="spark"></span>
+            <div class="name-cell">
+              <span class="name"><?= h($it["name"]) ?></span>
+              <!-- Sparkline stretched under the name — JS fills it on first poll. -->
+              <span class="spark"></span>
+            </div>
             <span class="price"><?= number_format($it["price_vnd"], 0, ".", ",") ?>₫</span>
             <span class="pct"><?= ($it["pct_vs_base"] >= 0 ? "+" : "") . (int)$it["pct_vs_base"] ?>%</span>
             <span class="arrow"><?= knk_tv_arrow((string)$it["trend"]) ?></span>
@@ -842,7 +870,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           <div class="pulse">🎯</div>
           <h3>WAITING FOR <span class="accent">PLAYERS</span></h3>
           <div class="sub">Boards are free — grab some darts.</div>
-          <div class="hint">Start a game at<br><span class="url"><?= h($_host) ?>/darts.php</span></div>
         </div>
       <?php else: ?>
         <?php foreach ($darts_games as $g): ?>
@@ -867,20 +894,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
 </main>
 
-<!-- Footer bar — KnK Bar logo on the left, scrolling ticker on
-     the right. Always rendered so the panels above keep a stable
-     height; the ticker just hides its content when there's nothing
-     to say. JS sets the inner text + a mode class ("is-crash" /
-     "is-song") on .tv-ticker. Crash messages take priority. -->
+<!-- Footer bar — full-width scrolling ticker. Always rendered so
+     the panels above keep a stable height; the ticker just hides
+     its content when there's nothing to say. JS sets the inner
+     text + a mode class ("is-crash" / "is-lyric" / "is-song") on
+     .tv-ticker. Crash > lyric > song in priority order. -->
 <footer class="tv-footer">
-  <div class="tv-corner-logo" aria-hidden="true">
-    <img src="/assets/img/knk-bar-logo.svg" alt="">
-    <div class="tagline">
-      <strong>KnK Bar</strong>
-      Scan to request a song,<br>
-      order a drink or throw some darts.
-    </div>
-  </div>
   <div class="tv-ticker is-hidden" id="tv-ticker">
     <span class="tv-ticker-inner" id="tv-ticker-inner"></span>
   </div>
@@ -943,12 +962,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   // ============================================================
   // FOOTER TICKER — multipurpose scrolling marquee.
   //
-  // Two competing message sources:
-  //   - setTickerCrash(text)  — drink crash announcement (priority)
-  //   - setTickerSong(text)   — now-playing info (lower priority)
+  // Three competing message sources, in priority order:
+  //   1. setTickerCrash(text) — drink crash announcement
+  //   2. setTickerLyric(text) — current synced lyric line
+  //   3. setTickerSong(text)  — now-playing info
   //
   // Whoever calls with a non-null string wins the slot until they
-  // call again with null. Crash always wins over song.
+  // call again with null. Crash always wins.
   //
   // The animation is restarted on each text change so the new text
   // starts from the right edge (otherwise it'd join mid-scroll).
@@ -956,15 +976,17 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   var tickerEl       = document.getElementById("tv-ticker");
   var tickerInner    = document.getElementById("tv-ticker-inner");
   var tickerCrashTxt = null;
+  var tickerLyricTxt = null;
   var tickerSongTxt  = null;
   var tickerCurrent  = null;   // what's actually on screen right now
   var tickerCurMode  = null;
 
   function refreshTicker() {
     var nextTxt, nextMode;
-    if (tickerCrashTxt) { nextTxt = tickerCrashTxt; nextMode = "crash"; }
-    else if (tickerSongTxt) { nextTxt = tickerSongTxt; nextMode = "song"; }
-    else { nextTxt = null; nextMode = null; }
+    if (tickerCrashTxt)      { nextTxt = tickerCrashTxt; nextMode = "crash"; }
+    else if (tickerLyricTxt) { nextTxt = tickerLyricTxt; nextMode = "lyric"; }
+    else if (tickerSongTxt)  { nextTxt = tickerSongTxt;  nextMode = "song";  }
+    else                     { nextTxt = null;           nextMode = null;    }
 
     if (nextTxt === tickerCurrent && nextMode === tickerCurMode) return;
     tickerCurrent = nextTxt;
@@ -972,11 +994,11 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
     if (!nextTxt) {
       tickerEl.classList.add("is-hidden");
-      tickerEl.classList.remove("is-crash", "is-song");
+      tickerEl.classList.remove("is-crash", "is-lyric", "is-song");
       tickerInner.textContent = "";
       return;
     }
-    tickerEl.classList.remove("is-hidden", "is-crash", "is-song");
+    tickerEl.classList.remove("is-hidden", "is-crash", "is-lyric", "is-song");
     tickerEl.classList.add("is-" + nextMode);
     tickerInner.textContent = nextTxt;
     /* Restart the scroll animation so the new message enters from
@@ -987,6 +1009,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   function setTickerCrash(text) {
     tickerCrashTxt = text || null;
+    refreshTicker();
+  }
+  function setTickerLyric(text) {
+    tickerLyricTxt = text || null;
     refreshTicker();
   }
   function setTickerSong(text) {
@@ -1048,7 +1074,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     } else {
       var rows = ['<div class="market-row head">' +
         '<span>Drink</span>' +
-        '<span></span>' +
         '<span style="text-align:right;">Price</span>' +
         '<span style="text-align:right;">Move</span>' +
         '<span></span></div>'];
@@ -1058,8 +1083,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         var pct = (it.pct_vs_base >= 0 ? "+" : "") + (it.pct_vs_base | 0) + "%";
         rows.push(
           '<div class="market-row ' + cls + '" data-code="' + escapeHtml(it.item_code) + '">' +
-            '<span class="name">' + escapeHtml(it.name) + '</span>' +
-            '<span class="spark"></span>' +
+            '<div class="name-cell">' +
+              '<span class="name">' + escapeHtml(it.name) + '</span>' +
+              '<span class="spark"></span>' +
+            '</div>' +
             '<span class="price">' + vnd(it.price_vnd) + '</span>' +
             '<span class="pct">' + pct + '</span>' +
             '<span class="arrow">' + arrow(it.trend) + '</span>' +
@@ -1097,6 +1124,159 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     return String(s == null ? "" : s).replace(/[^a-zA-Z0-9_-]/g, function (c) {
       return "\\" + c;
     });
+  }
+
+  // ============================================================
+  // LYRICS (LRCLIB) — synced lyric lines into the footer ticker.
+  //
+  // We pull synced lyrics from https://lrclib.net (free, no auth,
+  // CORS-friendly) for the song that's currently in the YT player,
+  // parse the LRC timestamps, and pipe each line into the ticker
+  // as the playhead crosses its timecode.
+  //
+  // YouTube titles are noisy — "Artist - Track (Official Music Video)"
+  // is the common shape — so cleanArtist/cleanTrack/splitTitle do
+  // their best to extract a clean lookup key. When LRCLIB has nothing
+  // we silently give up; the ticker just falls back to the song info.
+  // ============================================================
+  var lyricsLines        = null;     // [{time, text}, ...] or null
+  var lyricsForId        = null;     // jukebox.id we last fetched for
+  var lyricsLastIdx      = -1;
+  var lyricsTickInterval = null;
+
+  function cleanTrack(s) {
+    s = String(s || "");
+    /* Strip common parenthetical / bracket noise: "(Official Music
+     * Video)", "[Lyric Video]", "(Audio)", "(HD)", "(4K)" etc. */
+    s = s.replace(/\s*\([^)]*?(official|music|video|lyric|lyrics|audio|hd|hq|4k|remaster|live|m\/v)[^)]*?\)/gi, "");
+    s = s.replace(/\s*\[[^\]]*?(official|music|video|lyric|lyrics|audio|hd|hq|4k|remaster|live|m\/v)[^\]]*?\]/gi, "");
+    s = s.replace(/\s+/g, " ").trim();
+    return s;
+  }
+  function cleanArtist(s) {
+    s = String(s || "");
+    s = s.replace(/\s*-\s*topic\s*$/i, "");
+    s = s.replace(/\s*VEVO\s*$/i, "");
+    s = s.replace(/\s+official\s*$/i, "");
+    return s.trim();
+  }
+  function splitTitle(rawTitle, rawChannel) {
+    var title   = cleanTrack(rawTitle);
+    var channel = cleanArtist(rawChannel);
+    /* Common YT title shapes: "Artist - Track", "Artist – Track",
+     * "Artist — Track", "Artist | Track". Pick the first separator.
+     *
+     * (Using RegExp#exec rather than String#match so the lint
+     * heuristic doesn't read this as a PHP 8 match expression.) */
+    var re = /^(.+?)\s*[-\u2013\u2014|]\s*(.+)$/;
+    var m  = re.exec(title);
+    if (m) return { artist: m[1].trim(), track: m[2].trim() };
+    /* Fallback: assume the channel is the artist and the whole
+     * cleaned title is the track name. */
+    return { artist: channel, track: title };
+  }
+
+  function parseLRC(lrc) {
+    if (!lrc) return [];
+    var out  = [];
+    var rows = String(lrc).split(/\r?\n/);
+    /* LRC line: "[mm:ss.xx]Lyric text". A single row can have
+     * multiple timestamps prefixed (e.g. for repeated choruses);
+     * we expand each. Empty / metadata rows are skipped. */
+    var stampRe = /\[(\d+):(\d+(?:\.\d+)?)\]/g;
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i];
+      if (!row) continue;
+      var stamps = [];
+      var m;
+      stampRe.lastIndex = 0;
+      while ((m = stampRe.exec(row)) !== null) {
+        var min = parseInt(m[1], 10);
+        var sec = parseFloat(m[2]);
+        stamps.push(min * 60 + sec);
+      }
+      if (stamps.length === 0) continue;
+      var text = row.replace(stampRe, "").trim();
+      if (!text) continue;   // instrumental marker — skip
+      for (var j = 0; j < stamps.length; j++) {
+        out.push({ time: stamps[j], text: text });
+      }
+    }
+    out.sort(function (a, b) { return a.time - b.time; });
+    return out;
+  }
+
+  function fetchLyrics(songId, title, channel) {
+    var sp  = splitTitle(title, channel);
+    if (!sp.artist || !sp.track) return;
+    var url = "https://lrclib.net/api/get?artist_name=" +
+              encodeURIComponent(sp.artist) +
+              "&track_name=" + encodeURIComponent(sp.track);
+    fetch(url, { cache: "force-cache" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        /* /api/get is strict — exact artist+track match. If it
+         * misses, fall back to /api/search which is fuzzy. */
+        if (j && j.syncedLyrics) return j;
+        return fetch("https://lrclib.net/api/search?q=" +
+                     encodeURIComponent(sp.artist + " " + sp.track),
+                     { cache: "force-cache" })
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (arr) {
+            if (!Array.isArray(arr)) return null;
+            for (var k = 0; k < arr.length; k++) {
+              if (arr[k] && arr[k].syncedLyrics) return arr[k];
+            }
+            return null;
+          });
+      })
+      .then(function (rec) {
+        /* If the song changed while we were fetching, this response
+         * is for a stale id — just drop it. */
+        if (lyricsForId !== songId) return;
+        if (!rec || !rec.syncedLyrics) return;
+        var parsed = parseLRC(rec.syncedLyrics);
+        if (parsed.length === 0) return;
+        lyricsLines   = parsed;
+        lyricsLastIdx = -1;
+        startLyricLoop();
+      })
+      .catch(function () { /* CORS / network — silent fallback */ });
+  }
+
+  function clearLyrics() {
+    lyricsLines   = null;
+    lyricsForId   = null;
+    lyricsLastIdx = -1;
+    setTickerLyric(null);
+    if (lyricsTickInterval) {
+      clearInterval(lyricsTickInterval);
+      lyricsTickInterval = null;
+    }
+  }
+  function startLyricLoop() {
+    if (lyricsTickInterval) clearInterval(lyricsTickInterval);
+    lyricsTickInterval = setInterval(updateLyric, 350);
+  }
+  function updateLyric() {
+    if (!lyricsLines || !lyricsLines.length) return;
+    if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return;
+    var t;
+    try { t = ytPlayer.getCurrentTime(); } catch (_) { return; }
+    if (typeof t !== "number" || isNaN(t)) return;
+    /* Find the latest lyric whose timestamp is <= playhead. */
+    var idx = -1;
+    for (var i = 0; i < lyricsLines.length; i++) {
+      if (lyricsLines[i].time <= t) idx = i;
+      else break;
+    }
+    if (idx === lyricsLastIdx) return;
+    lyricsLastIdx = idx;
+    if (idx < 0) {
+      setTickerLyric(null);
+    } else {
+      setTickerLyric("\u266B  " + lyricsLines[idx].text);
+    }
   }
 
   // ============================================================
@@ -1248,11 +1428,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
   function playRow(row) {
     currentRow = row;
+    /* Keep the video/radio cards in sync with the playing state right
+     * here, so we don't rely on the next poll cycle to flip them.
+     * The radio card is mutually exclusive with the video — when
+     * a song starts the radio hides, when the song ends it returns. */
+    var videoEl   = document.getElementById("jbx-video");
+    var radioCard = document.getElementById("jbx-radio");
     if (!row) {
+      if (videoEl) videoEl.hidden = true;
+      if (radioCard) radioCard.hidden = false;
+      clearLyrics();
       if (ytPlayer && ytPlayer.stopVideo) try { ytPlayer.stopVideo(); } catch (_) {}
       startRadioIfIdle();
       return;
     }
+    if (videoEl) videoEl.hidden = false;
+    if (radioCard) radioCard.hidden = true;
     stopRadio();
     if (ytPlayer && ytPlayer.loadVideoById) {
       try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
@@ -1266,12 +1457,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       audioStarted = true;
       document.body.classList.remove("splash-on");
 
-      /* Make the YT player container visible BEFORE creating the
-       * iframe. Browsers don't reliably autoplay video in display:none
-       * iframes, and we keep .jbx-video visible from now on so the
-       * iframe's parent never goes display:none mid-playback. */
-      var videoEl = document.getElementById("jbx-video");
-      if (videoEl) videoEl.hidden = false;
+      /* Show the video panel only if a song is already loaded — the
+       * radio card and the video panel are mutually exclusive. If a
+       * song arrives later, playRow() un-hides the video panel BEFORE
+       * loadVideoById so the iframe isn't display:none at that moment. */
+      var videoEl   = document.getElementById("jbx-video");
+      var radioCard = document.getElementById("jbx-radio");
+      if (videoEl)   videoEl.hidden   = !currentRow;
+      if (radioCard) radioCard.hidden = !!currentRow;
 
       // Prime audio inside the user gesture so later .play() calls
       // aren't blocked. If nothing is queued, fire up the radio
@@ -1343,10 +1536,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     var hasNow  = !!s.now_playing;
     var upNext  = (s.up_next || []).slice(0, 5);
     var hasUp   = upNext.length > 0;
-    /* Radio card shows when nothing is playing and queue is empty —
-     * which is also the case when the kill switch is off (the API
-     * returns an empty state in that scenario). */
-    var showRadio = !hasNow && !hasUp;
 
     // ---- Audio engine sync ----
     // Mirrors the loop in /jukebox-player.php's pollState(): keep our
@@ -1357,6 +1546,11 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       var serverId  = serverNow ? serverNow.id : null;
       if (localId !== serverId) {
         if (serverNow) {
+          /* About to call loadVideoById — make the video panel
+           * visible BEFORE the call so the iframe isn't display:none
+           * when YT tries to autoplay (browsers block autoplay in
+           * hidden iframes). */
+          if (videoEl) videoEl.hidden = false;
           playRow(serverNow);
         } else if (!advancing && ytReady) {
           advanceNow();
@@ -1371,14 +1565,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       }
     }
 
-    /* The video panel (with the YT iframe) stays visible whenever
-     * audio has been started OR a song is playing — keeping the
-     * iframe's parent visible avoids autoplay hiccups. Before the
-     * splash gate is cleared we keep it hidden to avoid an empty
-     * black box on first paint. */
+    /* YouTube panel and Radio card are mutually exclusive:
+     *   - song playing → video visible, radio hidden
+     *   - no song      → video hidden,  radio visible
+     * The audio engine keeps the YT iframe alive in the DOM either
+     * way (it's just display:none when hidden), so flipping back is
+     * cheap. */
     if (videoEl) {
-      videoEl.hidden = !(audioStarted || hasNow);
+      videoEl.hidden = !hasNow;
     }
+    radioCard.hidden = hasNow;
 
     if (hasNow) {
       var n = s.now_playing;
@@ -1393,8 +1589,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       nowEl.innerHTML = "";
       nowEl.hidden = true;
     }
-
-    radioCard.hidden = !showRadio;
 
     if (hasUp) {
       var html = "";
@@ -1417,7 +1611,8 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     }
 
     /* Feed song info to the footer ticker. Lower priority than crash
-     * announcements — setTickerSong() is a no-op while a crash is up. */
+     * announcements (and live lyrics) — setTickerSong() is a no-op
+     * while either of those is up. */
     if (hasNow) {
       var n2 = s.now_playing;
       var t  = decodeHtml(n2.title || "");
@@ -1425,8 +1620,17 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       var msg = "\u266B  Now playing:  " + t;
       if (rq) msg += "    \u2014  Requested by " + rq;
       setTickerSong(msg);
+
+      /* Lyrics: fetch once per song id. If we already fetched for
+       * this id, just keep the existing tick-loop running. */
+      if (lyricsForId !== n2.id) {
+        clearLyrics();
+        lyricsForId = n2.id;
+        fetchLyrics(n2.id, decodeHtml(n2.title || ""), decodeHtml(n2.channel || ""));
+      }
     } else {
       setTickerSong(null);
+      if (lyricsForId !== null) clearLyrics();
     }
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== JBX_POLL) {
@@ -1466,9 +1670,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           '<div class="pulse">🎯</div>' +
           '<h3>WAITING FOR <span class="accent">PLAYERS</span></h3>' +
           '<div class="sub">Boards are free — grab some darts.</div>' +
-          '<div class="hint">Start a game at<br>' +
-            '<span class="url">' + escapeHtml(TV_HOST) + '/darts.php</span>' +
-          '</div>' +
         '</div>';
     } else {
       games.forEach(function (g) {
