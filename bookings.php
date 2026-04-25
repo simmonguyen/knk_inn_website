@@ -2,20 +2,22 @@
 /* =========================================================
    KnK Inn — Bookings admin
    https://knkinn.com/bookings.php
-   Role-gated (super_admin, owner, reception). See all bookings on one
-   screen, confirm / decline pending holds, manually block dates
-   (maintenance), browse recent history.
+   Permission-gated by "bookings" (see migration 015). See all
+   bookings on one screen, confirm / decline pending holds, manually
+   block dates (maintenance), browse recent history. The Guests tab
+   is gated separately by "guests".
    ========================================================= */
 
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/bookings_store.php";
 require_once __DIR__ . "/includes/guests_store.php";
 
-/* Bookings are for Super Admin, Owner, and Reception.
- * The Guests tab (V2 Phase 3) is further restricted to Super Admin + Owner
- * — reception will be redirected back to the Bookings tab if they try it. */
-$me = knk_require_role(["super_admin", "owner", "reception"]);
-$can_see_guests = in_array($me["role"], ["super_admin", "owner"], true);
+/* Bookings + Guests are now permission-gated rather than role-gated
+ * (see migration 015 / knk_permissions()). Anyone with the "bookings"
+ * permission can hit this page. The Guests tab is gated separately —
+ * a user without "guests" gets bounced back to the Bookings tab. */
+$me = knk_require_permission("bookings");
+$can_see_guests = knk_user_can($me, "guests");
 
 const ROOMS = [
     "standard-nowindow" => "Standard (no window)",

@@ -12,11 +12,11 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/includes/auth.php";
 
-// Already logged in? Send them to their role's home page (or ?next=).
+// Already logged in? Send them to their personal home page (or ?next=).
 $me = knk_current_user();
 if ($me) {
-    $next = $_GET["next"] ?? knk_role_home($me["role"]);
-    header("Location: " . knk_safe_next($next, $me["role"]));
+    $next = $_GET["next"] ?? knk_role_home_for($me);
+    header("Location: " . knk_safe_next($next, $me));
     exit;
 }
 
@@ -35,22 +35,23 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
 
     $res = knk_login_attempt($email, $password);
     if ($res["ok"]) {
-        $next = $_POST["next"] ?? knk_role_home($res["user"]["role"]);
-        header("Location: " . knk_safe_next($next, $res["user"]["role"]));
+        $user = $res["user"];
+        $next = $_POST["next"] ?? knk_role_home_for($user);
+        header("Location: " . knk_safe_next($next, $user));
         exit;
     }
     $error = $res["error"];
 }
 
 /* Only bounce to same-origin paths — never blindly trust ?next=. */
-function knk_safe_next(string $next, string $role): string {
+function knk_safe_next(string $next, array $me): string {
     if ($next === "" || $next[0] !== "/" || substr($next, 0, 2) === "//") {
-        return knk_role_home($role);
+        return knk_role_home_for($me);
     }
     // Don't loop back to login / logout / setup.
     $path = parse_url($next, PHP_URL_PATH) ?? "";
     if (in_array($path, ["/login.php", "/logout.php", "/setup.php"], true)) {
-        return knk_role_home($role);
+        return knk_role_home_for($me);
     }
     return $next;
 }

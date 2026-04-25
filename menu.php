@@ -31,7 +31,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/menu_store.php";
 
-$me    = knk_require_role(["super_admin", "owner"]);
+$me    = knk_require_permission("menu");
 $me_id = (int)$me["id"];
 
 /* ------------------------------------------------------------------

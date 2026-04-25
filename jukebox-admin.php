@@ -21,7 +21,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/jukebox.php";
 
-$me    = knk_require_role(["super_admin", "owner", "bartender"]);
+$me    = knk_require_permission("jukebox");
 $me_id = (int)$me["id"];
 
 $flash = "";

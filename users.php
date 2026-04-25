@@ -81,6 +81,33 @@ elseif ($action === "toggle_active") {
     }
 }
 
+elseif ($action === "update_permissions") {
+    $id = (int)($_POST["id"] ?? 0);
+    if ($id <= 0) {
+        $error = "Missing user.";
+    } else {
+        // Find the target user's role so we know whether to lock-on
+        // Super Admin's toggles regardless of what the form posted.
+        $stmt = knk_db()->prepare("SELECT role FROM users WHERE id = ? LIMIT 1");
+        $stmt->execute([$id]);
+        $target_role = (string)($stmt->fetchColumn() ?: "");
+
+        $submitted = (array)($_POST["perm"] ?? []);
+        $perms = [];
+        foreach (knk_permissions() as $p) {
+            $perms[$p] = !empty($submitted[$p]) ? 1 : 0;
+        }
+        // Super Admins always have everything on — never let the form
+        // strip a perm from another super_admin.
+        if ($target_role === "super_admin") {
+            foreach ($perms as $k => $_v) $perms[$k] = 1;
+        }
+        knk_set_user_permissions($id, $perms);
+        knk_audit("user.update_permissions", "users", (string)$id, $perms);
+        $flash = "Permissions updated for user #{$id}.";
+    }
+}
+
 if ($action !== "") {
     // POST-redirect-GET so refreshes don't re-submit the form.
     $qs = [];
@@ -100,6 +127,23 @@ $users = knk_db()
     ->query("SELECT id, email, name, role, active, created_at, last_login_at
              FROM users ORDER BY active DESC, role, name")
     ->fetchAll();
+
+// Load all user permissions in a single query, then group by user_id so
+// each row's <details> block can render its toggle matrix without
+// firing a query per user.
+$user_perms = [];
+foreach ($users as $u) {
+    $user_perms[(int)$u["id"]] = array_fill_keys(knk_permissions(), 0);
+}
+if (!empty($user_perms)) {
+    foreach (knk_db()->query("SELECT user_id, permission, granted FROM user_permissions")->fetchAll() as $r) {
+        $uid  = (int)$r["user_id"];
+        $perm = $r["permission"];
+        if (isset($user_perms[$uid][$perm])) {
+            $user_perms[$uid][$perm] = (int)$r["granted"] ? 1 : 0;
+        }
+    }
+}
 
 $role_options = [
     "super_admin" => "Super Admin",
@@ -151,6 +195,36 @@ $role_options = [
     button.ghost:hover { background: rgba(201,170,113,0.12); color: var(--cream, #f5e9d1); }
     button.danger { background: #a74a3a; color: #fff; }
     button.danger:hover { background: #c15a48; }
+    /* Permission toggle matrix */
+    .perm-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+      gap: 0.4rem 0.75rem;
+      margin: 0.6rem 0 0.4rem;
+    }
+    .perm-toggle {
+      display: flex; align-items: center; gap: 0.5rem;
+      padding: 0.35rem 0.55rem; border-radius: 4px;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid rgba(201,170,113,0.18);
+      font-size: 0.85rem;
+      cursor: pointer; user-select: none;
+    }
+    .perm-toggle input { width: auto; margin: 0; accent-color: var(--gold, #c9aa71); }
+    .perm-toggle:hover { background: rgba(201,170,113,0.08); }
+    .perm-toggle.locked {
+      opacity: 0.6; cursor: not-allowed;
+      background: rgba(201,170,113,0.12);
+      border-color: rgba(201,170,113,0.3);
+    }
+    .perm-toggle.locked input { cursor: not-allowed; }
+    .perm-section { margin-top: 0.6rem; }
+    .perm-section h4 {
+      margin: 0 0 0.2rem; font-size: 0.72rem;
+      letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--cream-dim, #d8c9ab); font-weight: 600;
+    }
+    .perm-section .muted { font-size: 0.78rem; }
     table.users {
       width: 100%; border-collapse: collapse; font-size: 0.9rem;
     }
@@ -275,6 +349,44 @@ $role_options = [
                     <input type="hidden" name="id" value="<?= (int)$u["id"] ?>">
                     <input name="password" type="text" placeholder="New password (min 8)" minlength="8" required autocomplete="off">
                     <button type="submit" class="ghost">Reset password</button>
+                  </form>
+
+                  <?php
+                  // Per-user permission matrix. Super Admin's switches
+                  // are visually locked-on so Ben can't accidentally
+                  // strip the kill-switch from another Super Admin.
+                  $is_super  = $u["role"] === "super_admin";
+                  $row_perms = $user_perms[(int)$u["id"]] ?? array_fill_keys(knk_permissions(), 0);
+                  ?>
+                  <form method="post" class="perm-section">
+                    <input type="hidden" name="action" value="update_permissions">
+                    <input type="hidden" name="id" value="<?= (int)$u["id"] ?>">
+                    <h4>Permissions</h4>
+                    <div class="muted" style="margin-bottom:0.45rem">
+                      <?php if ($is_super): ?>
+                        Super Admins always have access to everything.
+                      <?php else: ?>
+                        Tick the sections this user can open. Settings &amp; Users stay Super Admin-only.
+                      <?php endif; ?>
+                    </div>
+                    <div class="perm-grid">
+                      <?php foreach (knk_permissions() as $p):
+                          $on     = $is_super ? 1 : (int)($row_perms[$p] ?? 0);
+                          $locked = $is_super;
+                      ?>
+                        <label class="perm-toggle<?= $locked ? " locked" : "" ?>">
+                          <input type="checkbox" name="perm[<?= htmlspecialchars($p) ?>]" value="1"
+                                 <?= $on ? "checked" : "" ?>
+                                 <?= $locked ? "disabled" : "" ?>>
+                          <?= htmlspecialchars(knk_permission_label($p)) ?>
+                        </label>
+                      <?php endforeach; ?>
+                    </div>
+                    <div class="row-form" style="margin-top:0.4rem">
+                      <button type="submit" class="ghost"<?= $is_super ? " disabled" : "" ?>>
+                        Save permissions
+                      </button>
+                    </div>
                   </form>
 
                   <?php if ((int)$u["id"] !== (int)$me["id"]): ?>

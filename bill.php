@@ -19,7 +19,7 @@ require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/bookings_store.php";
 require_once __DIR__ . "/includes/bills_store.php";
 
-$me = knk_require_role(["super_admin", "owner", "reception"]);
+$me = knk_require_permission("bookings");
 
 $slug = preg_replace('/[^a-zA-Z0-9_]/', '', (string)($_GET["slug"] ?? ""));
 if ($slug === "") {

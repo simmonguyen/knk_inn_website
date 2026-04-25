@@ -15,7 +15,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/sales_store.php";
 
-$me = knk_require_role(["super_admin", "owner"]);
+$me = knk_require_permission("sales");
 
 /* ---------- Tab routing ---------- */
 $tab = (string)($_GET["tab"] ?? "daily");

@@ -22,7 +22,7 @@ require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/menu_store.php";
 require_once __DIR__ . "/includes/market_engine.php";
 
-$me = knk_require_role(["super_admin", "owner"]);
+$me = knk_require_permission("market");
 $me_id = (int)$me["id"];
 
 $flash = "";

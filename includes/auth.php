@@ -1,17 +1,29 @@
 <?php
 /*
- * KnK Inn — authentication & role guards.
+ * KnK Inn — authentication & permission guards.
  *
  * Drop this at the top of any staff page:
  *
  *   require_once __DIR__ . "/includes/auth.php";
- *   $me = knk_require_role(["super_admin", "owner", "reception"]);
+ *   $me = knk_require_permission("bookings");
  *
- * Four roles (see /includes/migrations/001_initial_schema.sql):
+ * Each user has nine on/off permissions (see migration 015):
+ *   bookings · orders · guests · sales · menu · market ·
+ *   jukebox  · darts  · photos
+ *
+ * Defaults are pre-filled from their role at creation time,
+ * then editable per-user from /users.php. Super Admins always
+ * pass every permission check — protects against self-lockout.
+ *
+ * The four roles still exist for default-pickng, the user-
+ * management screen, and the system-settings screen:
  *   super_admin  — Ben. Everything, including user management.
  *   owner        — Simmo. All data, no user management.
- *   reception    — Hotel Reception. Bookings + guest profiles.
- *   bartender    — Bartender / Hostess. Orders + drinks histories.
+ *   reception    — Hotel Reception.
+ *   bartender    — Bartender / Hostess.
+ *
+ * Settings + Users are role-gated to super_admin only — they
+ * deliberately don't appear in the per-user toggle matrix.
  *
  * Session keys we set on login:
  *   $_SESSION["knk_user_id"]     int
@@ -156,22 +168,47 @@ function knk_require_login(): array {
 
 /* --------------------------------------------------------------------
  * Gate a page to a set of roles. Shows a friendly 403 otherwise.
+ *
+ * Most pages should now use knk_require_permission() instead — roles
+ * still gate the user-management + system-settings screens (Super
+ * Admin only) where a stray permission row must never be able to
+ * grant access.
  * ------------------------------------------------------------------ */
 function knk_require_role(array $roles): array {
     $u = knk_require_login();
     if (!in_array($u["role"], $roles, true)) {
-        http_response_code(403);
-        $role_label = htmlspecialchars(knk_role_label($u["role"]));
-        $home       = htmlspecialchars(knk_role_home($u["role"]));
-        echo "<!doctype html><meta charset=utf-8><title>403 — Not allowed</title>"
-           . "<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;color:#2a1a08}"
-           . "a{color:#b38a3b}</style>"
-           . "<h1>403 — Not allowed</h1>"
-           . "<p>You're signed in as <strong>{$role_label}</strong>, which doesn't have access to this page.</p>"
-           . "<p><a href=\"{$home}\">Back to your dashboard</a> · <a href=\"/logout.php\">Log out</a></p>";
-        exit;
+        knk_render_403($u);
     }
     return $u;
+}
+
+/* --------------------------------------------------------------------
+ * Gate a page to a single permission key (see knk_permissions()).
+ * Super Admins always pass — protects against accidental self-lockout
+ * and matches the "Super-Admin always Yes, locked" rule in the UI.
+ * ------------------------------------------------------------------ */
+function knk_require_permission(string $permission): array {
+    $u = knk_require_login();
+    if (!knk_user_can($u, $permission)) {
+        knk_render_403($u);
+    }
+    return $u;
+}
+
+/* --------------------------------------------------------------------
+ * Shared 403 page. Sends the response and exit()s.
+ * ------------------------------------------------------------------ */
+function knk_render_403(array $u): void {
+    http_response_code(403);
+    $role_label = htmlspecialchars(knk_role_label($u["role"]));
+    $home       = htmlspecialchars(knk_role_home_for($u));
+    echo "<!doctype html><meta charset=utf-8><title>403 — Not allowed</title>"
+       . "<style>body{font-family:system-ui,sans-serif;max-width:40rem;margin:4rem auto;padding:0 1rem;color:#2a1a08}"
+       . "a{color:#b38a3b}</style>"
+       . "<h1>403 — Not allowed</h1>"
+       . "<p>You're signed in as <strong>{$role_label}</strong>, which doesn't have access to this page.</p>"
+       . "<p><a href=\"{$home}\">Back to your dashboard</a> · <a href=\"/logout.php\">Log out</a></p>";
+    exit;
 }
 
 /* --------------------------------------------------------------------
@@ -186,32 +223,145 @@ function knk_role_label(string $role): string {
     ][$role] ?? $role;
 }
 
-/** Where should this role land after login? */
+/** Where should this role land after login? Falls back to a sensible default. */
 function knk_role_home(string $role): string {
     if ($role === "bartender") return "/order-admin.php";
     return "/bookings.php";
 }
 
-/** Which pages should each role see in the nav bar? */
-function knk_role_nav(string $role): array {
-    $bookings = ["href" => "/bookings.php",                "label" => "Bookings"];
-    $orders   = ["href" => "/order-admin.php",             "label" => "Orders"];
-    $guests   = ["href" => "/bookings.php?tab=guests",     "label" => "Guests"];
-    $sales    = ["href" => "/sales.php",                   "label" => "Sales"];
-    $menu     = ["href" => "/menu.php",                    "label" => "Menu"];
-    $market   = ["href" => "/market-admin.php",            "label" => "Market"];
-    $jukebox  = ["href" => "/jukebox-admin.php",           "label" => "Jukebox"];
-    $darts    = ["href" => "/darts-admin.php",             "label" => "Darts"];
-    $photos   = ["href" => "/photos.php",                  "label" => "Photos"];
-    $settings = ["href" => "/settings.php",                "label" => "Settings"];
-    $users    = ["href" => "/users.php",                   "label" => "Users"];
-    switch ($role) {
-        case "super_admin": return [$bookings, $orders, $guests, $sales, $menu, $market, $jukebox, $darts, $photos, $settings, $users];
-        case "owner":       return [$bookings, $orders, $guests, $sales, $menu, $market, $jukebox, $darts, $photos];
-        case "reception":   return [$bookings];
-        case "bartender":   return [$orders, $jukebox, $darts];
-        default:            return [];
+/** Where should this specific user land after login?
+ *  Picks the first nav item they can actually see, so we never bounce
+ *  someone into a 403 right after they type their password. */
+function knk_role_home_for(array $me): string {
+    $links = knk_user_nav($me);
+    if (!empty($links)) return $links[0]["href"];
+    // No permissions at all — fall back to the role-level guess.
+    return knk_role_home($me["role"]);
+}
+
+/* --------------------------------------------------------------------
+ * Permission system.
+ * The nine toggleable permissions mirror the matrix in users.php
+ * (see migration 015). Settings + Users stay Super-Admin-only.
+ * ------------------------------------------------------------------ */
+function knk_permissions(): array {
+    return ["bookings", "orders", "guests", "sales", "menu", "market", "jukebox", "darts", "photos"];
+}
+
+function knk_permission_label(string $permission): string {
+    $labels = [
+        "bookings" => "Bookings",
+        "orders"   => "Orders",
+        "guests"   => "Guests",
+        "sales"    => "Sales",
+        "menu"     => "Menu",
+        "market"   => "Market",
+        "jukebox"  => "Jukebox",
+        "darts"    => "Darts",
+        "photos"   => "Photos",
+    ];
+    return $labels[$permission] ?? $permission;
+}
+
+/** Default ON/OFF matrix per role — must mirror migration 015. */
+function knk_role_default_permissions(string $role): array {
+    $matrix = [
+        "super_admin" => [
+            "bookings" => 1, "orders" => 1, "guests" => 1, "sales" => 1,
+            "menu"     => 1, "market" => 1, "jukebox" => 1, "darts" => 1, "photos" => 1,
+        ],
+        "owner" => [
+            "bookings" => 1, "orders" => 1, "guests" => 0, "sales" => 0,
+            "menu"     => 1, "market" => 0, "jukebox" => 0, "darts" => 0, "photos" => 1,
+        ],
+        "reception" => [
+            "bookings" => 1, "orders" => 1, "guests" => 0, "sales" => 0,
+            "menu"     => 0, "market" => 0, "jukebox" => 0, "darts" => 0, "photos" => 0,
+        ],
+        "bartender" => [
+            "bookings" => 0, "orders" => 1, "guests" => 0, "sales" => 0,
+            "menu"     => 0, "market" => 0, "jukebox" => 0, "darts" => 0, "photos" => 0,
+        ],
+    ];
+    if (isset($matrix[$role])) return $matrix[$role];
+    return array_fill_keys(knk_permissions(), 0);
+}
+
+/** Read a user's stored permission map. Returns ['bookings'=>0|1, ...] for all 9 keys. */
+function knk_user_permissions(int $user_id): array {
+    static $cache = [];
+    if (isset($cache[$user_id])) return $cache[$user_id];
+
+    $out = array_fill_keys(knk_permissions(), 0);
+    try {
+        $stmt = knk_db()->prepare("SELECT permission, granted FROM user_permissions WHERE user_id = ?");
+        $stmt->execute([$user_id]);
+        foreach ($stmt->fetchAll() as $r) {
+            if (array_key_exists($r["permission"], $out)) {
+                $out[$r["permission"]] = (int)$r["granted"] ? 1 : 0;
+            }
+        }
+    } catch (Throwable $e) {
+        // Table missing (migration not yet run) — leave all-zeros so the
+        // page falls through to a friendly 403 rather than a fatal error.
     }
+    return $cache[$user_id] = $out;
+}
+
+/** Can this user access $permission? Super Admins always pass. */
+function knk_user_can(array $me, string $permission): bool {
+    if (($me["role"] ?? "") === "super_admin") return true;
+    if (!in_array($permission, knk_permissions(), true)) return false;
+    $perms = knk_user_permissions((int)$me["id"]);
+    return !empty($perms[$permission]);
+}
+
+/** Persist a permission map for a user. $perms is a partial or full array of perm => 0|1.
+ *  Missing keys are written as 0 so the row always covers all nine permissions. */
+function knk_set_user_permissions(int $user_id, array $perms): void {
+    $pdo = knk_db();
+    $stmt = $pdo->prepare(
+        "INSERT INTO user_permissions (user_id, permission, granted)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE granted = VALUES(granted)"
+    );
+    foreach (knk_permissions() as $perm) {
+        $granted = !empty($perms[$perm]) ? 1 : 0;
+        $stmt->execute([$user_id, $perm, $granted]);
+    }
+}
+
+/* --------------------------------------------------------------------
+ * Per-user nav. Replaces the old role-only switch — looks up each
+ * link's permission and shows it only if the user has it. Settings
+ * and Users stay hardcoded super_admin-only.
+ * ------------------------------------------------------------------ */
+function knk_user_nav(array $me): array {
+    $items = [
+        "bookings" => ["href" => "/bookings.php",            "label" => "Bookings"],
+        "orders"   => ["href" => "/order-admin.php",         "label" => "Orders"],
+        "guests"   => ["href" => "/bookings.php?tab=guests", "label" => "Guests"],
+        "sales"    => ["href" => "/sales.php",               "label" => "Sales"],
+        "menu"     => ["href" => "/menu.php",                "label" => "Menu"],
+        "market"   => ["href" => "/market-admin.php",        "label" => "Market"],
+        "jukebox"  => ["href" => "/jukebox-admin.php",       "label" => "Jukebox"],
+        "darts"    => ["href" => "/darts-admin.php",         "label" => "Darts"],
+        "photos"   => ["href" => "/photos.php",              "label" => "Photos"],
+    ];
+    $out = [];
+    foreach ($items as $perm => $link) {
+        if (knk_user_can($me, $perm)) $out[] = $link;
+    }
+    if (($me["role"] ?? "") === "super_admin") {
+        $out[] = ["href" => "/settings.php", "label" => "Settings"];
+        $out[] = ["href" => "/users.php",    "label" => "Users"];
+    }
+    return $out;
+}
+
+/** @deprecated Kept so anything still calling it doesn't crash. Prefer knk_user_nav($me). */
+function knk_role_nav(string $role): array {
+    return knk_user_nav(["role" => $role, "id" => 0]);
 }
 
 /* --------------------------------------------------------------------
@@ -266,6 +416,15 @@ function knk_create_user(string $email, string $name, string $password, string $
     $stmt->execute([$email, $name, $hash, $role]);
     $id = (int)$pdo->lastInsertId();
 
+    // Seed permission toggles from the role's defaults. Each user gets
+    // their own row set so Ben can later flip individual switches.
+    try {
+        knk_set_user_permissions($id, knk_role_default_permissions($role));
+    } catch (Throwable $e) {
+        // Migration 015 not applied yet — user record still exists,
+        // permission rows will be filled in by the migration's backfill.
+    }
+
     knk_audit("user.create", "users", (string)$id, [
         "email" => $email,
         "role"  => $role,
@@ -304,7 +463,7 @@ function knk_audit(string $action, ?string $entity = null, ?string $entity_id = 
 function knk_render_admin_nav(array $me): void {
     $name  = htmlspecialchars($me["name"]);
     $role  = htmlspecialchars(knk_role_label($me["role"]));
-    $links = knk_role_nav($me["role"]);
+    $links = knk_user_nav($me);
     $current_script = $_SERVER["SCRIPT_NAME"] ?? "";
     // For query-string-aware active-state (e.g. bookings.php?tab=guests),
     // pick out the tab/filter keys from the current URL.

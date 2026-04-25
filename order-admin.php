@@ -14,8 +14,8 @@ require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
 
-/* Orders dashboard: Super Admin, Owner, and Bartender/Hostess. */
-$me = knk_require_role(["super_admin", "owner", "bartender"]);
+/* Orders dashboard — gated by the "orders" permission (see migration 015). */
+$me = knk_require_permission("orders");
 
 /* ---------- Actions: mark received / paid / cancelled ---------- */
 $flash = "";

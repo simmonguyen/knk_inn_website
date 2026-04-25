@@ -26,7 +26,7 @@ require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/photo_slots_store.php";
 require_once __DIR__ . "/includes/photo_library_store.php";
 
-$me = knk_require_role(["super_admin", "owner"]);
+$me = knk_require_permission("photos");
 
 /* ----------------------------------------------------------
  * Gallery-wall constants (unchanged)
