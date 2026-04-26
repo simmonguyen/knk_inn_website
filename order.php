@@ -24,9 +24,13 @@ require_once __DIR__ . "/includes/market_engine.php";
 /* Phase 6 — Stay logged in:
  * Remember the guest's email across visits via a 90-day cookie so they
  * don't have to re-type it every time. Session carries it within a visit;
- * this cookie re-seeds the session on the next visit. */
-define("KNK_GUEST_COOKIE",      "knk_guest_email");
-define("KNK_GUEST_COOKIE_TTL",  90 * 24 * 60 * 60);  // 90 days
+ * this cookie re-seeds the session on the next visit.
+ *
+ * `if (!defined())` guards so /bar.php (which now bootstraps identity at
+ * the shell level) can include this page without "constant already
+ * defined" warnings. */
+if (!defined("KNK_GUEST_COOKIE"))      define("KNK_GUEST_COOKIE",      "knk_guest_email");
+if (!defined("KNK_GUEST_COOKIE_TTL"))  define("KNK_GUEST_COOKIE_TTL",  90 * 24 * 60 * 60);  // 90 days
 
 /* Phase 6.1 — Anonymous-but-persistent cookie identity for /bar.php.
  *
@@ -34,52 +38,56 @@ define("KNK_GUEST_COOKIE_TTL",  90 * 24 * 60 * 60);  // 90 days
  * we want a tipsy first-time guest to be able to order WITHOUT typing
  * an email. We mint a random anon token on first visit, stash it in a
  * 1-year cookie, and synthesise a placeholder email of the form
- *     anon-<token>@guest.knkinn.local
+ *     anon-<token>@anon.knkinn.com
  * — that satisfies FILTER_VALIDATE_EMAIL so it slots straight into the
  * existing email-keyed orders/guests pipeline. Real-email login (via the
- * future profile button) will re-key the orders later by re-using the
- * same upsert path, so this anon identity is the only persistent thing.
+ * profile claim flow) re-keys the orders later by re-using the same
+ * upsert path, so this anon identity is the only persistent thing.
  *
  * NOT used outside the bar shell — standalone /order.php still asks for
  * a real email so receipts/notifications work properly.
  */
-define("KNK_GUEST_ANON_COOKIE",     "knk_guest_anon");
-define("KNK_GUEST_ANON_COOKIE_TTL", 365 * 24 * 60 * 60);  // 1 year
+if (!defined("KNK_GUEST_ANON_COOKIE"))     define("KNK_GUEST_ANON_COOKIE",     "knk_guest_anon");
+if (!defined("KNK_GUEST_ANON_COOKIE_TTL")) define("KNK_GUEST_ANON_COOKIE_TTL", 365 * 24 * 60 * 60);  // 1 year
 /* Use a real subdomain of knkinn.com so FILTER_VALIDATE_EMAIL never
  * trips on the TLD. The subdomain has no MX record so any errant
  * outbound mail just bounces — there's no real human at the other end. */
-define("KNK_GUEST_ANON_DOMAIN",     "anon.knkinn.com");
+if (!defined("KNK_GUEST_ANON_DOMAIN"))     define("KNK_GUEST_ANON_DOMAIN",     "anon.knkinn.com");
 
-function knk_anon_email_from_token(string $token): string {
-    // Hyphens only — URL-safe and lowercase, easy to spot in admin views.
-    $token = preg_replace('/[^a-z0-9]/', '', strtolower($token));
-    return "anon-" . $token . "@" . KNK_GUEST_ANON_DOMAIN;
+if (!function_exists("knk_anon_email_from_token")) {
+    function knk_anon_email_from_token(string $token): string {
+        // Hyphens only — URL-safe and lowercase, easy to spot in admin views.
+        $token = preg_replace('/[^a-z0-9]/', '', strtolower($token));
+        return "anon-" . $token . "@" . KNK_GUEST_ANON_DOMAIN;
+    }
 }
 
 /* Mint or re-use an anonymous identity, seed $_SESSION["order_email"],
  * and (re)issue the cookie. Safe to call repeatedly. */
-function knk_ensure_anon_identity(): void {
-    $token = isset($_COOKIE[KNK_GUEST_ANON_COOKIE])
-        ? preg_replace('/[^a-z0-9]/', '', strtolower((string)$_COOKIE[KNK_GUEST_ANON_COOKIE]))
-        : "";
-    if (strlen($token) < 16) {
-        // 16 hex chars = 64 bits of entropy — plenty for casual identity.
-        try {
-            $token = bin2hex(random_bytes(8));
-        } catch (\Throwable $e) {
-            $token = substr(hash("sha256", uniqid("", true) . microtime(true)), 0, 16);
+if (!function_exists("knk_ensure_anon_identity")) {
+    function knk_ensure_anon_identity(): void {
+        $token = isset($_COOKIE[KNK_GUEST_ANON_COOKIE])
+            ? preg_replace('/[^a-z0-9]/', '', strtolower((string)$_COOKIE[KNK_GUEST_ANON_COOKIE]))
+            : "";
+        if (strlen($token) < 16) {
+            // 16 hex chars = 64 bits of entropy — plenty for casual identity.
+            try {
+                $token = bin2hex(random_bytes(8));
+            } catch (\Throwable $e) {
+                $token = substr(hash("sha256", uniqid("", true) . microtime(true)), 0, 16);
+            }
         }
+        $_COOKIE[KNK_GUEST_ANON_COOKIE] = $token;
+        $secure = !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off";
+        setcookie(KNK_GUEST_ANON_COOKIE, $token, [
+            "expires"  => time() + KNK_GUEST_ANON_COOKIE_TTL,
+            "path"     => "/",
+            "secure"   => $secure,
+            "httponly" => true,
+            "samesite" => "Lax",
+        ]);
+        $_SESSION["order_email"] = knk_anon_email_from_token($token);
     }
-    $_COOKIE[KNK_GUEST_ANON_COOKIE] = $token;
-    $secure = !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off";
-    setcookie(KNK_GUEST_ANON_COOKIE, $token, [
-        "expires"  => time() + KNK_GUEST_ANON_COOKIE_TTL,
-        "path"     => "/",
-        "secure"   => $secure,
-        "httponly" => true,
-        "samesite" => "Lax",
-    ]);
-    $_SESSION["order_email"] = knk_anon_email_from_token($token);
 }
 
 if (empty($_SESSION["order_email"]) && !empty($_COOKIE[KNK_GUEST_COOKIE])) {
