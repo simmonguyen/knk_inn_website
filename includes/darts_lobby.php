@@ -162,6 +162,46 @@ function knk_darts_lobby_is_looking(string $email): bool {
     }
 }
 
+/**
+ * "Looking for an opponent" payload for the TV right column.
+ * Reshapes knk_darts_lobby_active_lookers() into TV-friendly rows
+ * (no email, avatar URL pre-resolved, ago-time pre-formatted).
+ *
+ * Returned shape: [ { display_name, avatar_url, ago }, ... ].
+ * Newest first. Empty array when nobody's looking — TV hides the
+ * panel in that case.
+ */
+function knk_tv_darts_build_lookers(int $limit = 6): array {
+    $limit = max(1, min(20, $limit));
+    $now_ts = time();
+    $rows = knk_darts_lobby_active_lookers("", $limit);
+    $out = [];
+    foreach ($rows as $r) {
+        $created_ts = (int)strtotime((string)$r["created_at"]);
+        $secs = $created_ts > 0 ? max(0, $now_ts - $created_ts) : 0;
+        if      ($secs < 60)    $ago = "just now";
+        elseif  ($secs < 3600)  $ago = (int)round($secs / 60)    . "m";
+        elseif  ($secs < 86400) $ago = (int)round($secs / 3600)  . "h";
+        else                    $ago = (int)round($secs / 86400) . "d";
+
+        $disp = trim((string)($r["display_name"] ?? ""));
+        if ($disp === "") $disp = "Guest";
+
+        /* avatar_path comes pre-joined from active_lookers (see the
+         * LEFT JOIN guests above). It's already a web-relative URL
+         * that knk_avatar_save_upload() wrote, so we pass it through
+         * unchanged. Empty → TV draws the gold initial. */
+        $avatar = (string)($r["avatar_path"] ?? "");
+
+        $out[] = [
+            "display_name" => $disp,
+            "avatar_url"   => $avatar,
+            "ago"          => $ago,
+        ];
+    }
+    return $out;
+}
+
 /* =========================================================
    CHALLENGES
    ========================================================= */

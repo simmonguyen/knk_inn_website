@@ -54,6 +54,7 @@ $out = [
     "poll_seconds" => 60,
     "games"        => [],
     "stats"        => null,
+    "lookers"      => [],
     "error"        => null,
 ];
 
@@ -213,6 +214,12 @@ try {
      * is mid-game (i.e. while the "Waiting for players" card is up).
      * Cheap enough to send on every poll: three small SELECTs. */
     $out["stats"] = knk_tv_darts_build_stats();
+
+    /* "Looking for an opponent" — guests in the bar lobby waiting
+     * for someone to challenge them. The TV renders this as social
+     * proof so the rest of the room can see who's up for a game.
+     * Limit 6 so the panel stays readable from across the bar. */
+    $out["lookers"] = knk_tv_darts_build_lookers(6);
 
 } catch (Throwable $e) {
     $out["error"] = "engine_error";

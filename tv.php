@@ -192,6 +192,11 @@ $darts_stats = $darts_enabled ? knk_tv_darts_build_stats() : [
     "recent" => [], "top_rounds" => [], "pie" => ["total" => 0, "slices" => []],
 ];
 
+/* "Looking for an opponent" — guests sitting in the lobby. Visible
+ * on the TV any time someone's looking, regardless of how many
+ * boards are live, so the room can flag down a willing partner. */
+$darts_lookers = $darts_enabled ? knk_tv_darts_build_lookers(6) : [];
+
 /* ---- Helpers ---- */
 function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
 function knk_tv_arrow(string $t): string {
@@ -734,6 +739,67 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   /* ============================================================
+   * "Looking for an opponent" — guests sitting in the bar lobby
+   * waiting to be challenged. Visible whenever ≥1 looker is in the
+   * lobby, regardless of how many boards are mid-game (so even a
+   * full house can flag down a willing challenger). Sits between
+   * the live games / Waiting card and the stats stack.
+   * ========================================================== */
+  .darts-lookers {
+    flex: 0 0 auto;
+    background: linear-gradient(180deg, rgba(201,170,113,0.18) 0%, rgba(201,170,113,0.08) 100%);
+    border: 1px solid rgba(201,170,113,0.35);
+    border-radius: 7px;
+    padding: 0.45rem 0.55rem;
+    margin-top: 0.1rem;
+  }
+  .darts-lookers.is-hidden { display: none; }
+  .darts-lookers h4 {
+    margin: 0 0 0.3rem 0;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.72rem;
+    color: var(--gold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .darts-lookers ul {
+    list-style: none; padding: 0; margin: 0;
+    display: flex; flex-wrap: wrap; gap: 0.35rem 0.55rem;
+  }
+  .darts-lookers li {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.18rem 0.45rem 0.18rem 0.18rem;
+    background: rgba(15,9,5,0.55);
+    border: 1px solid rgba(201,170,113,0.25);
+    border-radius: 999px;
+    font-size: 0.78rem;
+  }
+  .darts-lookers .av {
+    flex: 0 0 auto;
+    width: 22px; height: 22px; border-radius: 50%;
+    background: var(--gold);
+    color: var(--brown-deep);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.7rem;
+    overflow: hidden;
+  }
+  .darts-lookers .av img {
+    width: 100%; height: 100%; object-fit: cover;
+  }
+  .darts-lookers .nm {
+    color: var(--fg);
+    font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 9rem;
+  }
+  .darts-lookers .ago {
+    color: var(--muted);
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+  }
+
+  /* ============================================================
    * Right-column stats — Recent games / Top scoring this week /
    * Most-played pie. Sit under the "Waiting for players" card.
    * Hidden via .darts-stats.is-hidden when 2+ boards are live, so
@@ -1257,7 +1323,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 </div>
 
 <header class="tv-bar">
-  <div class="brand">KnK <em>Inn</em></div>
+  <div class="brand">KnK <em>Inn</em> TV</div>
   <div class="clock" id="tv-clock">--:--</div>
 </header>
 
@@ -1445,6 +1511,35 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           </div>
         <?php endif; ?>
       <?php endif; ?>
+    </div>
+
+    <!-- ===========================================================
+         Looking for an opponent. Anyone in the bar lobby right now.
+         Always visible if ≥1 looker — even when boards are full, so
+         the room can spot a willing challenger. JS toggles
+         .is-hidden when the array is empty.
+         ========================================================= -->
+    <div class="darts-lookers<?= empty($darts_lookers) ? ' is-hidden' : '' ?>"
+         id="darts-lookers">
+      <h4>🎯 Looking for an opponent</h4>
+      <ul id="darts-lookers-list">
+        <?php foreach ($darts_lookers as $lk):
+          $disp    = (string)$lk["display_name"];
+          $initial = mb_strtoupper(mb_substr($disp, 0, 1));
+        ?>
+          <li>
+            <span class="av">
+              <?php if (!empty($lk["avatar_url"])): ?>
+                <img src="<?= h($lk["avatar_url"]) ?>" alt="">
+              <?php else: ?>
+                <?= h($initial) ?>
+              <?php endif; ?>
+            </span>
+            <span class="nm"><?= h($disp) ?></span>
+            <span class="ago"><?= h($lk["ago"]) ?></span>
+          </li>
+        <?php endforeach; ?>
+      </ul>
     </div>
 
     <!-- ===========================================================
@@ -2999,6 +3094,44 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         renderDartsStats(s.stats);
       }
     }
+
+    /* Looking-for-an-opponent panel — independent of game count.
+     * Visible whenever ≥1 looker is in the lobby, even with 2+
+     * boards live (someone might still be hoping for a 3rd game). */
+    var lookersEl = document.getElementById("darts-lookers");
+    if (lookersEl) {
+      renderDartsLookers(s.lookers || []);
+    }
+  }
+
+  /* Repaint the lookers panel from the API. Empty array → hide the
+   * card (so the column doesn't show a blank header). One row per
+   * looker, capped at 6 by the server. */
+  function renderDartsLookers(lookers) {
+    var el = document.getElementById("darts-lookers");
+    if (!el) return;
+    if (!lookers || lookers.length === 0) {
+      el.classList.add("is-hidden");
+      var emptyList = document.getElementById("darts-lookers-list");
+      if (emptyList) emptyList.innerHTML = "";
+      return;
+    }
+    el.classList.remove("is-hidden");
+    var html = "";
+    lookers.forEach(function (lk) {
+      var disp    = String(lk.display_name || "Guest");
+      var initial = disp.charAt(0).toUpperCase();
+      var avHtml  = lk.avatar_url
+        ? '<img src="' + escapeHtml(lk.avatar_url) + '" alt="">'
+        : escapeHtml(initial);
+      html += '<li>'
+           +    '<span class="av">' + avHtml + '</span>'
+           +    '<span class="nm">' + escapeHtml(disp) + '</span>'
+           +    '<span class="ago">' + escapeHtml(lk.ago || "") + '</span>'
+           +  '</li>';
+    });
+    var list = document.getElementById("darts-lookers-list");
+    if (list) list.innerHTML = html;
   }
 
   /* Re-render the three stat cards from the API payload. Server's
