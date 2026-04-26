@@ -43,15 +43,25 @@ try {
 
     $now = knk_jukebox_now_playing();
     if ($now) {
+        /* Saved lyric offset for this video, if any. The TV uses
+         * this as the starting offset for the lyric ticker so
+         * staff-tweaked syncs stick across reloads and across
+         * future plays of the same video. NULL means "no offset
+         * saved yet" — TV falls back to its built-in default. */
+        $vid = (string)$now["youtube_video_id"];
+        $saved_offset = $vid !== ""
+            ? knk_jukebox_lyric_offset_get($vid)
+            : null;
         $out["now_playing"] = [
-            "id"         => (int)$now["id"],
-            "video_id"   => (string)$now["youtube_video_id"],
-            "title"      => (string)$now["youtube_title"],
-            "channel"    => (string)$now["youtube_channel"],
-            "duration"   => (int)$now["duration_seconds"],
-            "thumb"      => (string)$now["thumbnail_url"],
-            "name"       => (string)$now["requester_name"],
-            "table_no"   => (string)$now["table_no"],
+            "id"            => (int)$now["id"],
+            "video_id"      => $vid,
+            "title"         => (string)$now["youtube_title"],
+            "channel"       => (string)$now["youtube_channel"],
+            "duration"      => (int)$now["duration_seconds"],
+            "thumb"         => (string)$now["thumbnail_url"],
+            "name"          => (string)$now["requester_name"],
+            "table_no"      => (string)$now["table_no"],
+            "lyric_offset"  => $saved_offset, // float | null
         ];
     }
 

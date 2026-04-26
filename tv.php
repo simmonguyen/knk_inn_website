@@ -1198,7 +1198,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         <div class="tagline">
           <div class="tagline-hd">Crash the market →</div>
           Post about us on Facebook or write a Google review for
-          cheaper drinks. Scan or goto
+          cheaper drinks.
           <span class="url">knkinn.com/share.php</span>
         </div>
       </div>
@@ -1287,6 +1287,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
             </div>
           </div>
         <?php endforeach; ?>
+        <?php if (count($darts_games) === 1): ?>
+          <!-- 1 game = column has slack; show the "waiting for players"
+               ad in the bottom half so the panel stays visually balanced
+               (matches the JS render's behaviour for the same case). -->
+          <div class="darts-empty">
+            <div class="pulse">🎯</div>
+            <h3>WAITING FOR <span class="accent">PLAYERS</span></h3>
+            <div class="sub">Other boards are free — grab some darts.</div>
+          </div>
+        <?php endif; ?>
       <?php endif; ?>
     </div>
   </section>
@@ -1789,12 +1799,27 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   function saveLyricOffset(vid, offsetSec) {
     if (!vid) return;
+    /* Local cache first — survives a TV reload before the next
+     * /api/jukebox_state.php fetch comes back with the saved value. */
     try {
       var obj = loadLyricOffsets();
       if (offsetSec === 0) { delete obj[vid]; }
       else                 { obj[vid] = offsetSec; }
       localStorage.setItem(LYRIC_OFFSETS_KEY, JSON.stringify(obj));
     } catch (_) { /* private mode / quota — silent */ }
+    /* Server persist so the same video lands pre-synced for
+     * everyone next time it's queued. Fire-and-forget — we don't
+     * block the UI on the network round-trip; if the POST fails
+     * the staff can re-nudge. */
+    try {
+      var fd = new FormData();
+      fd.append("video_id", vid);
+      fd.append("offset_sec", String(offsetSec));
+      fetch("/api/lyric_offset.php", {
+        method: "POST", body: fd, credentials: "same-origin",
+        keepalive: true
+      }).catch(function () { /* transient — silent */ });
+    } catch (_) {}
   }
 
   function cleanTrack(s) {
@@ -2169,11 +2194,36 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
     /* Pull the saved offset for this YouTube video id (if any) so
      * the lyric ticker is already lined up before the first line
-     * fires. Default 0 for first-time songs. */
+     * fires.
+     *
+     * Priority order:
+     *   1. row.lyric_offset — the server-side persisted value from
+     *      /api/jukebox_state.php now_playing. Non-null means staff
+     *      have synced this song before; we use that no matter
+     *      what's in localStorage.
+     *   2. localStorage — TV's own cache from earlier nudges (covers
+     *      the moment between a nudge and the next state-poll, plus
+     *      survives a brief network blip).
+     *   3. LYRIC_DEFAULT_OFFSET — first-time songs nobody's tweaked. */
     lyricsOffsetVid = row.video_id || null;
-    var offsets = loadLyricOffsets();
-    lyricsOffsetSec = (lyricsOffsetVid && typeof offsets[lyricsOffsetVid] === "number")
-      ? offsets[lyricsOffsetVid] : LYRIC_DEFAULT_OFFSET;
+    var offsets  = loadLyricOffsets();
+    var serverOff = (typeof row.lyric_offset === "number") ? row.lyric_offset : null;
+    if (serverOff !== null) {
+      lyricsOffsetSec = serverOff;
+      /* Mirror back into localStorage so subsequent nudges stack
+       * correctly on top of the persisted value. */
+      try {
+        if (lyricsOffsetVid) {
+          if (serverOff === 0) delete offsets[lyricsOffsetVid];
+          else offsets[lyricsOffsetVid] = serverOff;
+          localStorage.setItem(LYRIC_OFFSETS_KEY, JSON.stringify(offsets));
+        }
+      } catch (_) {}
+    } else if (lyricsOffsetVid && typeof offsets[lyricsOffsetVid] === "number") {
+      lyricsOffsetSec = offsets[lyricsOffsetVid];
+    } else {
+      lyricsOffsetSec = LYRIC_DEFAULT_OFFSET;
+    }
 
     /* Adaptive pre-roll. The radio (or previous song's post-roll)
      * keeps playing during the wait, so there's no dead air — we
@@ -2687,6 +2737,19 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
             '<div class="darts-rows">' + rows + '</div>' +
           '</div>';
       });
+      // If only one board has a live game, the right column would
+      // otherwise leave a lot of empty space below the single card.
+      // Append the "Waiting for players" ad so the column splits 50/50
+      // (game on top, ad on bottom) — Ben's request: keep the
+      // signage active so guests know other boards are free.
+      if (games.length === 1) {
+        html +=
+          '<div class="darts-empty">' +
+            '<div class="pulse">🎯</div>' +
+            '<h3>WAITING FOR <span class="accent">PLAYERS</span></h3>' +
+            '<div class="sub">Other boards are free — grab some darts.</div>' +
+          '</div>';
+      }
       stack.innerHTML = html;
       // Drop state for games that have left the playing list.
       Object.keys(dartsState.gameById).forEach(function (k) {
