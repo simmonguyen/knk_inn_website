@@ -815,6 +815,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     overflow: hidden;
   }
   .darts-stats.is-hidden { display: none; }
+  /* When 2+ boards are mid-game, the column is full of live scores —
+   * keep Recent games visible (1 row of social proof) but drop the
+   * Top scoring + Most-played cards so the live games don't get
+   * squashed. JS adds .is-compact in that case. */
+  .darts-stats.is-compact #ds-card-top,
+  .darts-stats.is-compact #ds-card-pie { display: none; }
   .darts-stats .stat-card {
     background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
     border: 1px solid var(--line);
@@ -1500,16 +1506,11 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
             </div>
           </div>
         <?php endforeach; ?>
-        <?php if (count($darts_games) === 1): ?>
-          <!-- 1 game = column has slack; show the "waiting for players"
-               ad in the bottom half so the panel stays visually balanced
-               (matches the JS render's behaviour for the same case). -->
-          <div class="darts-empty">
-            <div class="pulse">🎯</div>
-            <h3>WAITING FOR <span class="accent">PLAYERS</span></h3>
-            <div class="sub">Other boards are free — grab some darts.</div>
-          </div>
-        <?php endif; ?>
+        <?php /* "Waiting for players" used to repeat under the live
+                 game card to fill slack in the right column. With the
+                 stats panel rendering directly below, there's no slack
+                 left — keeping it would make the column feel too full.
+                 So we only show Waiting when there are 0 live games. */ ?>
       <?php endif; ?>
     </div>
 
@@ -1543,12 +1544,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     </div>
 
     <!-- ===========================================================
-         Right-column stats. Visible when ≤1 board is mid-game (i.e.
-         while the "Waiting for players" card is up). When 2+ boards
-         are live, JS adds .is-hidden so the game cards take the
-         column. JS refreshes the inner HTML on every poll.
+         Right-column stats. Always visible. When 2+ boards are live,
+         JS adds .is-compact which hides the Top scoring + Most-played
+         cards (CSS-driven) so only Recent games stays — the games
+         have most of the column. JS also refreshes the inner HTML
+         on every poll.
          ========================================================= -->
-    <div class="darts-stats<?= count($darts_games) > 1 ? ' is-hidden' : '' ?>"
+    <div class="darts-stats<?= count($darts_games) > 1 ? ' is-compact' : '' ?>"
          id="darts-stats">
       <div class="stat-card" id="ds-card-recent">
         <h4>Recent games</h4>
@@ -3054,19 +3056,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
             '<div class="darts-rows">' + rows + '</div>' +
           '</div>';
       });
-      // If only one board has a live game, the right column would
-      // otherwise leave a lot of empty space below the single card.
-      // Append the "Waiting for players" ad so the column splits 50/50
-      // (game on top, ad on bottom) — Ben's request: keep the
-      // signage active so guests know other boards are free.
-      if (games.length === 1) {
-        html +=
-          '<div class="darts-empty">' +
-            '<div class="pulse">🎯</div>' +
-            '<h3>WAITING FOR <span class="accent">PLAYERS</span></h3>' +
-            '<div class="sub">Other boards are free — grab some darts.</div>' +
-          '</div>';
-      }
+      /* No "Waiting for players" card when a game is live — the
+       * stats panel below is taking that real estate now. The
+       * Waiting card only renders in the 0-games branch above. */
       stack.innerHTML = html;
       // Drop state for games that have left the playing list.
       Object.keys(dartsState.gameById).forEach(function (k) {
@@ -3082,17 +3074,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       DARTS_POLL = Math.max(2000, s.poll_seconds * 1000);
     }
 
-    /* Right-column stats — visible when ≤1 board is mid-game (i.e.
-     * while "Waiting for players" is up). Hidden otherwise so the
-     * game cards have the column. */
+    /* Right-column stats — always visible, but compact when 2+
+     * boards are mid-game (only Recent shown; Top scoring + Most-
+     * played are hidden because the column is full of live scores).
+     * 0 or 1 games: all three stat cards visible. */
     var statsEl = document.getElementById("darts-stats");
     if (statsEl) {
-      var hideStats = games.length > 1;
-      if (hideStats) statsEl.classList.add("is-hidden");
-      else           statsEl.classList.remove("is-hidden");
-      if (!hideStats && s.stats) {
-        renderDartsStats(s.stats);
-      }
+      statsEl.classList.remove("is-hidden");
+      if (games.length > 1) statsEl.classList.add("is-compact");
+      else                  statsEl.classList.remove("is-compact");
+      if (s.stats) renderDartsStats(s.stats);
     }
 
     /* Looking-for-an-opponent panel — independent of game count.
