@@ -1038,7 +1038,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         </div>
         <div class="tagline">
           <div class="tagline-hd">Crash the market →</div>
-          Post about us on Facebook, Google &amp; TripAdvisor for
+          Post about us on Facebook or write a Google review for
           cheaper drinks. Scan or goto
           <span class="url">knkinn.com/share.php</span>
         </div>

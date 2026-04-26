@@ -58,9 +58,6 @@ if (!defined("KNK_SHARE_PLATFORM_COOLDOWN_SEC")) {
  *   deep_link       — fallback URL if no setting override
  */
 function knk_share_platforms(): array {
-    $tripadvisor_default = "https://www.tripadvisor.com/UserReviewEdit-g293925-d-KnK_Inn_Saigon.html";
-    $google_default      = "https://search.google.com/local/writereview?placeid=";
-
     return [
         "facebook" => [
             "key"          => "facebook",
@@ -84,15 +81,21 @@ function knk_share_platforms(): array {
             // the override).
             "deep_link"    => "https://www.google.com/maps/search/" . rawurlencode("KnK Inn 96 De Tham District 1 Saigon"),
         ],
-        "tripadvisor" => [
-            "key"          => "tripadvisor",
-            "label"        => "TripAdvisor",
-            "tier"         => 3,
-            "drop_pct"     => 35,
-            "duration_min" => 5,
-            "action"       => "review",
-            "deep_link"    => "https://www.tripadvisor.com/Search?q=" . rawurlencode("KnK Inn Saigon"),
-        ],
+        // TripAdvisor — disabled until Ben's listing is approved.
+        // Re-enable by uncommenting this block once the
+        // TripAdvisor URL is filled in via /settings.php. The DB
+        // schema, audit-log, and cooldown logic are all already
+        // platform-agnostic, so no other code changes needed.
+        //
+        // "tripadvisor" => [
+        //     "key"          => "tripadvisor",
+        //     "label"        => "TripAdvisor",
+        //     "tier"         => 3,
+        //     "drop_pct"     => 35,
+        //     "duration_min" => 5,
+        //     "action"       => "review",
+        //     "deep_link"    => "https://www.tripadvisor.com/Search?q=" . rawurlencode("KnK Inn Saigon"),
+        // ],
     ];
 }
 

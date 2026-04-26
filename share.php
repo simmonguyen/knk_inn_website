@@ -416,8 +416,8 @@ function sh($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8
       Tap a button → your phone opens that platform with a post / review
       ready to go. The market crashes top-selling drinks for a few minutes,
       and your shout shows up to your friends. Each guest can rally each
-      platform once a day. Reviews count for bigger crashes — Google and
-      TripAdvisor reviews are gold for us.
+      platform once a day. Google reviews count for bigger crashes &mdash;
+      they&rsquo;re gold for us.
     </div>
 
     <p class="foot">
