@@ -20,6 +20,16 @@ require_once __DIR__ . "/includes/orders_store.php";
 require_once __DIR__ . "/includes/order_email.php";
 require_once __DIR__ . "/includes/guests_store.php";
 require_once __DIR__ . "/includes/market_engine.php";
+require_once __DIR__ . "/includes/hours.php";
+
+/* Closed-hours gate. Outside service hours (07:30–12:30 / 16:00–23:30
+ * Saigon time) we don't accept new orders — the splash advises the
+ * guest of the next opening time. Applies to direct QR-code access
+ * AND to /bar.php?tab=drinks (the bar shell also gates upstream, so
+ * this is defence in depth). */
+if (!knk_bar_is_open()) {
+    knk_bar_render_closed_and_exit("Drinks & orders");
+}
 
 /* Phase 6 — Stay logged in:
  * Remember the guest's email across visits via a 90-day cookie so they
@@ -361,12 +371,19 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
   .cat-title { font-family: 'Archivo Black', sans-serif; font-size: 16px; color: var(--brown-mid); padding: 6px 0; border-bottom: 2px solid var(--gold); margin: 12px 0 6px; letter-spacing: 0.02em; text-transform: uppercase; }
   .item { display:grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items:center; padding: 6px 0; border-bottom: 1px dashed var(--border); }
   .item .nm { font-weight: 600; color: var(--brown-deep); }
-  .item .pr { color: var(--muted); font-size: 13px; min-width: 80px; text-align: right; }
+  .item .pr { color: var(--muted); font-size: 13px; min-width: 90px; text-align: right;
+              display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+  .item .pr-row { display: inline-flex; align-items: baseline; gap: 4px; }
   .item input[type=number] { width: 56px; padding: 6px 8px; text-align: center; font-size: 14px; }
   .item .trend { font-size: 12px; margin-left: 4px; }
   .item .trend.up   { color: #b84c2b; }
   .item .trend.down { color: #1f5a1f; }
   .item .trend.flat { color: var(--muted); }
+  /* Inline mini-sparkline next to each market-eligible drink price.
+     ~60x16px lets every item show its recent trajectory at a glance,
+     so guests don't have to leave the menu to see who's moving. */
+  .item .spark { display: block; width: 60px; height: 16px; line-height: 0; }
+  .item .spark svg { display: block; width: 100%; height: 100%; }
   .tag-pill { display:inline-block; padding: 1px 7px; border-radius: 9px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-left: 6px; vertical-align: middle; }
   .tag-pill.crash { background: #b84c2b; color: #fff; animation: crashFlash 1.4s infinite; }
   .tag-pill.lock  { background: #c9aa71; color: #2a1a08; }
@@ -569,11 +586,9 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
       <input type="hidden" name="action" value="place_order">
       <input type="hidden" name="stamp_ts" value="<?= (int)$renderTs ?>">
 
-      <?php if ($marketOn): ?>
-        <div class="market-ribbon">
-          The Beer Stock Market is live — prices move in real time · <a href="/market.php" target="_blank">Watch the board ↗</a>
-        </div>
-      <?php endif; ?>
+<?php /* The Beer Stock Market ribbon used to point at /market.php — now
+       removed in favour of inline mini-sparklines next to each drink
+       price below. /market.php still exists for the TV display. */ ?>
 
       <div class="card">
         <h2>Menu</h2>
@@ -602,14 +617,29 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
                   <?php endif; ?>
                 </span>
                 <span class="pr">
-                  <?= h(knk_vnd($livePrice)) ?>
-                  <?php if ($isEligible && $trend === "up"): ?>
-                    <span class="trend up" title="Trending up">&#9650;</span>
-                  <?php elseif ($isEligible && $trend === "down"): ?>
-                    <span class="trend down" title="Trending down">&#9660;</span>
-                  <?php elseif ($isEligible): ?>
-                    <span class="trend flat" title="Flat">&ndash;</span>
+                  <?php if ($isEligible):
+                    /* Last ~16 price points for the inline sparkline.
+                     * Cheap query (one indexed read per drink). The
+                     * markup carries the points as a JSON data-spark
+                     * attribute that the JS at the bottom turns into
+                     * an inline SVG path on page load. */
+                    $spark_pts = knk_market_sparkline($code, 16);
+                  ?>
+                    <span class="spark"
+                          data-spark="<?= htmlspecialchars(json_encode($spark_pts), ENT_QUOTES, "UTF-8") ?>"
+                          data-trend="<?= h($trend) ?>"
+                          aria-hidden="true"></span>
                   <?php endif; ?>
+                  <span class="pr-row">
+                    <?= h(knk_vnd($livePrice)) ?>
+                    <?php if ($isEligible && $trend === "up"): ?>
+                      <span class="trend up" title="Trending up">&#9650;</span>
+                    <?php elseif ($isEligible && $trend === "down"): ?>
+                      <span class="trend down" title="Trending down">&#9660;</span>
+                    <?php elseif ($isEligible): ?>
+                      <span class="trend flat" title="Flat">&ndash;</span>
+                    <?php endif; ?>
+                  </span>
                 </span>
                 <input type="number" name="qty[<?= h($code) ?>]" min="0" max="20" step="1" value="0"
                        data-price="<?= (int)$livePrice ?>" class="qty-input" aria-label="Quantity of <?= h($it["name"]) ?>">
@@ -717,6 +747,38 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
     if (loc) loc.addEventListener('change', locChange);
     locChange();
     recalc();
+
+    /* Inline mini-sparklines next to each market-eligible drink. The
+     * server emits the last ~16 price points in a data-spark attribute;
+     * we turn each into a tiny SVG line chart. Colour follows the trend
+     * arrow so up/down/flat read identically to the existing indicator.
+     * Port of the renderSpark() helper in /market.php and /tv.php. */
+    function renderInlineSpark(el) {
+      var raw = el.getAttribute('data-spark') || '[]';
+      var pts; try { pts = JSON.parse(raw); } catch (_) { pts = []; }
+      if (!pts || pts.length < 2) return;
+      var trend = el.getAttribute('data-trend') || 'flat';
+      var color = trend === 'up'   ? '#1f5a1f'
+                : trend === 'down' ? '#b84c2b'
+                                   : '#7a8a8f';
+      var w = 60, h = 16;
+      var min = Math.min.apply(null, pts);
+      var max = Math.max.apply(null, pts);
+      var range = Math.max(1, max - min);
+      var stepX = w / Math.max(1, pts.length - 1);
+      var d = '';
+      for (var i = 0; i < pts.length; i++) {
+        var x = i * stepX;
+        var y = h - ((pts[i] - min) / range) * (h - 4) - 2;
+        d += (i === 0 ? 'M' : 'L') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+      }
+      el.innerHTML =
+        '<svg viewBox="0 0 ' + w + ' ' + h + '" preserveAspectRatio="none">' +
+          '<path d="' + d + '" fill="none" stroke="' + color +
+          '" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>' +
+        '</svg>';
+    }
+    document.querySelectorAll('.item .spark').forEach(renderInlineSpark);
   })();
 </script>
 
