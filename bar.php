@@ -36,6 +36,8 @@ define('KNK_BAR_FRAME', 1);
 
 require_once __DIR__ . '/includes/profile_store.php';
 require_once __DIR__ . '/includes/guests_store.php';
+require_once __DIR__ . '/includes/avatar_store.php';
+require_once __DIR__ . '/includes/notifications_store.php';
 
 /* ---- Anon-cookie identity bootstrap (mirror of /order.php) ----
  *
@@ -196,10 +198,13 @@ if ($BAR_TAB !== 'home') {
       font-weight: 700;
     }
     /* Top-right avatar — links to /bar.php?tab=profile.
-       Shows the first letter of the guest's display name on a circle of
-       gold over the deep brown header. Active state (when ON the profile
-       tab) gets a solid gold fill so it's visually obvious you're there. */
+       If the guest has uploaded a photo, we show that as a 34x34 circle.
+       Otherwise we fall back to the first letter of their display name on
+       a gold-edged circle. Active state (when ON the profile tab) gets a
+       solid gold ring. The red unread-dot in the corner appears when the
+       guest has unread notifications waiting. */
     .bar-shell-avatar {
+      position: relative;
       display: inline-flex; align-items: center; justify-content: center;
       width: 34px; height: 34px;
       border-radius: 50%;
@@ -210,6 +215,7 @@ if ($BAR_TAB !== 'home') {
       font-size: 0.95rem; line-height: 1;
       letter-spacing: 0;
       text-decoration: none;
+      overflow: visible; /* let the dot escape the circle */
       transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
       -webkit-tap-highlight-color: transparent;
     }
@@ -221,6 +227,27 @@ if ($BAR_TAB !== 'home') {
       background: #c9aa71;
       color: #1b0f04;
       border-color: #c9aa71;
+    }
+    .bar-shell-avatar.has-photo {
+      /* When showing a real photo we don't want the brown tinted bg
+         peeking out behind a transparent PNG corner. */
+      background: #1b0f04;
+      padding: 0;
+    }
+    .bar-shell-avatar-img {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      object-fit: cover;
+      display: block;
+    }
+    .bar-shell-avatar-dot {
+      position: absolute;
+      top: -2px; right: -2px;
+      width: 11px; height: 11px;
+      border-radius: 50%;
+      background: #d94343;
+      border: 2px solid #1b0f04; /* matches header bg, separates dot from photo */
+      box-shadow: 0 0 0 1px rgba(0,0,0,0.25);
     }
     .bar-shell-header-right {
       display: flex; align-items: center; gap: 0.65rem;
@@ -331,16 +358,55 @@ if ($BAR_TAB !== 'home') {
     $bar_initial = $bar_display !== ""
         ? mb_strtoupper(mb_substr($bar_display, 0, 1, "UTF-8"), "UTF-8")
         : "?";
+
+    /* Avatar photo URL (empty string means no photo uploaded → fall back
+     * to the initial-letter circle). Notifications unread count drives the
+     * red corner dot — capped at 99 by the store. */
+    $bar_avatar_url = "";
+    $bar_unread = 0;
+    if ($bar_email !== "") {
+        try {
+            $bar_avatar_url = knk_avatar_url_for($bar_email, $bar_guest_row);
+        } catch (Throwable $e) {
+            $bar_avatar_url = "";
+        }
+        try {
+            $bar_unread = (int)knk_notifications_unread_count($bar_email);
+        } catch (Throwable $e) {
+            $bar_unread = 0;
+        }
+    }
 ?>
   <div class="bar-shell">
     <header class="bar-shell-header">
       <a href="/" class="bar-shell-brand">KnK <em>Inn</em></a>
       <div class="bar-shell-header-right">
         <span class="bar-shell-tagline"><?= $BAR_TAB_LABEL[$BAR_TAB] ?></span>
-        <a class="bar-shell-avatar<?= $BAR_TAB === 'profile' ? ' is-active' : '' ?>"
+        <?php
+          $bar_avatar_classes = "bar-shell-avatar";
+          if ($BAR_TAB === 'profile') $bar_avatar_classes .= " is-active";
+          if ($bar_avatar_url !== "") $bar_avatar_classes .= " has-photo";
+
+          $bar_avatar_aria = "My account: " . $bar_display;
+          if ($bar_unread > 0) {
+              $bar_avatar_aria .= " (" . $bar_unread . " unread)";
+          }
+        ?>
+        <a class="<?= htmlspecialchars($bar_avatar_classes, ENT_QUOTES, "UTF-8") ?>"
            href="/bar.php?tab=profile"
-           aria-label="My account: <?= htmlspecialchars($bar_display, ENT_QUOTES, "UTF-8") ?>"
-           title="My account"><?= htmlspecialchars($bar_initial, ENT_QUOTES, "UTF-8") ?></a>
+           aria-label="<?= htmlspecialchars($bar_avatar_aria, ENT_QUOTES, "UTF-8") ?>"
+           title="My account"><?php
+          if ($bar_avatar_url !== "") {
+              echo '<img class="bar-shell-avatar-img" src="'
+                  . htmlspecialchars($bar_avatar_url, ENT_QUOTES, "UTF-8")
+                  . '" alt="">';
+          } else {
+              echo htmlspecialchars($bar_initial, ENT_QUOTES, "UTF-8");
+          }
+          if ($bar_unread > 0) {
+              echo '<span class="bar-shell-avatar-dot" aria-hidden="true"></span>';
+          }
+        ?></a>
       </div>
     </header>
 
