@@ -38,6 +38,7 @@ require_once __DIR__ . "/smtp_send.php";
 require_once __DIR__ . "/email_template.php";
 require_once __DIR__ . "/follows_store.php";
 require_once __DIR__ . "/notifications_store.php";
+require_once __DIR__ . "/darts_lobby.php";
 
 /* The anon-email domain matches the constant defined in order.php
  * (KNK_GUEST_ANON_DOMAIN). We re-declare it here so this file is
@@ -377,6 +378,11 @@ function knk_profile_apply_claim(string $token): ?string {
         knk_notifications_rekey_email($anon_email, $real_email);
     } catch (Throwable $e) {
         error_log("knk_profile_apply_claim/notifications: " . $e->getMessage());
+    }
+    try {
+        knk_darts_lobby_rekey_email($anon_email, $real_email);
+    } catch (Throwable $e) {
+        error_log("knk_profile_apply_claim/darts_lobby: " . $e->getMessage());
     }
 
     // Step 3 — merge / rename the guests row.

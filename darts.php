@@ -23,6 +23,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/includes/darts.php";
 require_once __DIR__ . "/includes/hours.php";
+require_once __DIR__ . "/includes/darts_lobby.php";
 
 /* Closed-hours gate. Outside service hours (07:30–12:30 / 16:00–23:30
  * Saigon time) we don't let new darts games start. */
@@ -110,6 +111,24 @@ if ($qs_game > 0) {
         exit;
     }
     $view = 'host_setup';
+}
+
+/* ----- Lobby state (Looking-for-Opponent) -----
+ * Only meaningful inside the bar shell where bar.php has already
+ * minted/restored a session anon-cookie. Standalone /darts.php
+ * (table-side QR codes) skips the lobby — those flows are about
+ * picking a specific board, not finding a stranger. */
+$lobby_email      = strtolower(trim((string)($_SESSION['order_email'] ?? '')));
+$show_lobby       = ($view === 'pick_board') && defined('KNK_BAR_FRAME') && $lobby_email !== '';
+$lobby_am_looking = false;
+$lobby_others     = [];
+$lobby_pending    = [];
+$recent_games     = [];
+if ($show_lobby) {
+    $lobby_am_looking = knk_darts_lobby_is_looking($lobby_email);
+    $lobby_others     = knk_darts_lobby_active_lookers($lobby_email, 25);
+    $lobby_pending    = knk_darts_lobby_pending_challenges($lobby_email, 5);
+    $recent_games     = knk_darts_recent_games_compact(10);
 }
 
 ?>
@@ -407,6 +426,119 @@ if ($qs_game > 0) {
 
     .small-link { color: var(--gold); text-decoration: none; font-size: 0.9rem; }
     .small-link:hover { text-decoration: underline; }
+
+    /* ============================================================
+     * Looking-for-Opponent lobby (pick_board view, bar shell only)
+     * ========================================================== */
+    .lobby-incoming { animation: lobby-pulse 1.4s ease-in-out infinite; }
+    @keyframes lobby-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201,170,113,0.45); }
+      50%      { box-shadow: 0 0 0 6px rgba(201,170,113,0); }
+    }
+    .lobby-incoming-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.6rem 0;
+      border-bottom: 1px solid rgba(201,170,113,0.12);
+    }
+    .lobby-incoming-row:last-child { border-bottom: none; }
+    .lobby-incoming-row .lobby-name {
+      font-weight: 700; color: var(--cream);
+    }
+    .lobby-incoming-row .lobby-actions { display: flex; gap: 0.4rem; }
+    .lobby-incoming-row .lobby-accept,
+    .lobby-incoming-row .lobby-decline {
+      padding: 0.42rem 0.95rem;
+      border-radius: 6px;
+      font-weight: 700;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    .lobby-incoming-row .lobby-accept {
+      background: var(--gold); color: var(--brown-deep, #1b0f04);
+      border-color: var(--gold);
+    }
+    .lobby-incoming-row .lobby-decline {
+      background: transparent; color: var(--cream-dim);
+      border-color: rgba(201,170,113,0.35);
+    }
+
+    .lobby-me-row {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 0.6rem;
+    }
+    .lobby-me-status {
+      font-weight: 600; color: var(--gold); font-size: 0.95rem;
+    }
+    .lobby-btn-primary {
+      padding: 0.7rem 1.1rem;
+      background: var(--gold); color: var(--brown-deep, #1b0f04);
+      border: none; border-radius: 8px;
+      font-family: "Archivo Black", sans-serif;
+      font-size: 0.95rem; letter-spacing: 0.04em;
+      cursor: pointer;
+      width: 100%;
+    }
+    .lobby-btn-ghost {
+      padding: 0.55rem 0.95rem;
+      background: transparent; color: var(--cream-dim);
+      border: 1px solid rgba(201,170,113,0.35);
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .lobby-list-wrap { margin-top: 1rem; }
+    .lobby-list-h {
+      font-size: 0.75rem; letter-spacing: 0.12em; text-transform: uppercase;
+      color: var(--cream-dim); margin: 0 0 0.4rem;
+    }
+    .lobby-list { list-style: none; padding: 0; margin: 0; }
+    .lobby-list-row {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.6rem;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid rgba(201,170,113,0.1);
+    }
+    .lobby-list-row:last-child { border-bottom: none; }
+    .lobby-list-row .lobby-name { font-weight: 600; color: var(--cream); }
+    .lobby-challenge {
+      padding: 0.4rem 0.85rem;
+      background: rgba(201,170,113,0.12);
+      color: var(--gold);
+      border: 1px solid rgba(201,170,113,0.45);
+      border-radius: 999px;
+      font-weight: 700;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .lobby-challenge:hover { background: rgba(201,170,113,0.25); }
+    .lobby-challenge.is-sent {
+      background: rgba(47,220,122,0.12);
+      color: #2fdc7a;
+      border-color: rgba(47,220,122,0.45);
+      cursor: default;
+    }
+
+    /* Recent games list */
+    .recent-games { list-style: none; padding: 0; margin: 0; }
+    .rg-row {
+      display: flex; gap: 0.7rem; align-items: baseline;
+      padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(201,170,113,0.08);
+      font-size: 0.92rem;
+    }
+    .rg-row:last-child { border-bottom: none; }
+    .rg-when {
+      flex: 0 0 auto;
+      color: var(--cream-dim); font-size: 0.78rem;
+      letter-spacing: 0.06em; min-width: 70px;
+    }
+    .rg-body { flex: 1 1 auto; min-width: 0; line-height: 1.35; }
+    .rg-winner { color: var(--gold); font-weight: 700; }
+    .rg-vs { color: var(--cream-dim); }
+    .rg-loser { color: var(--cream); }
+    .rg-meta { color: var(--cream-dim); font-size: 0.82rem; }
   </style>
 <?php if (!defined('KNK_BAR_FRAME')): ?>
 </head>
@@ -452,6 +584,112 @@ if ($qs_game > 0) {
           </a>
         <?php endforeach; ?>
       </div>
+
+      <?php if ($show_lobby): ?>
+      <!-- ============================================================
+           Looking-for-Opponent lobby. Only rendered inside the bar
+           shell — needs $_SESSION["order_email"] to identify the guest.
+           ============================================================ -->
+
+      <?php if (!empty($lobby_pending)): ?>
+        <!-- Incoming challenge cards — top of the section so a guest
+             scrolling in sees them immediately. Each has Accept /
+             Decline buttons that fire /api/darts_lobby.php. -->
+        <div class="card lobby-incoming" style="margin-top:1.4rem; border-color:var(--gold);">
+          <h2 style="margin-top:0">⚡ Someone wants to play you!</h2>
+          <?php foreach ($lobby_pending as $pc): ?>
+            <div class="lobby-incoming-row" data-challenge-id="<?= (int)$pc["id"] ?>">
+              <div class="lobby-name"><?= dh($pc["challenger_display"]) ?></div>
+              <div class="lobby-actions">
+                <button type="button" class="lobby-accept"  data-id="<?= (int)$pc["id"] ?>">Accept</button>
+                <button type="button" class="lobby-decline" data-id="<?= (int)$pc["id"] ?>">Decline</button>
+              </div>
+            </div>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
+
+      <div class="card" style="margin-top:1.4rem">
+        <h2 style="margin-top:0">Looking for an opponent?</h2>
+
+        <div id="lobbyMeRow" class="lobby-me-row">
+          <?php if ($lobby_am_looking): ?>
+            <div class="lobby-me-status is-on">
+              🟢 You're in the lobby — others can challenge you
+            </div>
+            <button type="button" id="lobbyClearBtn" class="lobby-btn-ghost">
+              Stop looking
+            </button>
+          <?php else: ?>
+            <p class="lede" style="margin:0 0 0.6rem">
+              Tap below and your name shows up to other guests on the darts tab.
+              First Challenge that lands wins your seat.
+            </p>
+            <button type="button" id="lobbySetBtn" class="lobby-btn-primary">
+              I'm looking for an opponent
+            </button>
+          <?php endif; ?>
+        </div>
+
+        <?php if (!empty($lobby_others)): ?>
+          <div class="lobby-list-wrap">
+            <h3 class="lobby-list-h">Others looking now</h3>
+            <ul class="lobby-list" id="lobbyList">
+              <?php foreach ($lobby_others as $lo):
+                $oe = (string)$lo["email"];
+                $od = (string)($lo["display_name"] ?: $oe);
+              ?>
+                <li class="lobby-list-row" data-target-email="<?= dh($oe) ?>">
+                  <span class="lobby-name"><?= dh($od) ?></span>
+                  <button type="button" class="lobby-challenge"
+                          data-target="<?= dh($oe) ?>">Challenge</button>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          </div>
+        <?php endif; ?>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($show_lobby && !empty($recent_games)): ?>
+      <!-- Recent games — last 10 across all boards. A bit of "what's
+           been going on" social proof for the bar tab. -->
+      <div class="card" style="margin-top:1.4rem">
+        <h2 style="margin-top:0">Recent games</h2>
+        <ul class="recent-games">
+          <?php foreach ($recent_games as $rg):
+            $when_ago = $rg["finished_ts"] > 0
+              ? max(0, time() - $rg["finished_ts"])
+              : 0;
+            if ($when_ago < 60)            $ago_lbl = "just now";
+            elseif ($when_ago < 3600)      $ago_lbl = (int)round($when_ago / 60) . " min ago";
+            elseif ($when_ago < 86400)     $ago_lbl = (int)round($when_ago / 3600) . " hr ago";
+            else                           $ago_lbl = (int)round($when_ago / 86400) . "d ago";
+
+            $type_label = strtoupper($rg["game_type"]);
+          ?>
+            <li class="rg-row">
+              <div class="rg-when"><?= dh($ago_lbl) ?></div>
+              <div class="rg-body">
+                <span class="rg-winner"><?= dh($rg["winner_name"] ?: "—") ?></span>
+                <span class="rg-vs"> beat </span>
+                <?php
+                  $others = array_values(array_filter($rg["players"], function ($n) use ($rg) {
+                    return $n !== $rg["winner_name"];
+                  }));
+                ?>
+                <span class="rg-loser"><?= dh(implode(", ", $others) ?: "—") ?></span>
+                <span class="rg-meta"> · <?= dh($type_label) ?>
+                  <?php if (!empty($rg["board_name"])): ?>
+                    · <?= dh($rg["board_name"]) ?>
+                  <?php endif; ?>
+                </span>
+              </div>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <?php endif; ?>
 
       <div class="card" style="margin-top:1.4rem">
         <h2 style="margin-top:0">Got a join code?</h2>
@@ -563,6 +801,127 @@ if ($qs_game > 0) {
     function setCookie(name, val) {
       document.cookie = name + "=" + encodeURIComponent(val) + "; path=/; max-age=86400; SameSite=Lax";
     }
+
+    /* ============================================================
+     * PICK BOARD — Looking-for-Opponent lobby wiring
+     * ============================================================ */
+    if (VIEW === 'pick_board') (function () {
+      var SHOW_LOBBY = <?= $show_lobby ? 'true' : 'false' ?>;
+      if (!SHOW_LOBBY) return;
+
+      var setBtn   = $('#lobbySetBtn');
+      var clearBtn = $('#lobbyClearBtn');
+
+      function call(action, extra) {
+        var fd = new FormData();
+        fd.append('action', action);
+        if (extra) for (var k in extra) fd.append(k, extra[k]);
+        return fetch('/api/darts_lobby.php', {
+          method: 'POST', body: fd, credentials: 'same-origin'
+        }).then(function (r) { return r.json(); });
+      }
+
+      function reload() {
+        // Server-rendered the page state, simplest way to refresh
+        // is to reload — keeps the UI in lock-step with the DB.
+        window.location.reload();
+      }
+
+      if (setBtn) {
+        setBtn.addEventListener('click', function () {
+          setBtn.disabled = true;
+          setBtn.textContent = "Joining the lobby...";
+          call('set_looking').then(function (j) {
+            if (!j || !j.ok) {
+              setBtn.disabled = false;
+              setBtn.textContent = "I'm looking for an opponent";
+              alert((j && j.error) || "Couldn't join the lobby.");
+              return;
+            }
+            reload();
+          });
+        });
+      }
+
+      if (clearBtn) {
+        clearBtn.addEventListener('click', function () {
+          clearBtn.disabled = true;
+          call('clear').then(function () { reload(); });
+        });
+      }
+
+      $$('.lobby-challenge').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var target = btn.getAttribute('data-target') || '';
+          if (!target || btn.classList.contains('is-sent')) return;
+          var oldText = btn.textContent;
+          btn.disabled = true;
+          btn.textContent = "Sending...";
+          call('challenge', { target_email: target }).then(function (j) {
+            if (j && j.ok) {
+              btn.classList.add('is-sent');
+              btn.textContent = "Sent ✓";
+            } else {
+              btn.disabled = false;
+              btn.textContent = oldText;
+              alert((j && j.error) || "Couldn't fire the challenge.");
+            }
+          });
+        });
+      });
+
+      $$('.lobby-accept').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-id');
+          btn.disabled = true; btn.textContent = "Starting game...";
+          call('respond', { challenge_id: id, accept: 1 }).then(function (j) {
+            if (j && j.ok && j.game_id) {
+              // Land both players on the new game's view. Frame-aware
+              // so we stay inside the bar shell when wrapped.
+              var prefix = <?= json_encode(defined('KNK_BAR_FRAME') ? '/bar.php?tab=darts&game=' : '/darts.php?game=') ?>;
+              window.location.href = prefix + j.game_id;
+            } else {
+              btn.disabled = false; btn.textContent = "Accept";
+              alert((j && j.error) || "Couldn't accept.");
+            }
+          });
+        });
+      });
+
+      $$('.lobby-decline').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var id = btn.getAttribute('data-id');
+          btn.disabled = true; btn.textContent = "Declining...";
+          call('respond', { challenge_id: id, accept: 0 }).then(function () { reload(); });
+        });
+      });
+
+      // Polling — refresh the lobby state every 8s so other guests
+      // showing up in the list / new incoming challenges appear
+      // without manual refresh. We just diff a few signal counts;
+      // any meaningful change triggers a full reload.
+      var lastState = {
+        am_looking:  <?= $lobby_am_looking ? 'true' : 'false' ?>,
+        lookers:     <?= count($lobby_others) ?>,
+        challenges:  <?= count($lobby_pending) ?>
+      };
+      setInterval(function () {
+        call('state').then(function (j) {
+          if (!j || !j.ok || !j.state) return;
+          var s = j.state;
+          var sig = {
+            am_looking: !!s.am_looking,
+            lookers:    (s.lookers || []).length,
+            challenges: (s.incoming_challenges || []).length
+          };
+          if (sig.am_looking !== lastState.am_looking
+              || sig.lookers     !== lastState.lookers
+              || sig.challenges  !== lastState.challenges) {
+            reload();
+          }
+        });
+      }, 8000);
+    })();
 
     /* ============================================================
      * HOST SETUP
