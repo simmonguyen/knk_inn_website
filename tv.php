@@ -817,10 +817,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-stats.is-hidden { display: none; }
   /* When 2+ boards are mid-game, the column is full of live scores —
    * keep Recent games visible (1 row of social proof) but drop the
-   * Top scoring + Most-played cards so the live games don't get
-   * squashed. JS adds .is-compact in that case. */
-  .darts-stats.is-compact #ds-card-top,
-  .darts-stats.is-compact #ds-card-pie { display: none; }
+   * Top scoring card so the live games don't get squashed. JS adds
+   * .is-compact in that case. */
+  .darts-stats.is-compact #ds-card-top { display: none; }
   .darts-stats .stat-card {
     background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
     border: 1px solid var(--line);
@@ -1591,32 +1590,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         <?php endif; ?>
       </div>
 
-      <div class="stat-card" id="ds-card-pie">
-        <h4>🥧 Most-played</h4>
-        <?php if (empty($darts_stats["pie"]["slices"])): ?>
-          <div class="empty">No games yet.</div>
-        <?php else: ?>
-          <div class="ds-pie-wrap">
-            <svg class="ds-pie" viewBox="0 0 100 100" aria-hidden="true">
-              <?php foreach ($darts_stats["pie"]["slices"] as $s): ?>
-                <path d="<?= h($s["d"]) ?>"
-                      fill="<?= h($s["color"]) ?>"
-                      stroke="#0f0905" stroke-width="0.8"/>
-              <?php endforeach; ?>
-            </svg>
-            <ul class="ds-legend">
-              <?php foreach ($darts_stats["pie"]["slices"] as $s): ?>
-                <li>
-                  <span class="dot" style="background:<?= h($s["color"]) ?>"></span>
-                  <span class="lbl"><?= h($s["label"]) ?></span>
-                  <span class="pct"><?= (int)$s["pct"] ?>%</span>
-                  <span class="cnt"><?= (int)$s["n"] ?>g</span>
-                </li>
-              <?php endforeach; ?>
-            </ul>
-          </div>
-        <?php endif; ?>
-      </div>
+      <?php /* Most-played pie card lived here. Dropped — the right
+              column was too crowded with three stat cards stacked.
+              The data still flows in $darts_stats["pie"] in case a
+              future admin view wants it. */ ?>
     </div>
   </section>
 
@@ -3179,33 +3156,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       topCard.innerHTML = html2;
     }
 
-    var pieCard = document.getElementById("ds-card-pie");
-    if (pieCard) {
-      var slices = pie.slices || [];
-      var html3 = '<h4>🥧 Most-played</h4>';
-      if (slices.length === 0) {
-        html3 += '<div class="empty">No games yet.</div>';
-      } else {
-        var paths = "";
-        var legend = "";
-        slices.forEach(function (s) {
-          paths += '<path d="' + escapeHtml(s.d) + '"'
-                +    ' fill="' + escapeHtml(s.color) + '"'
-                +    ' stroke="#0f0905" stroke-width="0.8"/>';
-          legend += '<li>'
-                 +   '<span class="dot" style="background:' + escapeHtml(s.color) + '"></span>'
-                 +   '<span class="lbl">' + escapeHtml(s.label) + '</span>'
-                 +   '<span class="pct">' + (s.pct | 0) + '%</span>'
-                 +   '<span class="cnt">' + (s.n | 0)   + 'g</span>'
-                 + '</li>';
-        });
-        html3 += '<div class="ds-pie-wrap">'
-              +    '<svg class="ds-pie" viewBox="0 0 100 100" aria-hidden="true">' + paths + '</svg>'
-              +    '<ul class="ds-legend">' + legend + '</ul>'
-              +  '</div>';
-      }
-      pieCard.innerHTML = html3;
-    }
+    /* Most-played pie card was removed — column was getting crowded.
+     * stats.pie still arrives from the API but there's no DOM target
+     * to render into, so we ignore it. */
   }
 
   // ============================================================
