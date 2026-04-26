@@ -369,21 +369,22 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
 
   .cat { margin: 14px 0; }
   .cat-title { font-family: 'Archivo Black', sans-serif; font-size: 16px; color: var(--brown-mid); padding: 6px 0; border-bottom: 2px solid var(--gold); margin: 12px 0 6px; letter-spacing: 0.02em; text-transform: uppercase; }
-  .item { display:grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items:center; padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .item { display:grid; grid-template-columns: 1fr auto auto auto; gap: 10px; align-items:center; padding: 6px 0; border-bottom: 1px dashed var(--border); }
   .item .nm { font-weight: 600; color: var(--brown-deep); }
-  .item .pr { color: var(--muted); font-size: 13px; min-width: 90px; text-align: right;
-              display: inline-flex; flex-direction: column; align-items: flex-end; gap: 2px; }
-  .item .pr-row { display: inline-flex; align-items: baseline; gap: 4px; }
+  .item .pr { color: var(--muted); font-size: 13px; min-width: 80px; text-align: right;
+              display: inline-flex; align-items: baseline; gap: 4px; justify-content: flex-end; }
   .item input[type=number] { width: 56px; padding: 6px 8px; text-align: center; font-size: 14px; }
-  .item .trend { font-size: 12px; margin-left: 4px; }
+  .item .trend { font-size: 12px; }
   .item .trend.up   { color: #b84c2b; }
   .item .trend.down { color: #1f5a1f; }
   .item .trend.flat { color: var(--muted); }
-  /* Inline mini-sparkline next to each market-eligible drink price.
-     ~60x16px lets every item show its recent trajectory at a glance,
-     so guests don't have to leave the menu to see who's moving. */
+  /* Inline mini-sparkline — sits between the drink name (left) and
+     the price (right). Fixed width so prices stay column-aligned. */
   .item .spark { display: block; width: 60px; height: 16px; line-height: 0; }
   .item .spark svg { display: block; width: 100%; height: 100%; }
+  /* Placeholder for drinks NOT on the market — keeps the grid columns
+     aligned across the menu so prices always sit in the same place. */
+  .item .spark-empty { display: block; width: 60px; height: 16px; }
   .tag-pill { display:inline-block; padding: 1px 7px; border-radius: 9px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; font-weight: 700; margin-left: 6px; vertical-align: middle; }
   .tag-pill.crash { background: #b84c2b; color: #fff; animation: crashFlash 1.4s infinite; }
   .tag-pill.lock  { background: #c9aa71; color: #2a1a08; }
@@ -616,30 +617,30 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
                     <span class="tag-pill lock">Special</span>
                   <?php endif; ?>
                 </span>
+                <?php if ($isEligible):
+                  /* Last ~16 price points for the inline sparkline.
+                   * Cheap query (one indexed read per drink). The
+                   * markup carries the points as a JSON data-spark
+                   * attribute that the JS at the bottom turns into
+                   * an inline SVG path on page load. */
+                  $spark_pts = knk_market_sparkline($code, 16);
+                ?>
+                  <span class="spark"
+                        data-spark="<?= htmlspecialchars(json_encode($spark_pts), ENT_QUOTES, "UTF-8") ?>"
+                        data-trend="<?= h($trend) ?>"
+                        aria-hidden="true"></span>
+                <?php else: ?>
+                  <span class="spark-empty" aria-hidden="true"></span>
+                <?php endif; ?>
                 <span class="pr">
-                  <?php if ($isEligible):
-                    /* Last ~16 price points for the inline sparkline.
-                     * Cheap query (one indexed read per drink). The
-                     * markup carries the points as a JSON data-spark
-                     * attribute that the JS at the bottom turns into
-                     * an inline SVG path on page load. */
-                    $spark_pts = knk_market_sparkline($code, 16);
-                  ?>
-                    <span class="spark"
-                          data-spark="<?= htmlspecialchars(json_encode($spark_pts), ENT_QUOTES, "UTF-8") ?>"
-                          data-trend="<?= h($trend) ?>"
-                          aria-hidden="true"></span>
+                  <?= h(knk_vnd($livePrice)) ?>
+                  <?php if ($isEligible && $trend === "up"): ?>
+                    <span class="trend up" title="Trending up">&#9650;</span>
+                  <?php elseif ($isEligible && $trend === "down"): ?>
+                    <span class="trend down" title="Trending down">&#9660;</span>
+                  <?php elseif ($isEligible): ?>
+                    <span class="trend flat" title="Flat">&ndash;</span>
                   <?php endif; ?>
-                  <span class="pr-row">
-                    <?= h(knk_vnd($livePrice)) ?>
-                    <?php if ($isEligible && $trend === "up"): ?>
-                      <span class="trend up" title="Trending up">&#9650;</span>
-                    <?php elseif ($isEligible && $trend === "down"): ?>
-                      <span class="trend down" title="Trending down">&#9660;</span>
-                    <?php elseif ($isEligible): ?>
-                      <span class="trend flat" title="Flat">&ndash;</span>
-                    <?php endif; ?>
-                  </span>
                 </span>
                 <input type="number" name="qty[<?= h($code) ?>]" min="0" max="20" step="1" value="0"
                        data-price="<?= (int)$livePrice ?>" class="qty-input" aria-label="Quantity of <?= h($it["name"]) ?>">
