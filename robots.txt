@@ -15,7 +15,7 @@ Disallow: /bookings.php
 Disallow: /bookings.ics.php
 Disallow: /photos.php
 Disallow: /confirm-booking.php
-Disallow: /order-admin.php
+Disallow: /orders.php
 Disallow: /order-received.php
 
 # Transactional / form endpoints — no reason to index these

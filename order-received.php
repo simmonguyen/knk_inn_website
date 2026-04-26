@@ -59,7 +59,7 @@ if (!empty($order["notes"])) {
 }
 $body .= "<div style='margin-top:10px;color:#6e5d40;'><b>Total:</b> " . knk_vnd((int)$order["total_vnd"]) . " (incl. VAT)</div>";
 $body .= "</div>";
-$body .= "<p><a href='order-admin.php' style='display:inline-block;background:#180c03;color:#c9aa71;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700;'>Back to orders</a></p>";
+$body .= "<p><a href='orders.php' style='display:inline-block;background:#180c03;color:#c9aa71;padding:12px 18px;border-radius:6px;text-decoration:none;font-weight:700;'>Back to orders</a></p>";
 
 echo knk_order_result_page($heading, $body);
 

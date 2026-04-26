@@ -2,7 +2,7 @@
 <!--
   KnK Inn — public sitemap
   Only pages Google should index. Staff-only pages (bookings.php, photos.php,
-  order-admin, order-received, confirm-booking, bookings.ics.php) are deliberately
+  orders, order-received, confirm-booking, bookings.ics.php) are deliberately
   excluded and also disallowed in /robots.txt.
 -->
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -176,7 +176,7 @@ function knk_email_bar_new_order(array $order, string $siteUrl = "https://knkinn
         "KnK Inn — new order (" . $locLabel . ")",
         "New order from " . $order["email"] . " — " . knk_vnd((int)$order["total_vnd"]),
         $body,
-        "Open /order-admin.php for the live list."
+        "Open /orders.php for the live list."
     );
 
     $plain = "New KnK Inn order\n"

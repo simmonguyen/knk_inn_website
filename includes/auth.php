@@ -239,7 +239,7 @@ function knk_role_label(string $role): string {
 
 /** Where should this role land after login? Falls back to a sensible default. */
 function knk_role_home(string $role): string {
-    if ($role === "bartender") return "/order-admin.php";
+    if ($role === "bartender") return "/orders.php";
     return "/bookings.php";
 }
 
@@ -353,7 +353,7 @@ function knk_set_user_permissions(int $user_id, array $perms): void {
 function knk_user_nav(array $me): array {
     $items = [
         "bookings" => ["href" => "/bookings.php",            "label" => knk_t("nav.bookings")],
-        "orders"   => ["href" => "/order-admin.php",         "label" => knk_t("nav.orders")],
+        "orders"   => ["href" => "/orders.php",              "label" => knk_t("nav.orders")],
         "guests"   => ["href" => "/bookings.php?tab=guests", "label" => knk_t("nav.guests")],
         "sales"    => ["href" => "/sales.php",               "label" => knk_t("nav.sales")],
         "menu"     => ["href" => "/menu.php",                "label" => knk_t("nav.menu")],

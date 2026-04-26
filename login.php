@@ -3,7 +3,7 @@
  * KnK Inn — /login.php
  *
  * Unified staff login. Replaces the per-page shared-password flow on
- * bookings.php / order-admin.php / photos.php.
+ * bookings.php / orders.php / photos.php.
  *
  * Accepts ?next=/some/page to bounce the user back where they came from.
  */

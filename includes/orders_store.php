@@ -181,7 +181,7 @@ function orders_set_status_by_token(string $token, string $status): ?array {
  * Permanently delete an order by id. Returns the deleted order (so the
  * caller can audit-log it) or null if no order matched.
  *
- * Used by /order-admin.php to clean up test orders. Super-admin only —
+ * Used by /orders.php to clean up test orders. Super-admin only —
  * the caller is expected to gate this.
  */
 function orders_delete_by_id(string $id): ?array {
