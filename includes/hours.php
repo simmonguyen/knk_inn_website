@@ -27,6 +27,8 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . "/settings_store.php";
+
 if (!defined("KNK_BAR_TZ")) {
     define("KNK_BAR_TZ", "Asia/Ho_Chi_Minh");
 }
@@ -66,8 +68,17 @@ function knk_bar_public_windows(): array {
     ];
 }
 
-/** True if the bar is currently open in Saigon time. */
+/**
+ * True if the bar is currently open in Saigon time, OR if the
+ * "Force open (testing)" override is set in /settings.php.
+ *
+ * The force-open toggle is a kill-switch the other way round: it
+ * keeps the doors digital-open 24/7 so Ben can test ordering /
+ * jukebox / darts while the bar is physically closed, without
+ * waiting for a service window. Toggle it off again before service.
+ */
 function knk_bar_is_open(?int $unix_now = null): bool {
+    if (knk_setting_bool("bar_force_open", false)) return true;
     $minutes = knk_bar_now_minutes($unix_now);
     foreach (knk_bar_windows() as $w) {
         $s = knk_bar_hhmm_to_minutes($w[0]);

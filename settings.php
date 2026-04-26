@@ -88,6 +88,14 @@ elseif ($action === "save_notification_email") {
             : "Notification email saved: {$email}";
     }
 }
+elseif ($action === "save_bar_force_open") {
+    $on = !empty($_POST["enabled"]) ? "1" : "0";
+    knk_setting_set("bar_force_open", $on, $me_id);
+    knk_audit("settings.update", "settings", "bar_force_open", ["value" => $on]);
+    $flash = $on === "1"
+        ? "Bar is now FORCED OPEN (testing). Service-hour gate is overridden."
+        : "Bar is now back on the normal schedule.";
+}
 
 if ($action !== "") {
     $qs = [];
@@ -103,12 +111,13 @@ $error = (string)($_GET["err"] ?? "");
 /* --------------------------------------------------------------------
  * Read current values for display
  * ------------------------------------------------------------------ */
-$mark_on      = knk_setting_bool("marketing_reminders_enabled", true);
-$alerts_on    = knk_setting_bool("owner_order_notifications_enabled", true);
-$notif_email  = (string)knk_setting("owner_notification_email", "");
-$days_before  = knk_setting_int("marketing_reminder_days_before", 7);
-$owner_email  = knk_settings_owner_email();
-$effective    = $notif_email !== "" ? $notif_email : ($owner_email ?: "(none set yet)");
+$mark_on        = knk_setting_bool("marketing_reminders_enabled", true);
+$alerts_on      = knk_setting_bool("owner_order_notifications_enabled", true);
+$notif_email    = (string)knk_setting("owner_notification_email", "");
+$days_before    = knk_setting_int("marketing_reminder_days_before", 7);
+$owner_email    = knk_settings_owner_email();
+$effective      = $notif_email !== "" ? $notif_email : ($owner_email ?: "(none set yet)");
+$force_open_on  = knk_setting_bool("bar_force_open", false);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -280,6 +289,38 @@ $effective    = $notif_email !== "" ? $notif_email : ($owner_email ?: "(none set
         <?php else: ?>
           <input type="hidden" name="enabled" value="1">
           <button type="submit">Turn on alerts</button>
+        <?php endif; ?>
+      </form>
+    </section>
+
+    <!-- Force bar open (testing override) -->
+    <section class="card">
+      <h2>Force bar open (testing)</h2>
+      <p class="explain">
+        Normally the bar self-gates outside service hours
+        (08:00&ndash;12:00 and 16:30&ndash;23:00 Saigon time) &mdash;
+        drinks orders, jukebox requests, and darts games all show a
+        &ldquo;closed&rdquo; splash, and price ticks freeze. Flip this
+        on to override the gate and keep everything open 24/7. Useful
+        for testing or for showing the menu to a friend at lunchtime.
+        <strong>Remember to switch it off again before service.</strong>
+      </p>
+
+      <div class="status-row">
+        <?php if ($force_open_on): ?>
+          <span class="status-pill on"><span class="dot"></span>Forced open</span>
+        <?php else: ?>
+          <span class="status-pill off"><span class="dot"></span>Normal hours</span>
+        <?php endif; ?>
+      </div>
+
+      <form method="post" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <input type="hidden" name="action" value="save_bar_force_open">
+        <?php if ($force_open_on): ?>
+          <button type="submit" class="ghost">Back to normal hours</button>
+        <?php else: ?>
+          <input type="hidden" name="enabled" value="1">
+          <button type="submit">Force bar open</button>
         <?php endif; ?>
       </form>
     </section>
