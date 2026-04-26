@@ -346,37 +346,26 @@ function knk_darts_lobby_challenge_respond(int $challenge_id, string $email, boo
         $chal_row       = knk_guest_find_by_email($challenger);
         $chal_disp      = knk_profile_display_name_for($challenger, $chal_row);
 
-        // Create the game with the LOOKER as host. If join_game then
-        // fails (e.g. the slot logic gets surprised by some pre-existing
-        // row, or a transient DB hiccup), we back out the half-formed
-        // game so we don't leave an orphan blocking the board.
+        // Create the game with the LOOKER as host AND the CHALLENGER as
+        // player 2 in a single transaction. We don't use the regular
+        // knk_darts_create_game + knk_darts_join_game pair because that
+        // splits the work across two separate transactions; the second
+        // transaction's slot-finding SELECT was occasionally not seeing
+        // the host row committed by the first (suspected stacked-cursor
+        // weirdness on Matbao's MariaDB), which surfaced as a bogus
+        // SQLSTATE 1062 'Duplicate entry "X-1"' when join_game tried to
+        // insert player 2 into slot 1.
         $game_id = 0;
         try {
-            [$game, $host] = knk_darts_create_game(
-                $chosen_board, "501", "singles", 2, $looker_disp, $email
+            $game_id = knk_darts_lobby_create_2p_game(
+                $chosen_board, $looker_disp, $email, $chal_disp, $challenger
             );
-            $game_id = (int)$game["id"];
-
-            // Defensive sanity check — the host row should exist at
-            // slot 1 after create_game commits. If not, something's
-            // gone sideways (stale connection / duplicate trigger /
-            // half-rolled-back transaction) and we'd rather bail than
-            // attempt a join that's almost guaranteed to fail.
-            $check = $pdo->prepare(
-                "SELECT COUNT(*) FROM darts_players WHERE game_id = ?"
-            );
-            $check->execute([$game_id]);
-            $count = (int)$check->fetchColumn();
-            if ($count !== 1) {
-                throw new RuntimeException(
-                    "Game " . $game_id . " has " . $count
-                    . " players right after create — expected 1."
-                );
-            }
-
-            knk_darts_join_game($game_id, $chal_disp, $challenger);
         } catch (Throwable $e) {
-            // Roll back the game so the board frees up.
+            // Roll back the game so the board frees up. The single
+            // transaction above auto-rolls-back on throw — this is just
+            // a safety net for any rows that might've leaked through
+            // (e.g. if the engine stored partial state in another table
+            // before the failure).
             if ($game_id > 0) {
                 try {
                     $pdo->prepare("DELETE FROM darts_players WHERE game_id = ?")
@@ -388,7 +377,7 @@ function knk_darts_lobby_challenge_respond(int $challenge_id, string $email, boo
                             . $cleanup->getMessage());
                 }
             }
-            error_log("knk_darts_lobby_challenge_respond/create+join: "
+            error_log("knk_darts_lobby_challenge_respond/create_2p: "
                     . $e->getMessage());
             return [
                 "ok"      => false,
@@ -413,6 +402,92 @@ function knk_darts_lobby_challenge_respond(int $challenge_id, string $email, boo
     } catch (Throwable $e) {
         error_log("knk_darts_lobby_challenge_respond: " . $e->getMessage());
         return ["ok" => false, "game_id" => null, "error" => $e->getMessage()];
+    }
+}
+
+/* =========================================================
+   ATOMIC 2-PLAYER GAME CREATION (lobby challenge accept path)
+   ========================================================= */
+
+/**
+ * Insert a fresh 1v1 501 singles game with BOTH players in a single
+ * transaction. Used by the lobby's challenge-accept flow to avoid
+ * the split-transaction race where knk_darts_join_game's slot-finding
+ * SELECT didn't always see the host row committed by an earlier
+ * knk_darts_create_game call on the same connection.
+ *
+ * Returns the new game_id.  Throws on any failure; caller is
+ * expected to surface the error to the looker's UI.
+ */
+function knk_darts_lobby_create_2p_game(
+    int $board_id,
+    string $host_name, string $host_email,
+    string $p2_name,   string $p2_email
+): int {
+    $host_name = mb_substr(trim($host_name) ?: 'Host',  0, 40);
+    $p2_name   = mb_substr(trim($p2_name)   ?: 'Guest', 0, 40);
+
+    $host_email = strtolower(trim($host_email));
+    $p2_email   = strtolower(trim($p2_email));
+    if (!filter_var($host_email, FILTER_VALIDATE_EMAIL)) $host_email = '';
+    if (!filter_var($p2_email,   FILTER_VALIDATE_EMAIL)) $p2_email   = '';
+
+    /* Drain any lingering cursors before we start a new transaction
+     * so the upcoming INSERTs get a clean connection state. */
+    knk_darts_cleanup_stale();
+    if (knk_darts_active_game_on_board($board_id) !== null) {
+        throw new RuntimeException("That board already has an active game.");
+    }
+
+    $code = knk_darts_make_join_code();
+    $cfg  = knk_darts_default_config('501');
+    $st   = knk_darts_default_state('501', 2, 'singles');
+
+    $pdo = knk_db();
+    $pdo->beginTransaction();
+    try {
+        // 1. Game row.
+        $pdo->prepare(
+            "INSERT INTO darts_games
+                (board_id, game_type, format, player_count, status,
+                 host_slot_no, join_code, config, state_json)
+             VALUES (?, '501', 'singles', 2, 'lobby', 1, ?, ?, ?)"
+        )->execute([
+            $board_id, $code,
+            json_encode($cfg, JSON_UNESCAPED_UNICODE),
+            json_encode($st,  JSON_UNESCAPED_UNICODE),
+        ]);
+        $game_id = (int)$pdo->lastInsertId();
+
+        // 2. Host (slot 1).
+        $hostTok = bin2hex(random_bytes(20));
+        $pdo->prepare(
+            "INSERT INTO darts_players
+                (game_id, slot_no, name, team_no, is_host,
+                 session_token, guest_email)
+             VALUES (?, 1, ?, 0, 1, ?, ?)"
+        )->execute([
+            $game_id, $host_name, $hostTok,
+            mb_substr($host_email, 0, 190),
+        ]);
+
+        // 3. Player 2 (slot 2).
+        $p2Tok = bin2hex(random_bytes(20));
+        $pdo->prepare(
+            "INSERT INTO darts_players
+                (game_id, slot_no, name, team_no, is_host,
+                 session_token, guest_email)
+             VALUES (?, 2, ?, 0, 0, ?, ?)"
+        )->execute([
+            $game_id, $p2_name, $p2Tok,
+            mb_substr($p2_email, 0, 190),
+        ]);
+
+        $pdo->commit();
+        return $game_id;
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) $pdo->rollBack();
+        throw $e;
     }
 }
 
