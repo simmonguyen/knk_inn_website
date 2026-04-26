@@ -544,6 +544,89 @@ function knk_jukebox_reject(int $id, string $reason, ?int $by_user = null): void
 }
 
 /* ==========================================================
+ * LYRIC OFFSETS (persisted per youtube_video_id)
+ * ========================================================== */
+
+/**
+ * Get the staff-synced lyric offset for a YouTube video, or null
+ * if no offset has been saved. Returned as a float in seconds —
+ * positive = lyrics later, negative = lyrics earlier.
+ */
+function knk_jukebox_lyric_offset_get(string $video_id): ?float {
+    $video_id = trim($video_id);
+    if ($video_id === "") return null;
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT offset_sec FROM jukebox_lyric_offsets
+              WHERE youtube_video_id = ? LIMIT 1"
+        );
+        $stmt->execute([$video_id]);
+        $v = $stmt->fetchColumn();
+        return $v === false || $v === null ? null : (float)$v;
+    } catch (Throwable $e) {
+        error_log("knk_jukebox_lyric_offset_get: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Upsert the lyric offset for a video. Clamps to ±30s so a stuck
+ * key or fat-fingered nudge can't write a nonsense value. Returns
+ * the value actually saved, or null on failure.
+ */
+function knk_jukebox_lyric_offset_set(string $video_id, float $offset_sec, ?int $by_user = null): ?float {
+    $video_id = trim($video_id);
+    if ($video_id === "" || strlen($video_id) > 20) return null;
+    if ($offset_sec >  30.0) $offset_sec =  30.0;
+    if ($offset_sec < -30.0) $offset_sec = -30.0;
+    // Round to 2dp so the column's DECIMAL(6,2) gets a clean store.
+    $offset_sec = round($offset_sec, 2);
+    try {
+        $stmt = knk_db()->prepare(
+            "INSERT INTO jukebox_lyric_offsets
+                (youtube_video_id, offset_sec, updated_by_user_id)
+             VALUES (?, ?, ?)
+             ON DUPLICATE KEY UPDATE
+                offset_sec = VALUES(offset_sec),
+                updated_by_user_id = VALUES(updated_by_user_id)"
+        );
+        $stmt->execute([$video_id, $offset_sec, $by_user]);
+        return $offset_sec;
+    } catch (Throwable $e) {
+        error_log("knk_jukebox_lyric_offset_set: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * "Recently played at the bar" — finished plays, all guests, all
+ * time. Powers the public history list at the bottom of
+ * /bar.php?tab=music. Status='played' only (skipped / rejected /
+ * cancelled songs don't belong on the social wall). Newest first.
+ *
+ * Limit capped at 100. Indexed lookup on (status, played_at).
+ */
+function knk_jukebox_recent_played(int $limit = 25): array {
+    $limit = max(1, min(100, $limit));
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT id, youtube_video_id, youtube_title, youtube_channel,
+                    thumbnail_url, requester_name, played_at
+               FROM jukebox_queue
+              WHERE status = 'played'
+                AND played_at IS NOT NULL
+           ORDER BY played_at DESC
+              LIMIT {$limit}"
+        );
+        $stmt->execute();
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        error_log("knk_jukebox_recent_played: " . $e->getMessage());
+        return [];
+    }
+}
+
+/* ==========================================================
  * GUEST-SIDE LIST + CANCEL (bar.php?tab=music "Your songs")
  * ========================================================== */
 

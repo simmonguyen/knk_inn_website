@@ -111,6 +111,13 @@ $my_songs     = (defined('KNK_BAR_FRAME') && $my_email !== "")
     ? knk_jukebox_songs_for_email($my_email, 8)
     : [];
 
+/* "Recently played at the bar" panel — last 25 actually-played
+ * songs, all guests, all time. status='played' only (we hide the
+ * skipped / rejected / cancelled-by-guest ones from the bar's
+ * social view). Read here unconditionally — it's a single
+ * cheap indexed query and the list fits in any context. */
+$bar_recent = knk_jukebox_recent_played(25);
+
 /* One-shot flash banner from a recent cancel POST. */
 $jb_flash = (string)($_SESSION["jukebox_flash"] ?? "");
 unset($_SESSION["jukebox_flash"]);
@@ -364,6 +371,34 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
       font-size: 0.92rem;
     }
 
+    /* "Recently played at KnK" panel — public history wall. Same
+       overall shape as the up-next list but with a relative-time
+       suffix on each row and no enumeration. */
+    .bar-recent { list-style: none; padding: 0; margin: 0; }
+    .bar-recent li {
+      display: flex; gap: 0.7rem; align-items: center;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid rgba(201,170,113,0.08);
+    }
+    .bar-recent li:last-child { border-bottom: none; }
+    .bar-recent li img {
+      width: 46px; height: 34px; object-fit: cover;
+      border-radius: 3px; flex-shrink: 0;
+    }
+    .bar-recent .meta { flex: 1; min-width: 0; }
+    .bar-recent .meta .t {
+      font-weight: 600; font-size: 0.92rem; line-height: 1.3;
+      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+    }
+    .bar-recent .meta .who {
+      font-size: 0.78rem; color: var(--cream-dim);
+      margin-top: 0.15rem;
+    }
+    .bar-recent .meta .when {
+      color: var(--gold); letter-spacing: 0.04em;
+    }
+
     .footer-note {
       text-align: center; color: var(--cream-dim);
       font-size: 0.78rem; margin: 1.6rem 0 0; line-height: 1.5;
@@ -555,6 +590,41 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
           </ol>
         <?php endif; ?>
       </div>
+
+      <?php if (!empty($bar_recent)): ?>
+      <!-- Public history wall — every guest's plays, all time. The
+           same panel renders standalone (table-side QR codes get
+           it too) so guests can scroll the bar's "what's been on"
+           regardless of where they came in. -->
+      <div class="card">
+        <h2 class="section">Recently played at KnK</h2>
+        <ul class="bar-recent">
+          <?php foreach ($bar_recent as $row):
+            $when_ts = !empty($row["played_at"])
+                ? strtotime((string)$row["played_at"]) : 0;
+            $ago = $when_ts > 0 ? max(0, time() - $when_ts) : 0;
+            if      ($ago < 60)    $ago_lbl = "just now";
+            elseif  ($ago < 3600)  $ago_lbl = (int)round($ago / 60)   . "m ago";
+            elseif  ($ago < 86400) $ago_lbl = (int)round($ago / 3600) . "h ago";
+            else                   $ago_lbl = (int)round($ago / 86400). "d ago";
+          ?>
+            <li>
+              <?php if (!empty($row["thumbnail_url"])): ?>
+                <img src="<?= jbh($row["thumbnail_url"]) ?>" alt="">
+              <?php endif; ?>
+              <div class="meta">
+                <div class="t"><?= jbh_yt($row["youtube_title"]) ?></div>
+                <div class="who">
+                  <?php $rn = trim((string)$row["requester_name"]); ?>
+                  <?= $rn !== "" ? jbh($rn) : "Guest" ?>
+                  <span class="when"> · <?= jbh($ago_lbl) ?></span>
+                </div>
+              </div>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <?php endif; ?>
 
     <?php endif; ?>
 
