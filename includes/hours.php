@@ -32,17 +32,37 @@ if (!defined("KNK_BAR_TZ")) {
 }
 
 /**
- * The two daily service windows. Each entry is ["start_hhmm",
- * "end_hhmm"]. Times use 24h "HH:MM" format; the end is exclusive
- * (you're closed AT that minute).
+ * The two daily GATE windows — what knk_bar_is_open() enforces.
  *
- * Returned as a function (rather than a constant array) so future
- * iterations can overlay per-day settings without rewriting callers.
+ * These are 30 minutes WIDER than the public-facing hours on each
+ * side, on purpose: customers sometimes arrive a bit early or trail
+ * out a bit late, and we don't want the gate to slam in their face.
+ * The wider window also gives the cron a more reasonable hand-off
+ * before/after the bar physically opens or closes.
+ *
+ * Times use 24h "HH:MM" format; the end is exclusive (you're closed
+ * AT that minute).
  */
 function knk_bar_windows(): array {
     return [
         ["07:30", "12:30"],
         ["16:00", "23:30"],
+    ];
+}
+
+/**
+ * The PUBLIC-facing service windows — what we tell customers on the
+ * "We're closed" splash. Tighter than knk_bar_windows() by 30 min
+ * each side; the difference is the buffer that lets early/late
+ * arrivals still get through.
+ *
+ * If you want to advertise different hours, change THIS array (not
+ * knk_bar_windows). The gate stays generous.
+ */
+function knk_bar_public_windows(): array {
+    return [
+        ["08:00", "12:00"],
+        ["16:30", "23:00"],
     ];
 }
 
@@ -58,15 +78,18 @@ function knk_bar_is_open(?int $unix_now = null): bool {
 }
 
 /**
- * Next opening time as a "HH:MM" string in Saigon time. If we're
- * already open this returns the start of the CURRENT window (so the
- * caller can render "We're open until X" without extra logic). If we
- * are closed and there's no window left today, returns the first
- * window of tomorrow.
+ * Next PUBLIC opening time as a "HH:MM" string in Saigon time, used
+ * by the closed splash. We deliberately use the public windows here
+ * (08:00 / 16:30) rather than the wider gate windows (07:30 / 16:00)
+ * so the customer-facing message matches the customer-facing hours.
+ *
+ * The 30-minute buffer means a customer who arrives early sees
+ * "Back at 16:30" but the gate actually flips at 16:00 — surprise to
+ * the upside, never the other way round.
  */
 function knk_bar_next_open_hhmm(?int $unix_now = null): string {
     $minutes = knk_bar_now_minutes($unix_now);
-    $windows = knk_bar_windows();
+    $windows = knk_bar_public_windows();
     foreach ($windows as $w) {
         $s = knk_bar_hhmm_to_minutes($w[0]);
         if ($s > $minutes) return $w[0];
@@ -119,13 +142,23 @@ function knk_bar_closed_html(string $tab_label = ""): string {
     $next_open = knk_bar_next_open_hhmm();
     $area = $tab_label !== "" ? htmlspecialchars($tab_label, ENT_QUOTES, "UTF-8") : "The bar";
 
+    /* Build the "Open daily" line from the public windows so the
+     * displayed text always matches the source of truth. The dot
+     * separator (·) keeps the line tight on a phone width. */
+    $window_strs = [];
+    foreach (knk_bar_public_windows() as $w) {
+        $window_strs[] = $w[0] . ' – ' . $w[1];
+    }
+    $hours_line = implode(' · ', $window_strs);
+
     $card = '<div class="knk-closed-card" role="alert">'
           . '<div class="knk-closed-icon" aria-hidden="true">😴</div>'
           . '<h2 class="knk-closed-title">We\'re having a kip</h2>'
           . '<p class="knk-closed-sub">' . $area . ' is closed right now.<br>'
           . 'Back at <strong>' . htmlspecialchars($next_open, ENT_QUOTES, "UTF-8") . '</strong>.</p>'
           . '<p class="knk-closed-hours">Open daily<br>'
-          . '07:30 – 12:30 · 16:00 – 23:30</p>'
+          . htmlspecialchars($hours_line, ENT_QUOTES, "UTF-8")
+          . '</p>'
           . '</div>';
 
     $css = '<style>
