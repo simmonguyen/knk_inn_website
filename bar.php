@@ -38,6 +38,7 @@ require_once __DIR__ . '/includes/profile_store.php';
 require_once __DIR__ . '/includes/guests_store.php';
 require_once __DIR__ . '/includes/avatar_store.php';
 require_once __DIR__ . '/includes/notifications_store.php';
+require_once __DIR__ . '/includes/hours.php';
 
 /* ---- Anon-cookie identity bootstrap (mirror of /order.php) ----
  *
@@ -139,9 +140,18 @@ $BAR_TAB_LABEL = [
  */
 $BAR_INNER = '';
 if ($BAR_TAB !== 'home') {
-    ob_start();
-    include $BAR_TAB_PAGE[$BAR_TAB];
-    $BAR_INNER = ob_get_clean();
+    /* Bar-hours gate — drinks / music / darts are blocked outside
+     * service hours (07:30–12:30, 16:00–23:30 Saigon). 'profile' is
+     * always available so guests can still see their own history,
+     * follow people, and read notifications when the bar is closed. */
+    $BAR_HOURS_GATED = ['drinks', 'music', 'darts'];
+    if (in_array($BAR_TAB, $BAR_HOURS_GATED, true) && !knk_bar_is_open()) {
+        $BAR_INNER = knk_bar_closed_html($BAR_TAB_LABEL[$BAR_TAB] ?? '');
+    } else {
+        ob_start();
+        include $BAR_TAB_PAGE[$BAR_TAB];
+        $BAR_INNER = ob_get_clean();
+    }
 }
 
 ?><!DOCTYPE html>
@@ -416,9 +426,9 @@ if ($BAR_TAB !== 'home') {
           <h1 class="bar-home-greeting">Welcome to <em>KnK Inn</em></h1>
           <p class="bar-home-sub">What would you like to do?</p>
 
-          <a class="bar-home-btn" href="/bar.php?tab=darts">
-            <span class="icon">🎯</span>
-            <span class="label">Throw Darts</span>
+          <a class="bar-home-btn" href="/bar.php?tab=drinks">
+            <span class="icon">🍸</span>
+            <span class="label">Order Drinks</span>
             <span class="chev">›</span>
           </a>
           <a class="bar-home-btn" href="/bar.php?tab=music">
@@ -426,9 +436,9 @@ if ($BAR_TAB !== 'home') {
             <span class="label">Music Request</span>
             <span class="chev">›</span>
           </a>
-          <a class="bar-home-btn" href="/bar.php?tab=drinks">
-            <span class="icon">🍸</span>
-            <span class="label">Order Drinks</span>
+          <a class="bar-home-btn" href="/bar.php?tab=darts">
+            <span class="icon">🎯</span>
+            <span class="label">Throw Darts</span>
             <span class="chev">›</span>
           </a>
         </div>

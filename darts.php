@@ -22,6 +22,13 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/includes/darts.php";
+require_once __DIR__ . "/includes/hours.php";
+
+/* Closed-hours gate. Outside service hours (07:30–12:30 / 16:00–23:30
+ * Saigon time) we don't let new darts games start. */
+if (!knk_bar_is_open()) {
+    knk_bar_render_closed_and_exit("Darts");
+}
 
 function dh($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
 

@@ -27,6 +27,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/../includes/db.php";
 require_once __DIR__ . "/../includes/market_engine.php";
+require_once __DIR__ . "/../includes/hours.php";
 
 header("Content-Type: text/plain; charset=utf-8");
 
@@ -48,6 +49,14 @@ mkt_log("KnK Inn — market tick at " . date("c"));
 
 if (!knk_market_enabled()) {
     mkt_log("Market is OFF (see /market-admin.php). No-op.");
+    exit;
+}
+
+/* Bar-hours gate. Outside service hours (07:30–12:30 / 16:00–23:30
+ * Saigon) we freeze prices — the morning shift shouldn't see a 12-hour
+ * decay drop from an overnight tick that ran while the bar was closed. */
+if (!knk_bar_is_open()) {
+    mkt_log("Bar is closed (outside 07:30–12:30 / 16:00–23:30). Prices held.");
     exit;
 }
 

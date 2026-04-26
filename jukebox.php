@@ -16,6 +16,13 @@ declare(strict_types=1);
 session_start();
 
 require_once __DIR__ . "/includes/jukebox.php";
+require_once __DIR__ . "/includes/hours.php";
+
+/* Closed-hours gate. Outside service hours (07:30–12:30 / 16:00–23:30
+ * Saigon time) we don't accept new song requests. */
+if (!knk_bar_is_open()) {
+    knk_bar_render_closed_and_exit("Jukebox");
+}
 
 function jbh($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
 /* For YouTube-sourced text (titles, channel names) — decode once first
