@@ -74,6 +74,41 @@ try {
         knk_audit("darts.force_finish", "darts_games", (string)$gid);
         $flash = "Game force-ended.";
     }
+    elseif ($action === "wipe_history") {
+        /* One-shot test-data wipe. Deletes every darts game, throw,
+         * player, lobby entry, challenge — so the public stats panel
+         * on /tv.php starts from a clean slate once Simmo opens for
+         * real play. Boards (the physical hardware config) are kept;
+         * config row is kept. Confirmed via a "WIPE" type-to-confirm
+         * box on the form, plus knk_require_permission("darts"). */
+        $confirm = strtoupper(trim((string)($_POST["confirm"] ?? "")));
+        if ($confirm !== "WIPE") {
+            throw new RuntimeException(
+                'Type WIPE in the confirm box to delete all darts game history.'
+            );
+        }
+        $pdo = knk_db();
+        $pdo->beginTransaction();
+        try {
+            // Order matters: throws → players → games (FK), then lobby + challenges.
+            $deleted_throws  = (int)$pdo->exec("DELETE FROM darts_throws");
+            $deleted_players = (int)$pdo->exec("DELETE FROM darts_players");
+            $deleted_games   = (int)$pdo->exec("DELETE FROM darts_games");
+            // Lobby + challenges may not exist on older sites — wrap each.
+            try { $pdo->exec("DELETE FROM darts_lobby"); }      catch (Throwable $e) {}
+            try { $pdo->exec("DELETE FROM darts_challenges"); } catch (Throwable $e) {}
+            $pdo->commit();
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            throw $e;
+        }
+        knk_audit("darts.wipe_history", null, null, [
+            "throws"  => $deleted_throws,
+            "players" => $deleted_players,
+            "games"   => $deleted_games,
+        ]);
+        $flash = "Wiped {$deleted_games} games, {$deleted_players} players, {$deleted_throws} throws. TV stats are clean.";
+    }
 } catch (Throwable $e) {
     $error = $e->getMessage();
 }
@@ -435,6 +470,28 @@ function da_game_label(string $type): string {
           </tbody>
         </table>
       <?php endif; ?>
+    </section>
+
+    <!-- WIPE HISTORY -->
+    <section class="card">
+      <h2>Wipe game history</h2>
+      <p class="explain">
+        Deletes every darts game, throw, and lobby entry. Useful to clear
+        out test data before opening night so the TV's "Recent games"
+        panel doesn't show fake 150s. Boards and settings are kept.
+        <strong>Cannot be undone.</strong>
+      </p>
+      <form method="post"
+            onsubmit="return confirm('Delete ALL darts game history? This cannot be undone.')"
+            style="display:flex; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-top:0.6rem">
+        <input type="hidden" name="action" value="wipe_history">
+        <label style="display:flex; gap:0.4rem; align-items:center">
+          <span class="muted" style="font-size:0.85rem">Type WIPE to confirm:</span>
+          <input type="text" name="confirm" autocomplete="off"
+                 style="width:90px; text-transform:uppercase; letter-spacing:0.1em">
+        </label>
+        <button type="submit" class="danger">Wipe darts history</button>
+      </form>
     </section>
 
   </main>
