@@ -96,6 +96,28 @@ elseif ($action === "save_bar_force_open") {
         ? "Bar is now FORCED OPEN (testing). Service-hour gate is overridden."
         : "Bar is now back on the normal schedule.";
 }
+elseif ($action === "save_share_rally") {
+    $on = !empty($_POST["enabled"]) ? "1" : "0";
+    knk_setting_set("share_rally_enabled", $on, $me_id);
+    knk_audit("settings.update", "settings", "share_rally_enabled", ["value" => $on]);
+    $flash = $on === "1"
+        ? "Share rally is ON — guests can crash the market via /share.php."
+        : "Share rally is OFF — /share.php still loads but no crashes fire.";
+}
+elseif ($action === "save_share_urls") {
+    $fb_url = trim((string)($_POST["share_url_facebook"] ?? ""));
+    $g_url  = trim((string)($_POST["share_url_google"] ?? ""));
+    $ta_url = trim((string)($_POST["share_url_tripadvisor"] ?? ""));
+    foreach (["share_url_facebook" => $fb_url,
+              "share_url_google" => $g_url,
+              "share_url_tripadvisor" => $ta_url] as $k => $v) {
+        knk_setting_set($k, $v, $me_id);
+    }
+    knk_audit("settings.update", "settings", "share_urls", [
+        "facebook" => $fb_url, "google" => $g_url, "tripadvisor" => $ta_url,
+    ]);
+    $flash = "Share-rally URLs saved.";
+}
 
 if ($action !== "") {
     $qs = [];
@@ -118,6 +140,10 @@ $days_before    = knk_setting_int("marketing_reminder_days_before", 7);
 $owner_email    = knk_settings_owner_email();
 $effective      = $notif_email !== "" ? $notif_email : ($owner_email ?: "(none set yet)");
 $force_open_on  = knk_setting_bool("bar_force_open", false);
+$share_rally_on = knk_setting_bool("share_rally_enabled", true);
+$share_url_fb   = (string)knk_setting("share_url_facebook", "");
+$share_url_g    = (string)knk_setting("share_url_google", "");
+$share_url_ta   = (string)knk_setting("share_url_tripadvisor", "");
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -322,6 +348,84 @@ $force_open_on  = knk_setting_bool("bar_force_open", false);
           <input type="hidden" name="enabled" value="1">
           <button type="submit">Force bar open</button>
         <?php endif; ?>
+      </form>
+    </section>
+
+    <!-- Share rally (Facebook / Google / TripAdvisor crash-the-market) -->
+    <section class="card">
+      <h2>Share rally — &ldquo;Crash the Market&rdquo;</h2>
+      <p class="explain">
+        Guests scan the alternating QR on the TV (or visit
+        <code>knkinn.com/share.php</code>) and tap a platform to share or
+        write a review. Each tap fires a market crash on the top trending
+        drinks &mdash; <strong>tier&nbsp;1</strong> Facebook (10%, 2&nbsp;min),
+        <strong>tier&nbsp;2</strong> Google review (20%, 2&nbsp;min),
+        <strong>tier&nbsp;3</strong> TripAdvisor review (35%, 5&nbsp;min).
+        24h cooldown per guest per platform so one regular can't spam it.
+      </p>
+
+      <div class="status-row">
+        <?php if ($share_rally_on): ?>
+          <span class="status-pill on"><span class="dot"></span>On</span>
+        <?php else: ?>
+          <span class="status-pill off"><span class="dot"></span>Off</span>
+        <?php endif; ?>
+      </div>
+
+      <form method="post" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <input type="hidden" name="action" value="save_share_rally">
+        <?php if ($share_rally_on): ?>
+          <button type="submit" class="ghost">Turn off share rally</button>
+        <?php else: ?>
+          <input type="hidden" name="enabled" value="1">
+          <button type="submit">Turn on share rally</button>
+        <?php endif; ?>
+      </form>
+
+      <hr style="border:0;border-top:1px solid var(--line,rgba(201,170,113,0.25));margin:1.2rem 0;">
+
+      <h3 style="margin:0 0 0.4rem;">Platform URLs (optional)</h3>
+      <p class="explain" style="margin-top:0;">
+        Where each platform button sends the guest. Leave a row blank
+        to use the search-fallback default (works fine, just less precise
+        than a direct write-review link).
+        <br><br>
+        <strong>Google Maps:</strong> paste either the full
+        <code>https://search.google.com/local/writereview?placeid=...</code>
+        URL, or just <code>placeid:XXXXX</code> &mdash; we'll build the URL.
+        Find the place ID at
+        <a href="https://developers.google.com/maps/documentation/places/web-service/place-id" target="_blank" rel="noopener">
+        developers.google.com/maps/documentation/places/web-service/place-id</a>.
+        <br>
+        <strong>TripAdvisor:</strong> paste the full
+        <code>https://www.tripadvisor.com/UserReviewEdit-...</code> URL
+        from your listing page.
+      </p>
+
+      <form method="post" style="margin-top:0.6rem; display:flex; flex-direction:column; gap:0.5rem;">
+        <input type="hidden" name="action" value="save_share_urls">
+        <label>
+          <span style="display:block;font-size:0.85rem;color:var(--cream-faint,#aaa);">Facebook share URL</span>
+          <input type="url" name="share_url_facebook"
+                 value="<?= htmlspecialchars($share_url_fb, ENT_QUOTES, "UTF-8") ?>"
+                 placeholder="https://www.facebook.com/sharer/sharer.php?u=https://knkinn.com/"
+                 style="width:100%; padding:0.5rem;">
+        </label>
+        <label>
+          <span style="display:block;font-size:0.85rem;color:var(--cream-faint,#aaa);">Google Maps review URL or <code>placeid:XXX</code></span>
+          <input type="text" name="share_url_google"
+                 value="<?= htmlspecialchars($share_url_g, ENT_QUOTES, "UTF-8") ?>"
+                 placeholder="placeid:ChIJN1t_..."
+                 style="width:100%; padding:0.5rem;">
+        </label>
+        <label>
+          <span style="display:block;font-size:0.85rem;color:var(--cream-faint,#aaa);">TripAdvisor review URL</span>
+          <input type="url" name="share_url_tripadvisor"
+                 value="<?= htmlspecialchars($share_url_ta, ENT_QUOTES, "UTF-8") ?>"
+                 placeholder="https://www.tripadvisor.com/UserReviewEdit-..."
+                 style="width:100%; padding:0.5rem;">
+        </label>
+        <div><button type="submit">Save URLs</button></div>
       </form>
     </section>
 
