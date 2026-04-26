@@ -528,7 +528,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     border-radius: 8px;
     background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
     text-align: center;
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+    transition: opacity 0.18s ease;
   }
+  .jbx-radio:hover { border-color: rgba(201,170,113,0.55); }
+  /* Muted state — user tapped the radio card to stop it. The pulse
+     freezes, opacity drops, and a "tap to resume" hint appears. */
+  .jbx-radio.is-muted { opacity: 0.55; }
+  .jbx-radio.is-muted .pulse { animation: none; opacity: 0.5; }
+  .jbx-radio .hint {
+    display: none;
+    font-size: 0.68rem; letter-spacing: 0.10em; text-transform: uppercase;
+    color: var(--cream-faint, rgba(245,233,209,0.55));
+    margin-top: 0.15rem;
+  }
+  .jbx-radio.is-muted .hint { display: block; }
   .jbx-radio .pulse {
     font-size: 1.9rem;
     animation: jbx-pulse 2s ease-in-out infinite;
@@ -731,6 +746,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * sports scrolls right-to-left as a marquee. Hidden state keeps
    * the row reserved so the panels above don't reflow. */
   .tv-ticker {
+    position: relative;        /* anchor for the lyric nudge buttons */
     overflow: hidden;
     white-space: nowrap;
     color: var(--fg);
@@ -739,6 +755,32 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     display: flex; align-items: center;
     min-height: 64px;
   }
+  /* Lyric nudge arrows — visible only when the ticker is in lyric
+     mode. Tap once to shift lyric timing ±0.25s. The same offset is
+     also bound to the [ ] keyboard keys for laptop control. */
+  .tv-lyric-nudge {
+    position: absolute; top: 50%;
+    transform: translateY(-50%);
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: rgba(201,170,113,0.10);
+    color: var(--gold, #c9aa71);
+    border: 1px solid rgba(201,170,113,0.45);
+    font-family: "Archivo Black", sans-serif;
+    font-size: 1.6rem; line-height: 1;
+    cursor: pointer;
+    display: none;
+    align-items: center; justify-content: center;
+    z-index: 5;
+    transition: background 0.15s ease, transform 0.05s ease;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+  .tv-lyric-nudge:hover  { background: rgba(201,170,113,0.22); }
+  .tv-lyric-nudge:active { transform: translateY(-50%) scale(0.94); }
+  .tv-lyric-nudge-left   { left:  1.2rem; }
+  .tv-lyric-nudge-right  { right: 1.2rem; }
+  .tv-ticker.is-lyric .tv-lyric-nudge { display: inline-flex; }
   .tv-ticker.is-hidden .tv-ticker-inner {
     visibility: hidden;
   }
@@ -748,6 +790,8 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
    * eye can pick events out of the stream. */
   .tv-ticker.is-sports {
     color: var(--fg);
+    font-size: 1.1rem;
+    letter-spacing: 0.05em;
   }
   .tv-ticker.is-sports .accent { color: var(--gold); font-weight: 700; }
   .tv-ticker.is-sports .sep    { color: var(--muted); margin: 0 0.6rem; }
@@ -760,7 +804,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-ticker-inner {
     display: inline-block;
     padding-left: 100%;
-    animation: tv-ticker-scroll 240s linear infinite;
+    animation: tv-ticker-scroll 320s linear infinite;
   }
   @keyframes tv-ticker-scroll {
     0%   { transform: translateX(0); }
@@ -924,10 +968,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       <?php endif; ?>
     </div>
 
-    <div class="jbx-radio" id="jbx-radio"<?= $jbx_now ? " hidden" : "" ?>>
+    <div class="jbx-radio" id="jbx-radio"<?= $jbx_now ? " hidden" : "" ?>
+         role="button" tabindex="0" aria-label="Toggle radio playback"
+         title="Tap to stop / resume the radio">
       <div class="pulse">📻</div>
       <h3>ON THE <span class="accent">RADIO</span></h3>
       <div class="station">Triple J · Australia</div>
+      <div class="hint">Tap to resume</div>
     </div>
 
     <div class="jbx-up" id="jbx-up"<?= empty($jbx_up_next) ? " hidden" : "" ?>>
@@ -1055,7 +1102,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
      showing. Crash announcements live in the TOP strip, not here. -->
 <footer class="tv-footer">
   <div class="tv-ticker is-hidden" id="tv-ticker">
+    <button class="tv-lyric-nudge tv-lyric-nudge-left"
+            id="tv-lyric-back" type="button"
+            title="Lyrics earlier (−0.25s)" aria-label="Lyrics earlier">‹</button>
     <span class="tv-ticker-inner" id="tv-ticker-inner"></span>
+    <button class="tv-lyric-nudge tv-lyric-nudge-right"
+            id="tv-lyric-fwd" type="button"
+            title="Lyrics later (+0.25s)" aria-label="Lyrics later">›</button>
   </div>
 </footer>
 
@@ -1348,6 +1401,21 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     else if (e.key === "[") { e.preventDefault(); nudgeLyricOffset(-step, false); }
     else if (e.key === "\\") { e.preventDefault(); nudgeLyricOffset(0, true); }
   });
+
+  /* On-screen click arrows — same nudge as the [ / ] keys, for
+   * touch/click access (Simmo doesn't always have a keyboard near
+   * the TV). Buttons are only visible when the ticker is in lyric
+   * mode, so clicking them outside that state is impossible. */
+  (function () {
+    var back = document.getElementById("tv-lyric-back");
+    var fwd  = document.getElementById("tv-lyric-fwd");
+    if (back) back.addEventListener("click", function (e) {
+      e.preventDefault(); nudgeLyricOffset(-0.25, false);
+    });
+    if (fwd)  fwd.addEventListener("click", function (e) {
+      e.preventDefault(); nudgeLyricOffset(+0.25, false);
+    });
+  })();
 
   // ============================================================
   // MARKET (centre — always visible, but state can be "closed" or "empty")
@@ -1722,10 +1790,17 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     });
   });
 
+  // radioMuted = "user has tapped the radio card to stop it." When
+  // true, startRadioIfIdle() is a no-op so the auto-resume flow
+  // doesn't fight the user's intent. Cleared when a real song starts
+  // playing (state has moved on) or when the user taps to resume.
+  var radioMuted = false;
+
   function startRadioIfIdle() {
     if (!audioStarted) return;
     if (!RADIO.enabled || !RADIO.url) return;
     if (currentRow) return;             // YouTube has the floor
+    if (radioMuted) return;             // user said stop
     // No-op if already streaming. Repeated play() on some streams
     // restarts the buffered chunk, which sounds like a short loop.
     if (radioPlaying && !radioEl.paused && !radioEl.ended && !radioEl.error) {
@@ -1748,6 +1823,34 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     try { radioEl.pause(); } catch (_) {}
     radioPlaying = false;
   }
+
+  // ----- click-to-toggle on the radio card -----
+  // Tapping the card while it's playing stops the stream and parks
+  // it muted. Tapping again resumes. A real song queueing up resets
+  // the muted flag so the post-song auto-resume still works.
+  (function () {
+    var card = document.getElementById("jbx-radio");
+    if (!card) return;
+    function toggle() {
+      if (radioMuted) {
+        radioMuted = false;
+        card.classList.remove("is-muted");
+        startRadioIfIdle();
+      } else {
+        radioMuted = true;
+        card.classList.add("is-muted");
+        stopRadio();
+      }
+    }
+    card.addEventListener("click", toggle);
+    card.addEventListener("keydown", function (e) {
+      // Enter / Space activate the role=button element.
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggle();
+      }
+    });
+  })();
 
   function loadYouTubeAPI() {
     if (window.YT && window.YT.Player) {
@@ -1875,6 +1978,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       if (!lyricsKnown && elapsed < PREROLL_MAX_MS) return;
       clearInterval(prerollPoll); prerollPoll = null;
       stopRadio();
+      // A real song's about to play — reset the user's mute flag so
+      // when this song ends, the radio auto-resume isn't blocked by
+      // a stale "tap to stop" from before.
+      radioMuted = false;
+      var rcard = document.getElementById("jbx-radio");
+      if (rcard) rcard.classList.remove("is-muted");
       if (ytPlayer && ytPlayer.loadVideoById) {
         try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
       }
