@@ -544,6 +544,81 @@ function knk_jukebox_reject(int $id, string $reason, ?int $by_user = null): void
 }
 
 /* ==========================================================
+ * GUEST-SIDE LIST + CANCEL (bar.php?tab=music "Your songs")
+ * ========================================================== */
+
+/**
+ * Recent songs requested by this email — used to populate the
+ * "Your songs" panel on /bar.php?tab=music. Newest first. Active
+ * songs (status pending/queued/playing) come ahead of historical
+ * (played/skipped/rejected) so cancel-able rows stay at the top.
+ *
+ * Capped at $limit; default 8 keeps the panel short on mobile.
+ */
+function knk_jukebox_songs_for_email(string $email, int $limit = 8): array {
+    $email = strtolower(trim($email));
+    if ($email === "") return [];
+    $limit = max(1, min(50, $limit));
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT id, youtube_video_id, youtube_title, youtube_channel,
+                    thumbnail_url, duration_seconds, status,
+                    submitted_at, played_at
+               FROM jukebox_queue
+              WHERE requester_email = ?
+           ORDER BY
+                CASE status
+                  WHEN 'playing' THEN 1
+                  WHEN 'queued'  THEN 2
+                  WHEN 'pending' THEN 3
+                  ELSE 4
+                END,
+                submitted_at DESC
+              LIMIT {$limit}"
+        );
+        $stmt->execute([$email]);
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        error_log("knk_jukebox_songs_for_email: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Guest cancels their own song request. Returns true if a row
+ * actually transitioned to 'skipped' (matched all the gates):
+ *   - id > 0
+ *   - requester_email matches the calling guest exactly
+ *   - status is currently 'pending' or 'queued' (you can't recall
+ *     a song that's already on the TV — at that point staff or
+ *     the auto-advance handles it)
+ *
+ * Status flips to 'skipped' so it falls out of the queue + stops
+ * counting against the per-IP cooldown. We also stamp played_at
+ * so admin views show when the cancel happened.
+ */
+function knk_jukebox_cancel_by_guest(int $id, string $email): bool {
+    $email = strtolower(trim($email));
+    if ($id <= 0 || $email === "") return false;
+    try {
+        $stmt = knk_db()->prepare(
+            "UPDATE jukebox_queue
+                SET status = 'skipped',
+                    played_at = NOW(),
+                    rejection_reason = 'cancelled by guest'
+              WHERE id = ?
+                AND requester_email = ?
+                AND status IN ('pending','queued')"
+        );
+        $stmt->execute([$id, $email]);
+        return $stmt->rowCount() > 0;
+    } catch (Throwable $e) {
+        error_log("knk_jukebox_cancel_by_guest: " . $e->getMessage());
+        return false;
+    }
+}
+
+/* ==========================================================
  * UTILITIES
  * ======================================================== */
 

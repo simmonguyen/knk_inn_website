@@ -72,6 +72,25 @@ if ($post_action === "submit") {
     exit;
 }
 
+if ($post_action === "cancel") {
+    /* Guest-side cancel of a song they queued. Only succeeds when:
+     *   - the song row's requester_email matches this session
+     *   - the song is still in pending/queued (not playing/played)
+     * Anything else (someone else's song, already-playing, or
+     * already-finished) silently no-ops; we redirect either way so
+     * a refresh doesn't replay the cancel. */
+    $cancel_id = (int)($_POST["song_id"] ?? 0);
+    $cancel_email = (string)($_SESSION["order_email"] ?? "");
+    if ($cancel_id > 0 && $cancel_email !== "") {
+        $cancelled = knk_jukebox_cancel_by_guest($cancel_id, $cancel_email);
+        $_SESSION["jukebox_flash"] = $cancelled
+            ? "Song cancelled."
+            : "Couldn't cancel that — it may already be playing.";
+    }
+    header("Location: " . $KNK_SELF_URL);
+    exit;
+}
+
 /* ----------- GET: render ----------- */
 $result = $_SESSION["jukebox_result"] ?? null;
 unset($_SESSION["jukebox_result"]);
@@ -83,6 +102,18 @@ $max_dur_min   = max(1, (int)ceil(((int)$cfg["max_duration_seconds"]) / 60));
 
 $now_playing = knk_jukebox_now_playing();
 $up_next     = knk_jukebox_up_next(8);
+
+/* "Your songs" panel (bar shell only — needs the guest's session
+ * identity to filter). Latest 8 of theirs, active rows surfaced
+ * first by knk_jukebox_songs_for_email's status-priority sort. */
+$my_email     = (string)($_SESSION["order_email"] ?? "");
+$my_songs     = (defined('KNK_BAR_FRAME') && $my_email !== "")
+    ? knk_jukebox_songs_for_email($my_email, 8)
+    : [];
+
+/* One-shot flash banner from a recent cancel POST. */
+$jb_flash = (string)($_SESSION["jukebox_flash"] ?? "");
+unset($_SESSION["jukebox_flash"]);
 
 $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["echo"] : [];
 ?>
@@ -276,6 +307,63 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
 
     .empty { color: var(--cream-dim); font-style: italic; font-size: 0.9rem; }
 
+    /* "Your songs" panel — appears only inside the bar shell.
+       Active rows (pending / queued / playing) sit above historical
+       (played / skipped / rejected) and get a Cancel button if the
+       song hasn't started yet. */
+    .my-songs { list-style: none; padding: 0; margin: 0; }
+    .my-song-row {
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid rgba(201,170,113,0.1);
+    }
+    .my-song-row:last-child { border-bottom: none; }
+    .my-song-row.is-historic { opacity: 0.55; }
+    .my-song-row img {
+      width: 46px; height: 34px; object-fit: cover;
+      border-radius: 3px; flex-shrink: 0;
+    }
+    .my-song-row .meta { flex: 1; min-width: 0; }
+    .my-song-row .meta .t {
+      font-weight: 600; font-size: 0.92rem; line-height: 1.3;
+      overflow: hidden; text-overflow: ellipsis;
+      display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical;
+    }
+    .my-song-row .meta .who { margin-top: 0.15rem; }
+    .my-song-row .status {
+      display: inline-block; font-size: 0.7rem; letter-spacing: 0.06em;
+      text-transform: uppercase; font-weight: 700;
+      padding: 0.1rem 0.42rem; border-radius: 999px;
+      background: rgba(201,170,113,0.15); color: var(--gold);
+    }
+    .my-song-row .status-playing  { background: #2fdc7a; color: #0f0905; }
+    .my-song-row .status-queued   { background: rgba(201,170,113,0.22); color: var(--gold); }
+    .my-song-row .status-pending  { background: rgba(255,255,255,0.10); color: var(--cream-dim); }
+    .my-song-row .status-played   { background: rgba(0,0,0,0.25); color: var(--cream-dim); }
+    .my-song-row .status-skipped  { background: rgba(0,0,0,0.25); color: var(--cream-dim); }
+    .my-song-row .status-rejected { background: rgba(217,67,67,0.18); color: #ffb1b1; }
+    .my-song-row .cancel-form { margin: 0; }
+    .my-song-row .cancel-btn {
+      padding: 0.35rem 0.75rem;
+      background: transparent; color: var(--cream-dim);
+      border: 1px solid rgba(201,170,113,0.35);
+      border-radius: 6px; font-weight: 600; font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .my-song-row .cancel-btn:hover {
+      background: rgba(217,67,67,0.18); color: #ffb1b1;
+      border-color: rgba(217,67,67,0.5);
+    }
+
+    .flash {
+      background: rgba(47,220,122,0.12);
+      border: 1px solid rgba(47,220,122,0.45);
+      color: #2fdc7a;
+      padding: 0.6rem 0.9rem; border-radius: 8px;
+      margin: 0 0 1rem;
+      font-size: 0.92rem;
+    }
+
     .footer-note {
       text-align: center; color: var(--cream-dim);
       font-size: 0.78rem; margin: 1.6rem 0 0; line-height: 1.5;
@@ -374,6 +462,55 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
           Songs longer than <?= (int)$max_dur_min ?> min, karaoke versions, and a few staff-banned tracks won't go through.
         </p>
       </form>
+
+      <?php if ($jb_flash !== ""): ?>
+        <div class="flash"><?= jbh($jb_flash) ?></div>
+      <?php endif; ?>
+
+      <?php if (defined('KNK_BAR_FRAME') && !empty($my_songs)): ?>
+      <!-- "Your songs" — guest's own queued/playing/recent requests
+           with Cancel buttons next to anything still pending or
+           queued. Only shown inside the bar shell (where we have
+           an authenticated session via the anon cookie). -->
+      <div class="card">
+        <h2 class="section">Your songs</h2>
+        <ul class="my-songs">
+          <?php foreach ($my_songs as $ms):
+            $st = (string)$ms["status"];
+            $is_active     = ($st === 'pending' || $st === 'queued' || $st === 'playing');
+            $is_cancelable = ($st === 'pending' || $st === 'queued');
+            $status_lbl =
+              $st === 'pending'  ? 'Awaiting staff' :
+              ($st === 'queued'  ? 'Queued' :
+              ($st === 'playing' ? 'Playing now' :
+              ($st === 'played'  ? 'Played' :
+              ($st === 'skipped' ? 'Skipped' :
+              ($st === 'rejected'? 'Rejected' : ucfirst($st))))));
+          ?>
+            <li class="my-song-row<?= $is_active ? ' is-active' : ' is-historic' ?>">
+              <?php if (!empty($ms["thumbnail_url"])): ?>
+                <img src="<?= jbh($ms["thumbnail_url"]) ?>" alt="">
+              <?php endif; ?>
+              <div class="meta">
+                <div class="t"><?= jbh_yt($ms["youtube_title"]) ?></div>
+                <div class="who">
+                  <span class="status status-<?= jbh($st) ?>"><?= jbh($status_lbl) ?></span>
+                </div>
+              </div>
+              <?php if ($is_cancelable): ?>
+                <form method="post" action="<?= jbh($KNK_SELF_URL) ?>"
+                      class="cancel-form"
+                      onsubmit="return confirm('Cancel this song?');">
+                  <input type="hidden" name="action"  value="cancel">
+                  <input type="hidden" name="song_id" value="<?= (int)$ms["id"] ?>">
+                  <button type="submit" class="cancel-btn">Cancel</button>
+                </form>
+              <?php endif; ?>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <?php endif; ?>
 
       <?php if ($now_playing): ?>
         <div class="card">
