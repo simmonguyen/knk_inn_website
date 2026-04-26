@@ -87,17 +87,9 @@ if (($_POST["action"] ?? "") === "delete") {
     exit;
 }
 
-/* ---------- Action: save guest notes (Guests tab) ---------- */
-if (($_POST["action"] ?? "") === "guest_notes" && $can_see_guests) {
-    $gid   = (int)($_POST["guest_id"] ?? 0);
-    $notes = (string)($_POST["notes"] ?? "");
-    if ($gid > 0) {
-        $ok = knk_guest_update_notes($gid, $notes, (int)$me["id"]);
-        $flash = $ok ? "Notes saved." : "Couldn't save notes.";
-        header("Location: bookings.php?tab=guests&id=" . $gid . "&msg=" . urlencode($flash));
-        exit;
-    }
-}
+/* (Guest notes feature removed — Ben asked to drop the field.
+ *  The DB column is left in place for now; nothing reads or
+ *  writes it anymore.) */
 
 $flash_msg = $_GET["msg"] ?? "";
 
@@ -547,20 +539,6 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
     .g-stat .n  { color: var(--gold, #c9aa71); font-size: 1.4rem; font-weight: 700; font-family: "Archivo Black", sans-serif; }
     .g-stat .l  { color: var(--cream-faint); font-size: 0.7rem; letter-spacing: 0.12em; text-transform: uppercase; }
 
-    .g-notes textarea {
-      width: 100%; min-height: 120px; background: rgba(0,0,0,0.3);
-      color: var(--cream); border: 1px solid rgba(201,170,113,0.28);
-      border-radius: 4px; padding: 0.6rem; font-family: inherit; font-size: 0.9rem;
-      resize: vertical;
-    }
-    .g-notes textarea:focus { outline: none; border-color: var(--gold, #c9aa71); }
-    .g-notes .save-row { display: flex; justify-content: flex-end; margin-top: 0.6rem; }
-    .g-notes button {
-      padding: 0.45rem 1.1rem; background: var(--gold, #c9aa71);
-      color: var(--brown-deep, #2a1a08); border: none; border-radius: 4px;
-      font-weight: 600; cursor: pointer;
-    }
-
     .g-list h3 { margin-top: 0; }
     .g-list ul { list-style: none; padding: 0; margin: 0; }
     .g-list li {
@@ -857,7 +835,7 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
   <?php if ($guest_detail): /* ========= SINGLE GUEST PROFILE ========= */ ?>
     <a class="back-link" href="bookings.php?tab=guests">← Back to all guests</a>
     <div class="g-profile">
-      <!-- Left column: contact + stats + notes -->
+      <!-- Left column: contact + stats -->
       <div>
         <div class="g-card g-contact">
           <h3>Contact</h3>
@@ -907,15 +885,6 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
           </div>
         </div>
 
-        <div class="g-card g-notes" style="margin-top:1rem;">
-          <h3>Notes</h3>
-          <form method="post">
-            <input type="hidden" name="action"   value="guest_notes">
-            <input type="hidden" name="guest_id" value="<?= (int)$guest_detail["id"] ?>">
-            <textarea name="notes" placeholder="Anything worth remembering — allergies, usual room, birthday, VIP perks&hellip;"><?= h((string)($guest_detail["notes"] ?? "")) ?></textarea>
-            <div class="save-row"><button type="submit">Save notes</button></div>
-          </form>
-        </div>
       </div>
 
       <!-- Right column: bookings + orders lists -->
