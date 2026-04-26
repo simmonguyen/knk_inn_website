@@ -1266,6 +1266,7 @@ if ($show_lobby) {
 
         html += '<div class="pad-actions">';
         html += '<button class="btn secondary" id="undoBtn">Undo last</button>';
+        html += '<button class="btn danger" id="endBtn" title="End the game now — no winner recorded">End game</button>';
         html += '</div>';
         html += '<div id="padErr" class="err" style="display:none"></div>';
         html += '</div>';
@@ -1305,6 +1306,34 @@ if ($show_lobby) {
               var err = $('#padErr'); err.textContent = e.message; err.style.display = 'block';
             });
         });
+        /* End game — for when someone has to leave mid-match. Marks
+         * the game abandoned (no winner). Confirm dialog so it's not
+         * a fat-finger; staff have a separate Force-end on the
+         * /darts-admin.php page. */
+        var endBtnEl = $('#endBtn');
+        if (endBtnEl) {
+          endBtnEl.addEventListener('click', function () {
+            if (!window.confirm('End the game now? No winner will be recorded.')) {
+              return;
+            }
+            var fd = new FormData();
+            fd.append('game_id', String(GAME_ID));
+            fd.append('token', TOKEN);
+            fetch('/api/darts_end.php', { method: 'POST', body: fd })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j.ok) throw new Error(j.error || 'Could not end game.');
+                /* Next poll picks up status='abandoned' and the page
+                 * routes to renderFinished (which handles abandoned
+                 * via the same code path). */
+                poll();
+              })
+              .catch(function (e) {
+                var err = $('#padErr');
+                if (err) { err.textContent = e.message; err.style.display = 'block'; }
+              });
+          });
+        }
       }
 
       function sendThrow(seg) {
@@ -1327,9 +1356,10 @@ if ($show_lobby) {
           });
       }
 
-      /* ----- FINISHED ----- */
+      /* ----- FINISHED / ABANDONED ----- */
       function renderFinished(s) {
         var g = s.game;
+        var isAbandoned = g.status === 'abandoned';
         var winnerName = '—';
         if (g.winner_slot_no) {
           var w = s.players.filter(function (p) { return p.slot_no === g.winner_slot_no; })[0];
@@ -1341,9 +1371,17 @@ if ($show_lobby) {
 
         var html = '';
         html += '<div class="card winner-card">';
-        html += '<div class="crown">🏆</div>';
-        html += '<div class="muted">Winner</div>';
-        html += '<div class="who">' + escapeHtml(winnerName) + '</div>';
+        if (isAbandoned) {
+          /* Game was ended early — celebrate nothing, just mark it
+           * complete so the room knows it's over. */
+          html += '<div class="crown">🏁</div>';
+          html += '<div class="muted">Game ended</div>';
+          html += '<div class="who">No winner</div>';
+        } else {
+          html += '<div class="crown">🏆</div>';
+          html += '<div class="muted">Winner</div>';
+          html += '<div class="who">' + escapeHtml(winnerName) + '</div>';
+        }
         html += '<div class="muted">' + escapeHtml(gameLabel(g.game_type)) + (g.format === 'doubles' ? ' · doubles' : '') + '</div>';
         html += '</div>';
 
