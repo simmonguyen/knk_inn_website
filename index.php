@@ -25,9 +25,25 @@ function p_src(array $slots, string $section, int $i, string $default): string {
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>KnK Inn — Boutique Hotel · Coffee · Wine · Sports Bar · Ho Chi Minh City</title>
 <meta name="description" content="KnK Inn — an Aussie pub-style boutique hotel in the heart of District 1, Saigon. Coffee by day, wine and sport by night, rooftop by moonlight.">
-<meta property="og:title" content="KnK Inn — Saigon">
-<meta property="og:description" content="Boutique rooms · Coffee · Wine · Sports Bar · Rooftop Garden — 96 De Tham, District 1, Ho Chi Minh City">
-<meta property="og:type" content="website">
+
+<!-- Open Graph (Facebook / Instagram / LinkedIn link previews).
+     After editing these, force a re-scrape so FB picks up the changes:
+     https://developers.facebook.com/tools/debug/?q=https%3A%2F%2Fknkinn.com%2F -->
+<meta property="og:title"        content="KnK Inn — Boutique Hotel · Coffee · Wine · Sports Bar · Ho Chi Minh City">
+<meta property="og:description"  content="Aussie pub-style boutique hotel in District 1, Saigon. Coffee by day, wine and sport by night, rooftop garden by moonlight.">
+<meta property="og:image"        content="https://knkinn.com/assets/img/nw_55.jpg">
+<meta property="og:image:width"  content="730">
+<meta property="og:image:height" content="478">
+<meta property="og:url"          content="https://knkinn.com/">
+<meta property="og:type"         content="website">
+<meta property="og:site_name"    content="KnK Inn">
+<meta property="og:locale"       content="en_US">
+
+<!-- Twitter / X cards. summary_large_image gives the big-photo card. -->
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="KnK Inn — Saigon">
+<meta name="twitter:description" content="Coffee · Wine · LIVE Sports · Rooftop Garden — heart of Saigon's backpacker district.">
+<meta name="twitter:image"       content="https://knkinn.com/assets/img/nw_55.jpg">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
