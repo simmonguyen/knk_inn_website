@@ -166,7 +166,7 @@ function knk_darts_cleanup_stale(): void {
  *
  * Returns [game_row, host_player_row].
  */
-function knk_darts_create_game(int $board_id, string $game_type, string $format, int $player_count, string $host_name): array {
+function knk_darts_create_game(int $board_id, string $game_type, string $format, int $player_count, string $host_name, string $guest_email = ''): array {
     if (!in_array($game_type, KNK_DARTS_GAME_TYPES, true)) {
         throw new RuntimeException("Unknown game type.");
     }
@@ -203,10 +203,15 @@ function knk_darts_create_game(int $board_id, string $game_type, string $format,
         $game_id = (int)$pdo->lastInsertId();
         $token = bin2hex(random_bytes(20));
         $team_no = ($format === 'doubles') ? 1 : 0;
+        /* Optional guest_email (added in migration 017). Lets the
+         * profile page show the guest their own darts game history.
+         * Empty string is fine — the column is NOT NULL DEFAULT ''. */
+        $email = strtolower(trim($guest_email));
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $email = '';
         $pdo->prepare(
-            "INSERT INTO darts_players (game_id, slot_no, name, team_no, is_host, session_token)
-             VALUES (?, 1, ?, ?, 1, ?)"
-        )->execute([$game_id, $host_name, $team_no, $token]);
+            "INSERT INTO darts_players (game_id, slot_no, name, team_no, is_host, session_token, guest_email)
+             VALUES (?, 1, ?, ?, 1, ?, ?)"
+        )->execute([$game_id, $host_name, $team_no, $token, mb_substr($email, 0, 190)]);
         $host_id = (int)$pdo->lastInsertId();
         $pdo->commit();
 
@@ -231,7 +236,7 @@ function knk_darts_create_game(int $board_id, string $game_type, string $format,
  * available slot_no and the matching team_no for doubles
  * (P1+P3 = team 1, P2+P4 = team 2).
  */
-function knk_darts_join_game(int $game_id, string $name): array {
+function knk_darts_join_game(int $game_id, string $name, string $guest_email = ''): array {
     $pdo = knk_db();
     $name = trim($name);
     if ($name === '') throw new RuntimeException("Tell us your name.");
@@ -257,10 +262,13 @@ function knk_darts_join_game(int $game_id, string $name): array {
         // Doubles: odd slot = team 1, even slot = team 2 (P1+P3 vs P2+P4).
         $team_no = ($game['format'] === 'doubles') ? (($next_slot % 2 === 1) ? 1 : 2) : 0;
         $token = bin2hex(random_bytes(20));
+        /* Optional guest_email — see knk_darts_create_game above. */
+        $email = strtolower(trim($guest_email));
+        if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) $email = '';
         $pdo->prepare(
-            "INSERT INTO darts_players (game_id, slot_no, name, team_no, is_host, session_token)
-             VALUES (?, ?, ?, ?, 0, ?)"
-        )->execute([$game_id, $next_slot, $name, $team_no, $token]);
+            "INSERT INTO darts_players (game_id, slot_no, name, team_no, is_host, session_token, guest_email)
+             VALUES (?, ?, ?, ?, 0, ?, ?)"
+        )->execute([$game_id, $next_slot, $name, $team_no, $token, mb_substr($email, 0, 190)]);
         $pid = (int)$pdo->lastInsertId();
         $pdo->commit();
 

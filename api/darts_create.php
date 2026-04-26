@@ -17,6 +17,8 @@
 
 declare(strict_types=1);
 
+session_start();
+
 require_once __DIR__ . "/../includes/darts.php";
 
 header("Content-Type: application/json; charset=utf-8");
@@ -33,10 +35,14 @@ try {
     $format       = (string)($_POST['format'] ?? 'singles');
     $player_count = (int)($_POST['player_count'] ?? 2);
     $host_name    = (string)($_POST['host_name'] ?? '');
+    /* Pass the bar-shell guest identity (anon or claimed) so the game
+     * shows up on the host's profile history. The phone's session cookie
+     * carries it from /bar.php → /api/darts_create.php. */
+    $guest_email  = (string)($_SESSION['order_email'] ?? '');
 
     if ($board_id <= 0) throw new RuntimeException("Pick a board.");
 
-    list($game, $host) = knk_darts_create_game($board_id, $game_type, $format, $player_count, $host_name);
+    list($game, $host) = knk_darts_create_game($board_id, $game_type, $format, $player_count, $host_name, $guest_email);
 
     $out = [
         'ok'             => true,

@@ -408,11 +408,18 @@ function knk_jukebox_request_submit(array $in, string $ip): array {
 
     $status = !empty($cfg["auto_approve"]) ? "queued" : "pending";
 
+    /* Optional requester_email (added in migration 017). Lets the
+     * profile page show the guest their own song history. Empty
+     * string is a fine default — the column is NOT NULL DEFAULT ''. */
+    $email = strtolower(trim((string)($in["email"] ?? "")));
+    if ($email !== "" && !filter_var($email, FILTER_VALIDATE_EMAIL)) $email = "";
+
     $stmt = knk_db()->prepare(
         "INSERT INTO jukebox_queue
          (artist_text, title_text, youtube_video_id, youtube_title, youtube_channel,
-          duration_seconds, thumbnail_url, requester_name, table_no, requester_ip, status)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+          duration_seconds, thumbnail_url, requester_name, table_no, requester_ip,
+          requester_email, status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
     );
     $stmt->execute([
         mb_substr($artist, 0, 200),
@@ -425,6 +432,7 @@ function knk_jukebox_request_submit(array $in, string $ip): array {
         mb_substr(trim((string)($in["name"] ?? "")), 0, 80),
         mb_substr(trim((string)($in["table_no"] ?? "")), 0, 20),
         mb_substr($ip, 0, 45),
+        mb_substr($email, 0, 190),
         $status,
     ]);
     $id = (int)knk_db()->lastInsertId();

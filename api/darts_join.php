@@ -14,6 +14,8 @@
 
 declare(strict_types=1);
 
+session_start();
+
 require_once __DIR__ . "/../includes/darts.php";
 
 header("Content-Type: application/json; charset=utf-8");
@@ -28,6 +30,9 @@ try {
     $code     = trim((string)($_POST['code']    ?? ''));
     $name     = trim((string)($_POST['name']    ?? ''));
     $game_id  = (int)($_POST['game_id'] ?? 0);
+    /* Carry the bar-shell guest identity through so this game shows
+     * up on the joiner's profile too. */
+    $guest_email = (string)($_SESSION['order_email'] ?? '');
 
     $game = null;
     if ($game_id > 0) {
@@ -40,7 +45,7 @@ try {
     if (!$game) throw new RuntimeException("Game not found.");
     if ($game['status'] !== 'lobby') throw new RuntimeException("That game has already started.");
 
-    $player = knk_darts_join_game((int)$game['id'], $name);
+    $player = knk_darts_join_game((int)$game['id'], $name, $guest_email);
     $out = [
         'ok'             => true,
         'game_id'        => (int)$game['id'],

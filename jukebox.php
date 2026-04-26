@@ -42,6 +42,10 @@ if ($post_action === "submit") {
             "title"    => (string)($_POST["title"]    ?? ""),
             "name"     => (string)($_POST["name"]     ?? ""),
             "table_no" => (string)($_POST["table_no"] ?? ""),
+            /* Pass through the bar-shell guest identity (anon or claimed)
+             * so the song shows up on the guest's profile history. Standalone
+             * /jukebox.php with no session leaves this empty. */
+            "email"    => (string)($_SESSION["order_email"] ?? ""),
         ], $ip);
         $_SESSION["jukebox_result"] = ["ok" => true, "data" => $result];
     } catch (Throwable $e) {
