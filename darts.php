@@ -24,6 +24,7 @@ declare(strict_types=1);
 require_once __DIR__ . "/includes/darts.php";
 require_once __DIR__ . "/includes/hours.php";
 require_once __DIR__ . "/includes/darts_lobby.php";
+require_once __DIR__ . "/includes/darts_stats.php";
 
 /* Closed-hours gate. Outside service hours (07:30–12:30 / 16:00–23:30
  * Saigon time) we don't let new darts games start. */
@@ -124,11 +125,18 @@ $lobby_am_looking = false;
 $lobby_others     = [];
 $lobby_pending    = [];
 $recent_games     = [];
+$top_rounds       = [];
+$leaderboard      = [];
+$gt_distribution  = [];
 if ($show_lobby) {
     $lobby_am_looking = knk_darts_lobby_is_looking($lobby_email);
     $lobby_others     = knk_darts_lobby_active_lookers($lobby_email, 25);
     $lobby_pending    = knk_darts_lobby_pending_challenges($lobby_email, 5);
     $recent_games     = knk_darts_recent_games_compact(10);
+    /* Three "what's been going on" stats panels under recent games. */
+    $top_rounds       = knk_darts_top_rounds_this_week(5);
+    $leaderboard      = knk_darts_leaderboard(10, 3);
+    $gt_distribution  = knk_darts_game_type_distribution();
 }
 
 ?>
@@ -539,6 +547,85 @@ if ($show_lobby) {
     .rg-vs { color: var(--cream-dim); }
     .rg-loser { color: var(--cream); }
     .rg-meta { color: var(--cream-dim); font-size: 0.82rem; }
+
+    /* Stats panel rows — used by Top scoring rounds + Leaderboard.
+       Three-column compact layout: rank · headline value/name · meta. */
+    .stat-list { list-style: none; padding: 0; margin: 0; }
+    .stat-row {
+      display: flex; align-items: center; gap: 0.65rem;
+      padding: 0.55rem 0;
+      border-bottom: 1px solid rgba(201,170,113,0.08);
+      font-size: 0.92rem;
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-row .rank {
+      flex: 0 0 auto; min-width: 22px;
+      font-family: "Archivo Black", sans-serif;
+      font-size: 0.82rem; color: var(--cream-dim);
+      letter-spacing: 0.04em;
+    }
+    .stat-row .big {
+      flex: 0 0 auto; min-width: 46px; text-align: right;
+      font-family: "Archivo Black", sans-serif;
+      font-size: 1.15rem; color: var(--gold); line-height: 1;
+    }
+    .stat-row .who {
+      flex: 1 1 auto; min-width: 0;
+      color: var(--cream); font-weight: 600;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .stat-row .who.flex-grow { flex: 1 1 auto; }
+    .stat-row .meta {
+      flex: 0 0 auto; color: var(--cream-dim); font-size: 0.78rem;
+      letter-spacing: 0.06em;
+    }
+    .stat-row .rate {
+      flex: 0 0 auto; min-width: 44px; text-align: right;
+      font-family: "Archivo Black", sans-serif;
+      font-size: 1rem; color: var(--gold);
+    }
+    /* 180s pulse red, ton+ pulse gold, 70%+ leaderboard rows lit gold. */
+    .stat-row.is-180     .big  { color: #fff; text-shadow: 0 0 10px #d94343; }
+    .stat-row.is-tonplus .big  { color: var(--gold); text-shadow: 0 0 8px rgba(201,170,113,0.4); }
+    .stat-row.is-hot     .rate { color: #2fdc7a; }
+    .stat-row.is-warm    .rate { color: var(--gold); }
+
+    /* Pie chart + legend — sits side by side on wide phones, stacks
+       on narrow ones via wrapping flex. */
+    .pie-wrap {
+      display: flex; flex-wrap: wrap; align-items: center;
+      gap: 1rem;
+    }
+    .pie {
+      width: 120px; height: 120px;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 2px 6px rgba(0,0,0,0.25));
+    }
+    .pie-legend { list-style: none; padding: 0; margin: 0; flex: 1 1 180px; }
+    .pie-legend li {
+      display: flex; align-items: center; gap: 0.55rem;
+      padding: 0.32rem 0;
+      font-size: 0.86rem; color: var(--cream);
+      border-bottom: 1px solid rgba(201,170,113,0.08);
+    }
+    .pie-legend li:last-child { border-bottom: none; }
+    .pie-legend .dot {
+      flex: 0 0 auto;
+      width: 11px; height: 11px; border-radius: 50%;
+    }
+    .pie-legend .lbl { flex: 1 1 auto; min-width: 0;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .pie-legend .pct {
+      flex: 0 0 auto;
+      font-family: "Archivo Black", sans-serif;
+      font-size: 0.82rem; color: var(--gold);
+    }
+    .pie-legend .cnt {
+      flex: 0 0 auto;
+      color: var(--cream-dim); font-size: 0.74rem;
+      letter-spacing: 0.06em; min-width: 28px; text-align: right;
+    }
   </style>
 <?php if (!defined('KNK_BAR_FRAME')): ?>
 </head>
@@ -688,6 +775,127 @@ if ($show_lobby) {
             </li>
           <?php endforeach; ?>
         </ul>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($show_lobby && !empty($top_rounds)): ?>
+      <!-- Top 5 highest-scoring rounds this week (501/301 only). -->
+      <div class="card" style="margin-top:1.4rem">
+        <h2 style="margin-top:0">🔥 Top scoring rounds <span style="font-weight:400;font-size:0.78em;color:var(--cream-dim)">this week</span></h2>
+        <ul class="stat-list">
+          <?php foreach ($top_rounds as $i => $tr):
+            $rt = (int)$tr["round_total"];
+            $glow_class = $rt === 180  ? ' is-180'
+                       : ($rt >= 140  ? ' is-tonplus' : '');
+          ?>
+            <li class="stat-row<?= $glow_class ?>">
+              <span class="rank">#<?= $i + 1 ?></span>
+              <span class="big"><?= (int)$tr["round_total"] ?></span>
+              <span class="who"><?= dh($tr["player_name"] ?: "—") ?></span>
+              <span class="meta"><?= dh(strtoupper((string)$tr["game_type"])) ?></span>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($show_lobby && !empty($leaderboard)): ?>
+      <!-- Player leaderboard — top 10 win-rate, min 3 games. -->
+      <div class="card" style="margin-top:1.4rem">
+        <h2 style="margin-top:0">🏆 Leaderboard <span style="font-weight:400;font-size:0.78em;color:var(--cream-dim)">min 3 games</span></h2>
+        <ul class="stat-list lb-list">
+          <?php foreach ($leaderboard as $i => $lb):
+            $disp = trim((string)$lb["display_name"]);
+            if ($disp === "") $disp = "Guest";
+            $rate = (int)$lb["win_rate"];
+            $rate_class = $rate >= 70 ? ' is-hot'
+                        : ($rate >= 50 ? ' is-warm' : '');
+          ?>
+            <li class="stat-row<?= $rate_class ?>">
+              <span class="rank">#<?= $i + 1 ?></span>
+              <span class="who flex-grow"><?= dh($disp) ?></span>
+              <span class="rate"><?= $rate ?>%</span>
+              <span class="meta"><?= (int)$lb["wins"] ?>W / <?= (int)$lb["losses"] ?>L</span>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <?php endif; ?>
+
+      <?php if ($show_lobby && !empty($gt_distribution)):
+        // Build pie-chart slice data — total + cumulative angle per slice.
+        $pie_total = 0;
+        foreach ($gt_distribution as $row) $pie_total += (int)$row["n"];
+        $pie_colors = [
+          '501'         => '#c9aa71',  // KnK gold
+          '301'         => '#d8c08b',  // gold-soft
+          'cricket'     => '#2fdc7a',  // green
+          'aroundclock' => '#5cc4ff',  // sky-blue
+          'killer'      => '#d94343',  // red
+          'halveit'     => '#9b6dff',  // purple
+        ];
+        $pie_label = [
+          '501'         => '501',
+          '301'         => '301',
+          'cricket'     => 'Cricket',
+          'aroundclock' => 'Around the Clock',
+          'killer'      => 'Killer',
+          'halveit'     => 'Halve It',
+        ];
+        // Pre-compute SVG arcs.
+        $cx = 60; $cy = 60; $r = 55;
+        $cum = 0.0;
+        $arcs = [];
+        foreach ($gt_distribution as $row) {
+            $frac = $pie_total > 0 ? ((int)$row["n"]) / $pie_total : 0;
+            $startA = $cum * 2 * M_PI - M_PI / 2;       // start at 12 o'clock
+            $cum   += $frac;
+            $endA   = $cum * 2 * M_PI - M_PI / 2;
+            $sx = $cx + $r * cos($startA);
+            $sy = $cy + $r * sin($startA);
+            $ex = $cx + $r * cos($endA);
+            $ey = $cy + $r * sin($endA);
+            $largeArc = $frac > 0.5 ? 1 : 0;
+            // Special case: a single full-circle slice (frac == 1) — SVG
+            // arc can't draw a 360° sweep in one path, so we use two halves.
+            if (abs($frac - 1.0) < 1e-9) {
+                $arcs[] = [
+                    'd' => "M{$cx},{$cy} L{$cx},". ($cy - $r) ." A{$r},{$r} 0 1 1 {$cx},". ($cy + $r) ." A{$r},{$r} 0 1 1 {$cx},". ($cy - $r) ." Z",
+                    'color' => $pie_colors[(string)$row["game_type"]] ?? '#888',
+                    'label' => $pie_label[(string)$row["game_type"]] ?? (string)$row["game_type"],
+                    'n'     => (int)$row["n"],
+                    'pct'   => 100,
+                ];
+            } else {
+                $arcs[] = [
+                    'd' => "M{$cx},{$cy} L{$sx},{$sy} A{$r},{$r} 0 {$largeArc} 1 {$ex},{$ey} Z",
+                    'color' => $pie_colors[(string)$row["game_type"]] ?? '#888',
+                    'label' => $pie_label[(string)$row["game_type"]] ?? (string)$row["game_type"],
+                    'n'     => (int)$row["n"],
+                    'pct'   => (int)round($frac * 100),
+                ];
+            }
+        }
+      ?>
+      <div class="card" style="margin-top:1.4rem">
+        <h2 style="margin-top:0">🥧 Most-played</h2>
+        <div class="pie-wrap">
+          <svg class="pie" viewBox="0 0 120 120" aria-hidden="true">
+            <?php foreach ($arcs as $a): ?>
+              <path d="<?= dh($a['d']) ?>" fill="<?= dh($a['color']) ?>" stroke="#0f0905" stroke-width="1"/>
+            <?php endforeach; ?>
+          </svg>
+          <ul class="pie-legend">
+            <?php foreach ($arcs as $a): ?>
+              <li>
+                <span class="dot" style="background:<?= dh($a['color']) ?>"></span>
+                <span class="lbl"><?= dh($a['label']) ?></span>
+                <span class="pct"><?= (int)$a['pct'] ?>%</span>
+                <span class="cnt"><?= (int)$a['n'] ?>g</span>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        </div>
       </div>
       <?php endif; ?>
 
