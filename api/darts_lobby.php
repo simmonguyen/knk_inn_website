@@ -47,7 +47,74 @@ function knk_lobby_state_payload(string $email): array {
         "am_looking"           => knk_darts_lobby_is_looking($email),
         "lookers"              => knk_darts_lobby_active_lookers($email, 25),
         "incoming_challenges"  => knk_darts_lobby_pending_challenges($email, 5),
+        "recent_accept"        => knk_lobby_recent_accept_for($email),
     ];
+}
+
+/**
+ * If $email has a recently-accepted (last 5 min) challenge that
+ * routed them into a fresh game, return {game_id, session_token}
+ * so the polling client can set the seat cookie and redirect.
+ * Otherwise null. Same payload is sent both to the looker (caller
+ * of action=respond) and the challenger (whose state poll picks it
+ * up on the next tick).
+ */
+function knk_lobby_recent_accept_for(string $email): ?array {
+    $email = strtolower(trim($email));
+    if ($email === "") return null;
+    try {
+        $pdo = knk_db();
+        $stmt = $pdo->prepare(
+            "SELECT c.game_id
+               FROM darts_challenges c
+              WHERE c.status = 'accepted'
+                AND c.game_id IS NOT NULL
+                AND c.responded_at >= (NOW() - INTERVAL 5 MINUTE)
+                AND (c.challenger_email = ? OR c.looker_email = ?)
+           ORDER BY c.responded_at DESC LIMIT 1"
+        );
+        $stmt->execute([$email, $email]);
+        $row = $stmt->fetch();
+        if (!$row) return null;
+        $game_id = (int)$row["game_id"];
+
+        $tStmt = $pdo->prepare(
+            "SELECT session_token
+               FROM darts_players
+              WHERE game_id = ? AND guest_email = ?
+              LIMIT 1"
+        );
+        $tStmt->execute([$game_id, $email]);
+        $tok = (string)($tStmt->fetchColumn() ?: "");
+        if ($tok === "") return null;
+
+        return [
+            "game_id"       => $game_id,
+            "session_token" => $tok,
+        ];
+    } catch (Throwable $e) {
+        error_log("knk_lobby_recent_accept_for: " . $e->getMessage());
+        return null;
+    }
+}
+
+/**
+ * Set the per-game seat cookie so /darts.php?game=N recognises this
+ * browser as already-seated. Mirrors the same cookie /api/darts_join.php
+ * sets for joiners (name "darts_token_<game_id>", path=/, ~1 day).
+ */
+function knk_lobby_set_seat_cookie(int $game_id, string $token): void {
+    if ($game_id <= 0 || $token === "") return;
+    $secure = !empty($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] !== "off";
+    setcookie("darts_token_" . $game_id, $token, [
+        "expires"  => time() + 86400,
+        "path"     => "/",
+        "secure"   => $secure,
+        "httponly" => false, /* JS in /bar.php sometimes reads it for
+                              * route redirects; the token is short-
+                              * lived per-game, low-stakes. */
+        "samesite" => "Lax",
+    ]);
 }
 
 $out = [
@@ -116,6 +183,18 @@ try {
         }
         $out["ok"] = true;
         $out["game_id"] = $resp["game_id"];
+        // On accept: set the looker's seat cookie BEFORE the state
+        // payload is built so the same response that surfaces the
+        // game_id also primes the cookie for the redirect.
+        if ($accept && !empty($resp["game_id"])) {
+            $tStmt = knk_db()->prepare(
+                "SELECT session_token FROM darts_players
+                  WHERE game_id = ? AND guest_email = ? LIMIT 1"
+            );
+            $tStmt->execute([(int)$resp["game_id"], $email]);
+            $myTok = (string)($tStmt->fetchColumn() ?: "");
+            knk_lobby_set_seat_cookie((int)$resp["game_id"], $myTok);
+        }
         $out["state"] = knk_lobby_state_payload($email);
 
     } elseif ($action === "state") {

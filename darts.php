@@ -870,15 +870,34 @@ if ($show_lobby) {
         });
       });
 
+      // Helper: set the per-game seat cookie so /darts.php?game=N
+      // recognises this browser as already-seated and skips the
+      // "Join 501" name-entry page. The server also sets this cookie
+      // via Set-Cookie on respond, but we do it client-side too as
+      // a belt-and-braces guard for the polling-side redirect.
+      function setSeatCookie(gameId, token) {
+        if (!gameId || !token) return;
+        var secure = (location.protocol === 'https:') ? '; Secure' : '';
+        document.cookie = 'darts_token_' + gameId + '=' + encodeURIComponent(token)
+                        + '; path=/; max-age=86400; SameSite=Lax' + secure;
+      }
+
+      var prefix = <?= json_encode(defined('KNK_BAR_FRAME') ? '/bar.php?tab=darts&game=' : '/darts.php?game=') ?>;
+
       $$('.lobby-accept').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var id = btn.getAttribute('data-id');
           btn.disabled = true; btn.textContent = "Starting game...";
           call('respond', { challenge_id: id, accept: 1 }).then(function (j) {
             if (j && j.ok && j.game_id) {
-              // Land both players on the new game's view. Frame-aware
-              // so we stay inside the bar shell when wrapped.
-              var prefix = <?= json_encode(defined('KNK_BAR_FRAME') ? '/bar.php?tab=darts&game=' : '/darts.php?game=') ?>;
+              // Set the seat cookie from state.recent_accept so the
+              // landing page recognises us as seated (the server's
+              // Set-Cookie should already cover this, but doing it in
+              // JS too survives any cookie-attribute quirks).
+              if (j.state && j.state.recent_accept
+                  && j.state.recent_accept.game_id === j.game_id) {
+                setSeatCookie(j.game_id, j.state.recent_accept.session_token);
+              }
               window.location.href = prefix + j.game_id;
             } else {
               btn.disabled = false; btn.textContent = "Accept";
@@ -900,6 +919,14 @@ if ($show_lobby) {
       // showing up in the list / new incoming challenges appear
       // without manual refresh. We just diff a few signal counts;
       // any meaningful change triggers a full reload.
+      //
+      // Special case: when state.recent_accept appears, the server
+      // is telling us "you've just been routed into a fresh game" —
+      // could be because we accepted a challenge (covered above)
+      // OR because someone accepted OUR challenge (we're the
+      // challenger, polling, the looker tapped Accept on the other
+      // phone). Either way, set the seat cookie and redirect so we
+      // skip the "Join 501" name entry trap.
       var lastState = {
         am_looking:  <?= $lobby_am_looking ? 'true' : 'false' ?>,
         lookers:     <?= count($lobby_others) ?>,
@@ -909,6 +936,11 @@ if ($show_lobby) {
         call('state').then(function (j) {
           if (!j || !j.ok || !j.state) return;
           var s = j.state;
+          if (s.recent_accept && s.recent_accept.game_id) {
+            setSeatCookie(s.recent_accept.game_id, s.recent_accept.session_token);
+            window.location.href = prefix + s.recent_accept.game_id;
+            return;
+          }
           var sig = {
             am_looking: !!s.am_looking,
             lookers:    (s.lookers || []).length,

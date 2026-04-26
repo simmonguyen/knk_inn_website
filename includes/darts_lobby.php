@@ -356,10 +356,15 @@ function knk_darts_lobby_challenge_respond(int $challenge_id, string $email, boo
         // SQLSTATE 1062 'Duplicate entry "X-1"' when join_game tried to
         // insert player 2 into slot 1.
         $game_id = 0;
+        $host_token = '';
+        $p2_token   = '';
         try {
-            $game_id = knk_darts_lobby_create_2p_game(
+            $created = knk_darts_lobby_create_2p_game(
                 $chosen_board, $looker_disp, $email, $chal_disp, $challenger
             );
+            $game_id    = (int)$created['game_id'];
+            $host_token = (string)$created['host_token'];
+            $p2_token   = (string)$created['p2_token'];
         } catch (Throwable $e) {
             // Roll back the game so the board frees up. The single
             // transaction above auto-rolls-back on throw — this is just
@@ -416,14 +421,20 @@ function knk_darts_lobby_challenge_respond(int $challenge_id, string $email, boo
  * SELECT didn't always see the host row committed by an earlier
  * knk_darts_create_game call on the same connection.
  *
- * Returns the new game_id.  Throws on any failure; caller is
- * expected to surface the error to the looker's UI.
+ * Returns ['game_id' => N, 'host_token' => 'hex...', 'p2_token' => 'hex...'].
+ * The caller is responsible for setting the appropriate
+ * `darts_token_{game_id}` cookie on each player's browser so that
+ * /darts.php?game=N recognises them as already-seated and skips
+ * the "Join 501" name-entry page.
+ *
+ * Throws on any failure; caller is expected to surface the error
+ * to the looker's UI.
  */
 function knk_darts_lobby_create_2p_game(
     int $board_id,
     string $host_name, string $host_email,
     string $p2_name,   string $p2_email
-): int {
+): array {
     $host_name = mb_substr(trim($host_name) ?: 'Host',  0, 40);
     $p2_name   = mb_substr(trim($p2_name)   ?: 'Guest', 0, 40);
 
@@ -484,7 +495,11 @@ function knk_darts_lobby_create_2p_game(
         ]);
 
         $pdo->commit();
-        return $game_id;
+        return [
+            'game_id'    => $game_id,
+            'host_token' => $hostTok,
+            'p2_token'   => $p2Tok,
+        ];
     } catch (Throwable $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         throw $e;
