@@ -41,6 +41,7 @@ require_once __DIR__ . "/includes/market_engine.php";
 require_once __DIR__ . "/includes/orders_store.php";   // knk_vnd()
 require_once __DIR__ . "/includes/jukebox.php";
 require_once __DIR__ . "/includes/darts.php";
+require_once __DIR__ . "/includes/settings_store.php";
 
 /* =============================================================
  * Initial server-side state — so the first paint is correct
@@ -138,6 +139,7 @@ $jbx_initial = [
 $darts_cfg     = knk_darts_config();
 $darts_enabled = !empty($darts_cfg["enabled"]);
 $darts_poll    = $darts_enabled ? max(2, (int)$darts_cfg["poll_seconds"]) : 60;
+$darts_loud    = knk_setting_bool("darts_loud_mode", true);
 $darts_games   = [];
 if ($darts_enabled) {
     $boards_by_id = [];
@@ -721,6 +723,161 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
 
   /* ============================================================
+   * Tap-by-tap rendering — each player's row now shows three
+   * dart slots for their CURRENT turn plus a small chip with
+   * their last completed round's total. New darts get .is-new
+   * for one frame to fire the slide-in animation.
+   * ========================================================== */
+  .darts-row {
+    /* Override the previous flex justify-between so we can use
+     * a 3-column grid: name | dart-strip | score. */
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    gap: 0.5rem;
+    align-items: center;
+  }
+  .darts-darts-strip {
+    display: inline-flex; gap: 0.18rem;
+    align-items: center;
+  }
+  .darts-dart-slot {
+    min-width: 30px; padding: 0.18rem 0.32rem;
+    border: 1px dashed rgba(201,170,113,0.3);
+    border-radius: 4px;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.7rem; letter-spacing: 0.02em;
+    color: var(--cream-dim, rgba(245,233,209,0.55));
+    text-align: center;
+    line-height: 1;
+    transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+  }
+  .darts-dart-slot.has-throw {
+    border-style: solid;
+    border-color: var(--gold);
+    color: var(--gold);
+    background: rgba(201,170,113,0.08);
+  }
+  .darts-dart-slot.is-treble {
+    background: rgba(201,170,113,0.22);
+    color: #fff;
+    border-color: #fff;
+  }
+  .darts-dart-slot.is-bull {
+    background: #d94343;
+    color: #fff;
+    border-color: #fff;
+  }
+  .darts-dart-slot.is-double {
+    background: rgba(63,184,128,0.22);
+    border-color: #2fdc7a;
+    color: #2fdc7a;
+  }
+  .darts-dart-slot.is-new {
+    animation: dart-pop 0.45s ease-out both;
+  }
+  @keyframes dart-pop {
+    0%   { transform: scale(0.6) translateX(-8px); opacity: 0; }
+    60%  { transform: scale(1.18); opacity: 1; }
+    100% { transform: scale(1)    translateX(0);  opacity: 1; }
+  }
+
+  /* Round-total chip — appears next to the player score whenever
+   * we have a last_round on this slot. Gold if normal, special
+   * colours for 180 / ton+ / stinker. */
+  .darts-row .last-round {
+    display: inline-flex; align-items: baseline; gap: 0.2rem;
+    padding: 0.1rem 0.35rem;
+    background: rgba(201,170,113,0.1);
+    border: 1px solid rgba(201,170,113,0.35);
+    border-radius: 999px;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.62rem;
+    color: var(--gold);
+    letter-spacing: 0.04em;
+    margin-left: 0.45rem;
+    white-space: nowrap;
+  }
+  .darts-row .last-round .lr-tag {
+    font-size: 0.52rem; opacity: 0.75; letter-spacing: 0.08em;
+  }
+  .darts-row .last-round.notable-180    { background: #d94343; border-color: #d94343; color: #fff; }
+  .darts-row .last-round.notable-tonplus{ background: #c9aa71; border-color: #c9aa71; color: #1b0f04; }
+  .darts-row .last-round.notable-finish { background: #2fdc7a; border-color: #2fdc7a; color: #0f0905; }
+  .darts-row .last-round.notable-stinker{ background: #444;    border-color: #444;    color: #999; }
+  .darts-row .last-round.is-fresh {
+    animation: lr-pop 0.55s ease-out both;
+  }
+  @keyframes lr-pop {
+    0%   { transform: scale(0.5); opacity: 0; }
+    60%  { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(1);    opacity: 1; }
+  }
+
+  /* ============================================================
+   * Celebration overlay — full-panel banner on big shots
+   * (180s, ton+ rounds, checkouts, stinkers). LOUD mode only;
+   * QUIET mode keeps just the chip animations above.
+   * ========================================================== */
+  .darts-celebration {
+    position: absolute;
+    left: 0; right: 0; top: 50%;
+    transform: translateY(-50%);
+    pointer-events: none;
+    text-align: center;
+    z-index: 20;
+    opacity: 0;
+  }
+  .darts-celebration.is-firing {
+    animation: celeb-show 3.2s ease-out both;
+  }
+  @keyframes celeb-show {
+    0%   { opacity: 0; transform: translateY(-50%) scale(0.8); }
+    18%  { opacity: 1; transform: translateY(-50%) scale(1.06); }
+    35%  { opacity: 1; transform: translateY(-50%) scale(1); }
+    85%  { opacity: 1; transform: translateY(-50%) scale(1); }
+    100% { opacity: 0; transform: translateY(-50%) scale(1.04); }
+  }
+  .darts-celebration .celeb-headline {
+    font-family: "Archivo Black", sans-serif;
+    font-size: 2.4rem; line-height: 1; letter-spacing: 0.02em;
+    color: var(--gold);
+    text-shadow: 0 0 18px rgba(201,170,113,0.5);
+    margin: 0;
+  }
+  .darts-celebration.kind-180   .celeb-headline { color: #fff; text-shadow: 0 0 24px #d94343; }
+  .darts-celebration.kind-tonplus .celeb-headline { color: var(--gold); }
+  .darts-celebration.kind-finish .celeb-headline { color: #2fdc7a; text-shadow: 0 0 22px #2fdc7a; }
+  .darts-celebration.kind-stinker .celeb-headline { color: #ccc; text-shadow: none; }
+  .darts-celebration .celeb-banter {
+    font-family: "Inter", system-ui, sans-serif;
+    font-size: 1.05rem; line-height: 1.25;
+    color: var(--cream); font-weight: 600;
+    margin-top: 0.6rem;
+    padding: 0 0.8rem;
+  }
+  /* Container needs position:relative for the absolute celebration. */
+  .panel-darts { position: relative; }
+  /* On a 180 / finish / ton+ in LOUD mode also flash the panel bg. */
+  .panel-darts.celeb-flash-180     { animation: celeb-flash-180   0.9s ease-out 1; }
+  .panel-darts.celeb-flash-tonplus { animation: celeb-flash-gold  0.9s ease-out 1; }
+  .panel-darts.celeb-flash-finish  { animation: celeb-flash-green 0.9s ease-out 1; }
+  @keyframes celeb-flash-180 {
+    0% { box-shadow: inset 0 0 0 0 rgba(217,67,67,0); }
+    25% { box-shadow: inset 0 0 240px 0 rgba(217,67,67,0.32); }
+    100% { box-shadow: inset 0 0 0 0 rgba(217,67,67,0); }
+  }
+  @keyframes celeb-flash-gold {
+    0% { box-shadow: inset 0 0 0 0 rgba(201,170,113,0); }
+    25% { box-shadow: inset 0 0 240px 0 rgba(201,170,113,0.32); }
+    100% { box-shadow: inset 0 0 0 0 rgba(201,170,113,0); }
+  }
+  @keyframes celeb-flash-green {
+    0% { box-shadow: inset 0 0 0 0 rgba(47,220,122,0); }
+    25% { box-shadow: inset 0 0 240px 0 rgba(47,220,122,0.32); }
+    100% { box-shadow: inset 0 0 0 0 rgba(47,220,122,0); }
+  }
+
+  /* ============================================================
    * Top crash strip — only visible when one or more drinks have
    * crashed. A slim red marquee that slides the crash announcement
    * right-to-left across the top of the screen. Collapses to 0
@@ -1098,6 +1255,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
        ======================================================= -->
   <section class="panel panel-darts" id="panel-darts" aria-label="Darts">
     <h2>🎯 Darts</h2>
+
+    <!-- Celebration overlay — only visible while .is-firing. JS sets
+         the .kind-* class on each fire for the per-event colour. -->
+    <div class="darts-celebration" id="darts-celebration" aria-hidden="true">
+      <h3 class="celeb-headline" id="celeb-headline"></h3>
+      <p class="celeb-banter"   id="celeb-banter"></p>
+    </div>
 
     <div class="darts-stack" id="darts-stack">
       <?php if (empty($darts_games)): ?>
@@ -2232,12 +2396,205 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     "killer": "Killer", "halveit": "Halve It"
   };
 
+  /* Loud-mode toggle from settings.php (super_admin can flip it
+   * via /settings.php → Darts celebrations). When false, the
+   * tap-by-tap rendering still works; we just skip the full-panel
+   * banner + colour flash. */
+  var DARTS_LOUD = <?= $darts_loud ? 'true' : 'false' ?>;
+
+  /* Aussie-pub banter banks. ~40 lines total, randomly drawn so we
+   * don't hear the same line back-to-back. Lines are kept short so
+   * they fit a phone-width panel and read at a glance. */
+  var BANTER = {
+    one_eighty: [
+      "YOU LITTLE RIPPER!",
+      "GET AMONGST IT!",
+      "TOP OF THE LEAGUE!",
+      "CRACKING THROW!",
+      "ABSOLUTE BELTER!",
+      "KNK SALUTES YOU!",
+      "BLOODY BEAUTY!",
+      "AUSTRALIAN OF THE YEAR!"
+    ],
+    tonplus: [
+      "Now we're cooking",
+      "Right up the guts",
+      "Tidy little throw",
+      "That'll do nicely",
+      "Crack on, mate",
+      "Solid work",
+      "Easy as Sunday morning"
+    ],
+    finish: [
+      "GAME, SET, MATCH!",
+      "DONE AND DUSTED!",
+      "Showing 'em how it's done",
+      "Walk-off win, beauty",
+      "Closer than a Bondi tram",
+      "Pour him a cold one"
+    ],
+    stinker: [
+      "Crikey, that's a stinker",
+      "Have a Bex, have a lie down",
+      "Blame the lighting, mate",
+      "Even the cat could've done better",
+      "Ouch — let's not speak of this again",
+      "That's a yikes from me"
+    ],
+    bullseye: [
+      "RIGHT IN THE GUTS!",
+      "Bullseye, beauty!",
+      "Dead centre — class",
+      "Lasered it"
+    ],
+    treble: [
+      "Tidy treble",
+      "Right where you want it",
+      "Easy money",
+      "Buttery"
+    ]
+  };
+  function pickBanter(kind) {
+    var arr = BANTER[kind] || [];
+    if (arr.length === 0) return "";
+    return arr[Math.floor(Math.random() * arr.length)];
+  }
+
+  /* ------------------------------------------------------------
+   * Per-game render state we carry across polls. We use this to:
+   *   - decide which dart slots are "new" (animate them in)
+   *   - detect when a player just COMPLETED their round (fire chip)
+   *   - decide whether to trigger a celebration banner
+   * ------------------------------------------------------------ */
+  var dartsState = {
+    /* gameById[game_id] = {
+     *   latest_throw_id: int,
+     *   slot_last_round: { slot_no: { turn, last_throw_id, total } }
+     * } */
+    gameById: {},
+    /* True the very first time we render — suppresses celebrations
+     * for darts that were already on the board when we loaded. */
+    bootstrapped: false
+  };
+
+  function classifyNotable(gameType, lastRound, headline) {
+    if (!lastRound) return null;
+    var total = lastRound.total | 0;
+    var darts = lastRound.darts || [];
+    var anyBull = false, anyTreble = false, anyDouble = false;
+    for (var i = 0; i < darts.length; i++) {
+      var lbl = (darts[i].label || "").toUpperCase();
+      if (lbl.indexOf("BULL") !== -1) anyBull = true;
+      else if (lbl.charAt(0) === "T") anyTreble = true;
+      else if (lbl.charAt(0) === "D") anyDouble = true;
+    }
+    var isX01 = (gameType === "501" || gameType === "301");
+    /* Finish detection — heuristic only. In x01 the headline goes
+     * to "0" or "DONE" when a player checks out. */
+    var hl = (headline || "").toString().toUpperCase();
+    if (isX01 && (hl === "0" || hl === "DONE")) return "finish";
+    if (isX01 && total === 180)                  return "180";
+    if (isX01 && total >= 100 && total < 180)    return "tonplus";
+    if (isX01 && total <= 15)                    return "stinker";
+    if (anyBull)                                 return "bullseye";
+    if (anyTreble)                               return "treble";
+    return null;
+  }
+
+  /* Fire the celebration banner. Auto-clears after the CSS
+   * animation duration. Only one celebration runs at a time —
+   * a second trigger replaces the in-flight banner. */
+  var celebTimer = null;
+  function fireCelebration(kind, playerName) {
+    var cel = document.getElementById("darts-celebration");
+    var hd  = document.getElementById("celeb-headline");
+    var bn  = document.getElementById("celeb-banter");
+    var panel = document.getElementById("panel-darts");
+    if (!cel || !hd || !bn) return;
+
+    var headline = "";
+    if (kind === "180")          headline = "180!";
+    else if (kind === "tonplus") headline = "TON-PLUS!";
+    else if (kind === "finish")  headline = "CHECKOUT!";
+    else if (kind === "stinker") headline = "OOF…";
+    else if (kind === "bullseye")headline = "BULLSEYE!";
+    else if (kind === "treble")  headline = "TREBLE!";
+    else                         return;
+
+    /* QUIET mode — just show a small chip-style badge under the
+     * headline; skip the panel flash + huge banner. */
+    if (!DARTS_LOUD) {
+      hd.textContent = headline;
+      bn.textContent = playerName ? ("— " + playerName) : "";
+      cel.classList.remove("kind-180","kind-tonplus","kind-finish","kind-stinker","kind-bullseye","kind-treble");
+      cel.classList.add("kind-" + kind);
+      cel.classList.remove("is-firing");
+      void cel.offsetWidth; // restart animation
+      cel.classList.add("is-firing");
+      return;
+    }
+
+    hd.textContent = headline;
+    var line = pickBanter(kind);
+    bn.textContent = line + (playerName ? " — " + playerName : "");
+    cel.classList.remove("kind-180","kind-tonplus","kind-finish","kind-stinker","kind-bullseye","kind-treble");
+    cel.classList.add("kind-" + kind);
+    cel.classList.remove("is-firing");
+    void cel.offsetWidth;
+    cel.classList.add("is-firing");
+
+    /* Panel flash for the loudest kinds only. */
+    if (panel) {
+      panel.classList.remove(
+        "celeb-flash-180","celeb-flash-tonplus","celeb-flash-finish"
+      );
+      void panel.offsetWidth;
+      if (kind === "180")          panel.classList.add("celeb-flash-180");
+      else if (kind === "tonplus") panel.classList.add("celeb-flash-tonplus");
+      else if (kind === "finish")  panel.classList.add("celeb-flash-finish");
+    }
+
+    if (celebTimer) clearTimeout(celebTimer);
+    celebTimer = setTimeout(function () {
+      cel.classList.remove("is-firing");
+    }, 3300);
+  }
+
   function pollDarts() {
     fetch("/api/darts_live.php", { cache: "no-store" })
       .then(function (r) { return r.json(); })
       .then(renderDarts)
       .catch(function () { /* keep last frame */ });
   }
+
+  function dartSlotHtml(throwObj, isNew) {
+    /* throwObj may be undefined for empty slots — render a dashed
+     * placeholder so the strip width stays stable as darts land. */
+    if (!throwObj) {
+      return '<span class="darts-dart-slot" aria-hidden="true">·</span>';
+    }
+    var lbl = (throwObj.label || "").toUpperCase();
+    var cls = "darts-dart-slot has-throw";
+    if (lbl.indexOf("BULL") !== -1)       cls += " is-bull";
+    else if (lbl.charAt(0) === "T")       cls += " is-treble";
+    else if (lbl.charAt(0) === "D")       cls += " is-double";
+    if (isNew) cls += " is-new";
+    return '<span class="' + cls + '">' + escapeHtml(lbl) + '</span>';
+  }
+
+  function lastRoundChipHtml(lr, notable, isFresh) {
+    if (!lr) return "";
+    var cls = "last-round";
+    if (notable === "180")       cls += " notable-180";
+    else if (notable === "tonplus") cls += " notable-tonplus";
+    else if (notable === "finish")  cls += " notable-finish";
+    else if (notable === "stinker") cls += " notable-stinker";
+    if (isFresh) cls += " is-fresh";
+    return '<span class="' + cls + '">'
+         +   '<span class="lr-tag">RD</span> ' + (lr.total | 0)
+         + '</span>';
+  }
+
   function renderDarts(s) {
     if (!s) return;
     var games = (s && s.games) || [];
@@ -2245,28 +2602,84 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     var html = "";
 
     if (games.length === 0) {
-      /* No live games — paint the "Waiting for players" advert.
-       * Same fallback whether boards are simply free or the kill
-       * switch is off and the API returned an empty list. */
       html =
         '<div class="darts-empty" id="darts-empty">' +
           '<div class="pulse">🎯</div>' +
           '<h3>WAITING FOR <span class="accent">PLAYERS</span></h3>' +
           '<div class="sub">Boards are free — grab some darts.</div>' +
         '</div>';
+      // Clean up any per-game state for games that ended.
+      dartsState.gameById = {};
+      stack.innerHTML = html;
     } else {
+      var seenGames = {};
       games.forEach(function (g) {
+        var gid = g.game_id | 0;
+        seenGames[gid] = true;
+        var prev = dartsState.gameById[gid] || {
+          latest_throw_id: 0, slot_last_round: {}
+        };
+        var nextLatestThrowId = g.latest_throw_id | 0;
         var rows = "";
+
         (g.rows || []).forEach(function (r) {
+          var slot = r.slot_no | 0;
+          var prevLR = prev.slot_last_round[slot] || null;
+          var lr = r.last_round || null;
+          var notable = classifyNotable(g.game_type, lr, r.headline);
+
+          /* "Round just landed" detection: the last_round.last_throw_id
+           * for this slot has increased since the previous poll. We
+           * suppress this on the first poll (bootstrap) so we don't
+           * fire celebrations for darts that were already on the board
+           * when the TV booted. */
+          var isFreshRound = false;
+          if (lr) {
+            if (!prevLR || (lr.last_throw_id | 0) > (prevLR.last_throw_id | 0)) {
+              isFreshRound = true;
+            }
+          }
+
+          if (isFreshRound && notable && dartsState.bootstrapped) {
+            fireCelebration(notable, r.name);
+          }
+
+          /* Update slot state for next poll. */
+          if (lr) {
+            prev.slot_last_round[slot] = {
+              last_throw_id: lr.last_throw_id | 0,
+              total:         lr.total | 0,
+              turn:          lr.turn | 0
+            };
+          }
+
+          /* Build the dart strip for this player's CURRENT turn.
+           * Always 3 slots wide. New darts (id > prev latest) get
+           * .is-new for the slide-in animation. */
+          var ct = r.current_throws || [];
+          var darts = "";
+          for (var i = 0; i < 3; i++) {
+            var t = ct[i];
+            var isNew = !!(t && (t.id | 0) > (prev.latest_throw_id | 0));
+            darts += dartSlotHtml(t, isNew);
+          }
+
           rows +=
             '<div class="darts-row' + (r.is_active ? " active" : "") + '">' +
               '<span class="name">'  + escapeHtml(r.name)     + '</span>' +
-              '<span class="score">' + escapeHtml(r.headline) + '</span>' +
+              '<span class="darts-darts-strip">' + darts + '</span>' +
+              '<span class="score">' + escapeHtml(r.headline) +
+                lastRoundChipHtml(lr, notable, isFreshRound && dartsState.bootstrapped) +
+              '</span>' +
             '</div>';
         });
+
+        prev.latest_throw_id = nextLatestThrowId;
+        dartsState.gameById[gid] = prev;
+
         var label = GAME_LABELS[g.game_type] || g.game_type;
         html +=
-          '<div class="darts-card" data-game-id="' + (g.game_id | 0) + '">' +
+          '<div class="darts-card" data-game-id="' + gid + '">' +
             '<div class="head">' +
               '<span class="board">' + escapeHtml(g.board_name) + '</span>' +
               '<span class="gtype">' + escapeHtml(label)        + '</span>' +
@@ -2274,8 +2687,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
             '<div class="darts-rows">' + rows + '</div>' +
           '</div>';
       });
+      stack.innerHTML = html;
+      // Drop state for games that have left the playing list.
+      Object.keys(dartsState.gameById).forEach(function (k) {
+        if (!seenGames[k]) delete dartsState.gameById[k];
+      });
     }
-    stack.innerHTML = html;
+
+    /* Mark the engine bootstrapped after the first frame. From the
+     * second frame on, fresh-round detection can fire celebrations. */
+    dartsState.bootstrapped = true;
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== DARTS_POLL) {
       DARTS_POLL = Math.max(2000, s.poll_seconds * 1000);

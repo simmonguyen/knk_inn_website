@@ -84,31 +84,115 @@ try {
         $board_id = (int)$g["board_id"];
         if (!isset($boards[$board_id])) continue;
 
-        $players = knk_darts_load_players((int)$g["id"]);
+        $game_id = (int)$g["id"];
+        $players = knk_darts_load_players($game_id);
+        $throws  = knk_darts_load_throws($game_id, false);
         $sb      = $g["state_json"] ? json_decode((string)$g["state_json"], true) : null;
         $type    = (string)$g["game_type"];
         $format  = (string)$g["format"];
         $current = $g["current_slot_no"] !== null ? (int)$g["current_slot_no"] : null;
 
+        /* Group throws by (slot_no, turn_no) for tap-by-tap rendering.
+         * Each player gets:
+         *   - current_throws: their darts in the in-progress turn (0..3)
+         *   - last_round: their last completed turn's summary, or null
+         *   - latest_throw_id: max id we've seen for them (TV diff key) */
+        $by_slot = [];      // slot_no => [turn_no => [throw rows]]
+        $latest_throw_id = 0;
+        foreach ($throws as $t) {
+            $sn = (int)$t["slot_no"];
+            $tn = (int)$t["turn_no"];
+            $by_slot[$sn][$tn][] = $t;
+            if ((int)$t["id"] > $latest_throw_id) $latest_throw_id = (int)$t["id"];
+        }
+
         $rows = [];
         foreach ($players as $p) {
             $slot = (int)$p["slot_no"];
+            $turns_for_slot = $by_slot[$slot] ?? [];
+            $turn_keys = array_keys($turns_for_slot);
+            sort($turn_keys, SORT_NUMERIC);
+
+            // The current_turn for this slot, in 501/301, is
+            // current_turn_no when this slot === current_slot_no.
+            // In all game types: current = max turn_no whose 3 darts
+            // aren't yet complete; otherwise the next turn is "current"
+            // but empty.
+            $current_turn = null;
+            $last_full_turn = null;
+            foreach ($turn_keys as $tn) {
+                $cnt = count($turns_for_slot[$tn]);
+                if ($cnt < 3) {
+                    $current_turn = $tn;
+                } else {
+                    $last_full_turn = $tn;
+                }
+            }
+
+            // Build the current-turn dart array (0..3 entries).
+            $current_darts = [];
+            if ($current_turn !== null) {
+                $darts = $turns_for_slot[$current_turn];
+                usort($darts, function ($a, $b) {
+                    return (int)$a["dart_no"] - (int)$b["dart_no"];
+                });
+                foreach ($darts as $d) {
+                    $current_darts[] = [
+                        "dart"  => (int)$d["dart_no"],
+                        "label" => (string)$d["segment"],
+                        "value" => (int)$d["value"],
+                        "id"    => (int)$d["id"],
+                    ];
+                }
+            }
+
+            // Build the last-completed-round summary if any.
+            $last_round = null;
+            if ($last_full_turn !== null) {
+                $darts = $turns_for_slot[$last_full_turn];
+                usort($darts, function ($a, $b) {
+                    return (int)$a["dart_no"] - (int)$b["dart_no"];
+                });
+                $total = 0;
+                $arr = [];
+                $max_id = 0;
+                foreach ($darts as $d) {
+                    $val = (int)$d["value"];
+                    $total += $val;
+                    $arr[] = [
+                        "dart"  => (int)$d["dart_no"],
+                        "label" => (string)$d["segment"],
+                        "value" => $val,
+                    ];
+                    if ((int)$d["id"] > $max_id) $max_id = (int)$d["id"];
+                }
+                $last_round = [
+                    "turn"        => $last_full_turn,
+                    "darts"       => $arr,
+                    "total"       => $total,
+                    "last_throw_id" => $max_id,
+                ];
+            }
+
             $rows[] = [
-                "slot_no"   => $slot,
-                "name"      => (string)$p["name"],
-                "team_no"   => (int)$p["team_no"],
-                "headline"  => knk_tv_darts_headline($type, $format, $sb, $slot),
-                "is_active" => ($current !== null && $slot === $current),
+                "slot_no"        => $slot,
+                "name"           => (string)$p["name"],
+                "team_no"        => (int)$p["team_no"],
+                "headline"       => knk_tv_darts_headline($type, $format, $sb, $slot),
+                "is_active"      => ($current !== null && $slot === $current),
+                "current_throws" => $current_darts,
+                "last_round"     => $last_round,
             ];
         }
 
         $out["games"][] = [
             "board_id"        => $board_id,
             "board_name"      => (string)$boards[$board_id]["name"],
-            "game_id"         => (int)$g["id"],
+            "game_id"         => $game_id,
             "game_type"       => $type,
             "format"          => $format,
             "current_slot_no" => $current,
+            "latest_throw_id" => $latest_throw_id,
             "rows"            => $rows,
         ];
     }

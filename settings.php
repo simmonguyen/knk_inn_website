@@ -104,6 +104,14 @@ elseif ($action === "save_share_rally") {
         ? "Share rally is ON — guests can crash the market via /share.php."
         : "Share rally is OFF — /share.php still loads but no crashes fire.";
 }
+elseif ($action === "save_darts_loud") {
+    $on = !empty($_POST["enabled"]) ? "1" : "0";
+    knk_setting_set("darts_loud_mode", $on, $me_id);
+    knk_audit("settings.update", "settings", "darts_loud_mode", ["value" => $on]);
+    $flash = $on === "1"
+        ? "Darts celebrations are LOUD — banners + banter on big shots."
+        : "Darts celebrations are QUIET — small badges, no audio.";
+}
 elseif ($action === "save_share_urls") {
     $fb_url = trim((string)($_POST["share_url_facebook"] ?? ""));
     $g_url  = trim((string)($_POST["share_url_google"] ?? ""));
@@ -144,6 +152,7 @@ $share_rally_on = knk_setting_bool("share_rally_enabled", true);
 $share_url_fb   = (string)knk_setting("share_url_facebook", "");
 $share_url_g    = (string)knk_setting("share_url_google", "");
 $share_url_ta   = (string)knk_setting("share_url_tripadvisor", "");
+$darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -431,6 +440,40 @@ $share_url_ta   = (string)knk_setting("share_url_tripadvisor", "");
                  style="width:100%; padding:0.5rem;">
         </label>
         <div><button type="submit">Save URLs</button></div>
+      </form>
+    </section>
+
+    <!-- Darts loud-mode toggle (TV celebrations + banter) -->
+    <section class="card">
+      <h2>Darts celebrations</h2>
+      <p class="explain">
+        On the bar TV, every dart now appears tap-by-tap with each
+        round's totals. When this is <strong>ON</strong>, big shots
+        (180s, ton-plus rounds, checkouts) trigger a full-screen
+        banner with Aussie pub banter (&ldquo;You little ripper!&rdquo;
+        on a 180; &ldquo;Crikey, that's a stinker&rdquo; on a 0&ndash;15
+        round) and a gold flash. Turn it <strong>OFF</strong> for slow
+        afternoons or when the volume would be obnoxious &mdash; the
+        tap-by-tap stays, just dialled down to a small badge with no
+        audio.
+      </p>
+
+      <div class="status-row">
+        <?php if ($darts_loud_on): ?>
+          <span class="status-pill on"><span class="dot"></span>Loud</span>
+        <?php else: ?>
+          <span class="status-pill off"><span class="dot"></span>Quiet</span>
+        <?php endif; ?>
+      </div>
+
+      <form method="post" style="margin-top:1rem; display:flex; gap:0.6rem; flex-wrap:wrap">
+        <input type="hidden" name="action" value="save_darts_loud">
+        <?php if ($darts_loud_on): ?>
+          <button type="submit" class="ghost">Quiet mode</button>
+        <?php else: ?>
+          <input type="hidden" name="enabled" value="1">
+          <button type="submit">Loud mode</button>
+        <?php endif; ?>
       </form>
     </section>
 
