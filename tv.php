@@ -590,7 +590,6 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .jbx-logo {
     margin-top: auto;          /* pin to bottom of the jukebox column */
     padding-top: 0.7rem;
-    border-top: 1px solid var(--line);
     position: relative;
     min-height: 240px;
   }
@@ -623,7 +622,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   .jbx-slide .tagline .url {
     color: var(--gold); font-weight: 700;
-    word-break: break-all;
+    /* Don't break the URL mid-word — "knkinn.com/share.php" is
+     * short enough to fit and the trailing "p" was wrapping
+     * onto its own line because of word-break: break-all. */
+    white-space: nowrap;
   }
   /* The "Crash the Market" slide gets a hot-red headline so it
    * pops harder when it cycles in. */

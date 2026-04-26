@@ -348,6 +348,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
                  maxlength="200" required>
         </div>
 
+        <?php if (!defined('KNK_BAR_FRAME')): ?>
         <div class="row2">
           <div class="field">
             <label for="f-name">Your name <span style="text-transform:none;letter-spacing:0;color:var(--cream-dim)">(optional)</span></label>
@@ -364,6 +365,8 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
                    maxlength="20" <?= $require_table ? "required" : "" ?>>
           </div>
         </div>
+        <?php endif; /* KNK_BAR_FRAME — bar shell hides name+table; the
+                        guest's identity comes from the anon cookie. */ ?>
 
         <button type="submit" class="submit">Queue song</button>
 
