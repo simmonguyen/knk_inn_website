@@ -42,6 +42,8 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/../includes/darts.php";
+require_once __DIR__ . "/../includes/darts_lobby.php";  // recent_games_compact
+require_once __DIR__ . "/../includes/darts_stats.php";  // knk_tv_darts_build_stats()
 
 header("Content-Type: application/json; charset=utf-8");
 header("Cache-Control: no-store, no-cache, must-revalidate, max-age=0");
@@ -51,6 +53,7 @@ $out = [
     "now_ts"       => time(),
     "poll_seconds" => 60,
     "games"        => [],
+    "stats"        => null,
     "error"        => null,
 ];
 
@@ -204,6 +207,12 @@ try {
         if ($oa !== $ob) return $oa - $ob;
         return $a["board_id"] - $b["board_id"];
     });
+
+    /* TV right-column stats panels — Recent games / Top scoring this
+     * week / Most-played pie. The JS only renders these when ≤1 board
+     * is mid-game (i.e. while the "Waiting for players" card is up).
+     * Cheap enough to send on every poll: three small SELECTs. */
+    $out["stats"] = knk_tv_darts_build_stats();
 
 } catch (Throwable $e) {
     $out["error"] = "engine_error";

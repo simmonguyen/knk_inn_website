@@ -41,6 +41,8 @@ require_once __DIR__ . "/includes/market_engine.php";
 require_once __DIR__ . "/includes/orders_store.php";   // knk_vnd()
 require_once __DIR__ . "/includes/jukebox.php";
 require_once __DIR__ . "/includes/darts.php";
+require_once __DIR__ . "/includes/darts_lobby.php";   // recent_games_compact (right-col stats)
+require_once __DIR__ . "/includes/darts_stats.php";   // knk_tv_darts_build_stats()
 require_once __DIR__ . "/includes/settings_store.php";
 
 /* =============================================================
@@ -180,6 +182,15 @@ if ($darts_enabled) {
 /* The URL on the bar QR codes / "scan to play" cards for darts.
  * Falls back to /darts.php which lists the boards. */
 $DARTS_LOBBY_URL = $_scheme . "://" . $_host . "/darts.php";
+
+/* Right-column stats — Recent / Top scoring / Most-played pie. We
+ * always build these on first paint so the column doesn't show empty
+ * skeleton boxes for the first 4-second poll cycle. JS refreshes
+ * them via /api/darts_live.php. Stats are visible only when ≤1
+ * board is mid-game (i.e. while "Waiting for players" is up). */
+$darts_stats = $darts_enabled ? knk_tv_darts_build_stats() : [
+    "recent" => [], "top_rounds" => [], "pie" => ["total" => 0, "slices" => []],
+];
 
 /* ---- Helpers ---- */
 function h($s): string { return htmlspecialchars((string)$s, ENT_QUOTES, "UTF-8"); }
@@ -720,6 +731,142 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .darts-empty h3 .accent { color: var(--gold); }
   .darts-empty .sub {
     color: var(--gold); font-weight: 600; font-size: 0.78rem;
+  }
+
+  /* ============================================================
+   * Right-column stats — Recent games / Top scoring this week /
+   * Most-played pie. Sit under the "Waiting for players" card.
+   * Hidden via .darts-stats.is-hidden when 2+ boards are live, so
+   * the game cards have all the column to themselves.
+   * ========================================================== */
+  .darts-stats {
+    flex: 0 0 auto;
+    display: flex; flex-direction: column;
+    gap: 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid rgba(201,170,113,0.18);
+    margin-top: 0.1rem;
+    overflow: hidden;
+  }
+  .darts-stats.is-hidden { display: none; }
+  .darts-stats .stat-card {
+    background: linear-gradient(180deg, #1b0f04 0%, #0f0905 100%);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 0.4rem 0.55rem 0.45rem;
+    line-height: 1.2;
+  }
+  .darts-stats .stat-card h4 {
+    margin: 0 0 0.3rem 0;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.66rem;
+    color: var(--gold);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  /* Recent games list */
+  .darts-stats .ds-recent { list-style: none; padding: 0; margin: 0; }
+  .darts-stats .ds-recent li {
+    display: grid;
+    grid-template-columns: minmax(56px, auto) 1fr;
+    gap: 0.5rem;
+    padding: 0.18rem 0;
+    font-size: 0.74rem;
+    border-bottom: 1px solid rgba(201,170,113,0.06);
+  }
+  .darts-stats .ds-recent li:last-child { border-bottom: none; }
+  .darts-stats .ds-recent .ago {
+    color: var(--muted);
+    letter-spacing: 0.04em;
+    font-size: 0.7rem;
+    align-self: center;
+  }
+  .darts-stats .ds-recent .body {
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .darts-stats .ds-recent .winner { color: var(--gold); font-weight: 700; }
+  .darts-stats .ds-recent .vs     { color: var(--muted); font-weight: 500; }
+  .darts-stats .ds-recent .loser  { color: var(--fg); }
+  .darts-stats .ds-recent .meta   {
+    color: var(--muted); font-size: 0.66rem;
+    margin-left: 0.3rem;
+  }
+  /* Top scoring rounds */
+  .darts-stats .ds-top { list-style: none; padding: 0; margin: 0; }
+  .darts-stats .ds-top li {
+    display: grid;
+    grid-template-columns: 16px 44px 1fr auto;
+    gap: 0.4rem;
+    align-items: center;
+    padding: 0.2rem 0;
+    font-size: 0.78rem;
+    border-bottom: 1px solid rgba(201,170,113,0.06);
+  }
+  .darts-stats .ds-top li:last-child { border-bottom: none; }
+  .darts-stats .ds-top .rank {
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.66rem; color: var(--muted);
+  }
+  .darts-stats .ds-top .big {
+    font-family: "Archivo Black", sans-serif;
+    font-size: 1.05rem; color: var(--gold);
+    text-align: right;
+  }
+  .darts-stats .ds-top .who {
+    font-weight: 600; color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .darts-stats .ds-top .gtype {
+    color: var(--muted); font-size: 0.68rem;
+    letter-spacing: 0.04em;
+  }
+  .darts-stats .ds-top .is-180 .big {
+    color: #fff; text-shadow: 0 0 8px #d94343;
+  }
+  .darts-stats .ds-top .is-tonplus .big {
+    color: var(--gold); text-shadow: 0 0 6px rgba(201,170,113,0.5);
+  }
+  /* Most-played pie */
+  .darts-stats .ds-pie-wrap {
+    display: flex; align-items: center; gap: 0.55rem;
+  }
+  .darts-stats .ds-pie {
+    width: 70px; height: 70px;
+    flex: 0 0 auto;
+    filter: drop-shadow(0 1px 4px rgba(0,0,0,0.3));
+  }
+  .darts-stats .ds-legend {
+    list-style: none; padding: 0; margin: 0;
+    flex: 1 1 auto; min-width: 0;
+  }
+  .darts-stats .ds-legend li {
+    display: grid;
+    grid-template-columns: 9px 1fr auto auto;
+    gap: 0.4rem;
+    align-items: center;
+    padding: 0.1rem 0;
+    font-size: 0.72rem;
+  }
+  .darts-stats .ds-legend .dot {
+    width: 9px; height: 9px; border-radius: 50%;
+  }
+  .darts-stats .ds-legend .lbl {
+    color: var(--fg);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .darts-stats .ds-legend .pct {
+    font-family: "Archivo Black", sans-serif;
+    color: var(--gold); font-size: 0.72rem;
+  }
+  .darts-stats .ds-legend .cnt {
+    color: var(--muted); font-size: 0.62rem;
+    letter-spacing: 0.04em;
+  }
+  .darts-stats .empty {
+    color: var(--muted);
+    font-size: 0.72rem;
+    text-align: center;
+    padding: 0.3rem 0;
   }
 
   /* ============================================================
@@ -1298,6 +1445,81 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           </div>
         <?php endif; ?>
       <?php endif; ?>
+    </div>
+
+    <!-- ===========================================================
+         Right-column stats. Visible when ≤1 board is mid-game (i.e.
+         while the "Waiting for players" card is up). When 2+ boards
+         are live, JS adds .is-hidden so the game cards take the
+         column. JS refreshes the inner HTML on every poll.
+         ========================================================= -->
+    <div class="darts-stats<?= count($darts_games) > 1 ? ' is-hidden' : '' ?>"
+         id="darts-stats">
+      <div class="stat-card" id="ds-card-recent">
+        <h4>Recent games</h4>
+        <?php if (empty($darts_stats["recent"])): ?>
+          <div class="empty">No games played yet.</div>
+        <?php else: ?>
+          <ul class="ds-recent">
+            <?php foreach ($darts_stats["recent"] as $rg): ?>
+              <li>
+                <span class="ago"><?= h($rg["ago"]) ?></span>
+                <span class="body">
+                  <span class="winner"><?= h($rg["winner"]) ?></span><span class="vs"> beat </span><span class="loser"><?= h($rg["loser"]) ?></span><span class="meta"> · <?= h($rg["type"]) ?></span>
+                </span>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
+      </div>
+
+      <div class="stat-card" id="ds-card-top">
+        <h4>🔥 Top scoring this week</h4>
+        <?php if (empty($darts_stats["top_rounds"])): ?>
+          <div class="empty">Nothing 100+ this week.</div>
+        <?php else: ?>
+          <ul class="ds-top">
+            <?php foreach ($darts_stats["top_rounds"] as $i => $tr):
+              $cls = $tr["tier"] === "180" ? " is-180"
+                  : ($tr["tier"] === "tonplus" ? " is-tonplus" : "");
+            ?>
+              <li class="<?= $cls ?>">
+                <span class="rank">#<?= $i + 1 ?></span>
+                <span class="big"><?= (int)$tr["total"] ?></span>
+                <span class="who"><?= h($tr["name"]) ?></span>
+                <span class="gtype"><?= h($tr["type"]) ?></span>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php endif; ?>
+      </div>
+
+      <div class="stat-card" id="ds-card-pie">
+        <h4>🥧 Most-played</h4>
+        <?php if (empty($darts_stats["pie"]["slices"])): ?>
+          <div class="empty">No games yet.</div>
+        <?php else: ?>
+          <div class="ds-pie-wrap">
+            <svg class="ds-pie" viewBox="0 0 100 100" aria-hidden="true">
+              <?php foreach ($darts_stats["pie"]["slices"] as $s): ?>
+                <path d="<?= h($s["d"]) ?>"
+                      fill="<?= h($s["color"]) ?>"
+                      stroke="#0f0905" stroke-width="0.8"/>
+              <?php endforeach; ?>
+            </svg>
+            <ul class="ds-legend">
+              <?php foreach ($darts_stats["pie"]["slices"] as $s): ?>
+                <li>
+                  <span class="dot" style="background:<?= h($s["color"]) ?>"></span>
+                  <span class="lbl"><?= h($s["label"]) ?></span>
+                  <span class="pct"><?= (int)$s["pct"] ?>%</span>
+                  <span class="cnt"><?= (int)$s["n"] ?>g</span>
+                </li>
+              <?php endforeach; ?>
+            </ul>
+          </div>
+        <?php endif; ?>
+      </div>
     </div>
   </section>
 
@@ -2763,6 +2985,102 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
     if (typeof s.poll_seconds === "number" && s.poll_seconds * 1000 !== DARTS_POLL) {
       DARTS_POLL = Math.max(2000, s.poll_seconds * 1000);
+    }
+
+    /* Right-column stats — visible when ≤1 board is mid-game (i.e.
+     * while "Waiting for players" is up). Hidden otherwise so the
+     * game cards have the column. */
+    var statsEl = document.getElementById("darts-stats");
+    if (statsEl) {
+      var hideStats = games.length > 1;
+      if (hideStats) statsEl.classList.add("is-hidden");
+      else           statsEl.classList.remove("is-hidden");
+      if (!hideStats && s.stats) {
+        renderDartsStats(s.stats);
+      }
+    }
+  }
+
+  /* Re-render the three stat cards from the API payload. Server's
+   * first paint already wrote the same shape to the DOM; this just
+   * keeps it fresh as games finish through the night. */
+  function renderDartsStats(stats) {
+    if (!stats) return;
+    var recent = stats.recent || [];
+    var top    = stats.top_rounds || [];
+    var pie    = stats.pie || { slices: [] };
+
+    var recentCard = document.getElementById("ds-card-recent");
+    if (recentCard) {
+      var html = '<h4>Recent games</h4>';
+      if (recent.length === 0) {
+        html += '<div class="empty">No games played yet.</div>';
+      } else {
+        html += '<ul class="ds-recent">';
+        recent.forEach(function (rg) {
+          html += '<li>'
+               +   '<span class="ago">' + escapeHtml(rg.ago) + '</span>'
+               +   '<span class="body">'
+               +     '<span class="winner">' + escapeHtml(rg.winner) + '</span>'
+               +     '<span class="vs"> beat </span>'
+               +     '<span class="loser">'  + escapeHtml(rg.loser)  + '</span>'
+               +     '<span class="meta"> · ' + escapeHtml(rg.type)  + '</span>'
+               +   '</span>'
+               + '</li>';
+        });
+        html += '</ul>';
+      }
+      recentCard.innerHTML = html;
+    }
+
+    var topCard = document.getElementById("ds-card-top");
+    if (topCard) {
+      var html2 = '<h4>🔥 Top scoring this week</h4>';
+      if (top.length === 0) {
+        html2 += '<div class="empty">Nothing 100+ this week.</div>';
+      } else {
+        html2 += '<ul class="ds-top">';
+        top.forEach(function (tr, i) {
+          var cls = tr.tier === "180"     ? " is-180"
+                  : tr.tier === "tonplus" ? " is-tonplus" : "";
+          html2 += '<li class="' + cls + '">'
+                +   '<span class="rank">#' + (i + 1) + '</span>'
+                +   '<span class="big">' + (tr.total | 0) + '</span>'
+                +   '<span class="who">' + escapeHtml(tr.name) + '</span>'
+                +   '<span class="gtype">' + escapeHtml(tr.type) + '</span>'
+                + '</li>';
+        });
+        html2 += '</ul>';
+      }
+      topCard.innerHTML = html2;
+    }
+
+    var pieCard = document.getElementById("ds-card-pie");
+    if (pieCard) {
+      var slices = pie.slices || [];
+      var html3 = '<h4>🥧 Most-played</h4>';
+      if (slices.length === 0) {
+        html3 += '<div class="empty">No games yet.</div>';
+      } else {
+        var paths = "";
+        var legend = "";
+        slices.forEach(function (s) {
+          paths += '<path d="' + escapeHtml(s.d) + '"'
+                +    ' fill="' + escapeHtml(s.color) + '"'
+                +    ' stroke="#0f0905" stroke-width="0.8"/>';
+          legend += '<li>'
+                 +   '<span class="dot" style="background:' + escapeHtml(s.color) + '"></span>'
+                 +   '<span class="lbl">' + escapeHtml(s.label) + '</span>'
+                 +   '<span class="pct">' + (s.pct | 0) + '%</span>'
+                 +   '<span class="cnt">' + (s.n | 0)   + 'g</span>'
+                 + '</li>';
+        });
+        html3 += '<div class="ds-pie-wrap">'
+              +    '<svg class="ds-pie" viewBox="0 0 100 100" aria-hidden="true">' + paths + '</svg>'
+              +    '<ul class="ds-legend">' + legend + '</ul>'
+              +  '</div>';
+      }
+      pieCard.innerHTML = html3;
     }
   }
 

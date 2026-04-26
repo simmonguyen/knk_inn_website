@@ -2,17 +2,23 @@
 /*
  * KnK Inn — darts stats helpers.
  *
- * Read-only aggregations powering the three "what's been going on
- * at the boards" panels on /bar.php?tab=darts pick_board view:
+ * Read-only aggregations powering the right-column stat panels on
+ * /tv.php (Recent games / Top scoring this week / Most-played pie).
  *
  *   - knk_darts_top_rounds_this_week()
  *       Best 3-dart turns over the last 7 days, x01 only.
  *
  *   - knk_darts_leaderboard()
- *       Top win-rate players (min 3 games) over all finished games.
+ *       Top win-rate players (min 3 games). Currently unused by the
+ *       TV but kept around — admin pages may want it later.
  *
  *   - knk_darts_game_type_distribution()
- *       Game type → game count, used to render the pie chart.
+ *       Game type → game count, powers the pie chart.
+ *
+ *   - knk_tv_darts_build_stats()
+ *       One-shot bundler used by both /tv.php (server first paint)
+ *       and /api/darts_live.php (TV polls). Returns recent / top /
+ *       pie pre-shaped so the TV's JS can paint without extra trig.
  *
  * No schema changes — pure SELECTs over the existing darts_games /
  * darts_players / darts_throws tables.
@@ -21,6 +27,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/darts_lobby.php"; // knk_darts_recent_games_compact
 
 /**
  * Top N highest-scoring 3-dart rounds in the last 7 days, across
@@ -145,4 +152,132 @@ function knk_darts_game_type_distribution(): array {
         error_log("knk_darts_game_type_distribution: " . $e->getMessage());
         return [];
     }
+}
+
+/* ---------------------------------------------------------------
+ * TV right-column stats payload — three panels worth of data,
+ * pre-shaped so the TV's JS can paint without extra work. Lives
+ * here (not in /api/) so /tv.php's server-render and the API's JSON
+ * response use the same code path.
+ *
+ * Returns:
+ *   {
+ *     recent:     [ { ago, winner, loser, type, board }, ... ],
+ *     top_rounds: [ { total, name, type, tier }, ... ],
+ *     pie:        { total, slices: [ { label, color, n, pct, d }, ... ] }
+ *   }
+ * "tier" on top_rounds is "" / "tonplus" / "180" — drives glow.
+ * "d" on pie slices is a ready-to-render SVG arc path string.
+ * ------------------------------------------------------------- */
+function knk_tv_darts_build_stats(): array {
+    $now_ts = time();
+
+    /* --- Recent games (last 6, all boards) --- */
+    $recent_raw = knk_darts_recent_games_compact(6);
+    $recent = [];
+    foreach ($recent_raw as $rg) {
+        $secs = $rg["finished_ts"] > 0
+            ? max(0, $now_ts - (int)$rg["finished_ts"])
+            : 0;
+        if      ($secs < 60)    $ago = "just now";
+        elseif  ($secs < 3600)  $ago = (int)round($secs / 60)    . "m ago";
+        elseif  ($secs < 86400) $ago = (int)round($secs / 3600)  . "h ago";
+        else                    $ago = (int)round($secs / 86400) . "d ago";
+
+        $others = array_values(array_filter(
+            $rg["players"],
+            function ($n) use ($rg) { return $n !== $rg["winner_name"]; }
+        ));
+
+        $recent[] = [
+            "ago"    => $ago,
+            "winner" => (string)($rg["winner_name"] ?: "—"),
+            "loser"  => (string)(implode(", ", $others) ?: "—"),
+            "type"   => strtoupper((string)$rg["game_type"]),
+            "board"  => (string)($rg["board_name"] ?? ""),
+        ];
+    }
+
+    /* --- Top scoring rounds this week (top 3, x01 only) --- */
+    $top_raw = knk_darts_top_rounds_this_week(3);
+    $top = [];
+    foreach ($top_raw as $tr) {
+        $rt = (int)$tr["round_total"];
+        $tier = $rt === 180 ? "180" : ($rt >= 140 ? "tonplus" : "");
+        $top[] = [
+            "total" => $rt,
+            "name"  => (string)($tr["player_name"] ?: "—"),
+            "type"  => strtoupper((string)$tr["game_type"]),
+            "tier"  => $tier,
+        ];
+    }
+
+    /* --- Most-played pie --- */
+    $pie_raw = knk_darts_game_type_distribution();
+    $pie_total = 0;
+    foreach ($pie_raw as $row) $pie_total += (int)$row["n"];
+
+    $pie_label = [
+        "501"         => "501",
+        "301"         => "301",
+        "cricket"     => "Cricket",
+        "aroundclock" => "Around Clk",
+        "killer"      => "Killer",
+        "halveit"     => "Halve It",
+    ];
+    $pie_color = [
+        "501"         => "#c9aa71",
+        "301"         => "#d8c08b",
+        "cricket"     => "#2fdc7a",
+        "aroundclock" => "#5cc4ff",
+        "killer"      => "#d94343",
+        "halveit"     => "#9b6dff",
+    ];
+
+    /* Pre-compute SVG arc paths so the TV doesn't have to do trig. */
+    $cx = 50; $cy = 50; $r = 44;
+    $cum = 0.0;
+    $slices = [];
+    foreach ($pie_raw as $row) {
+        $type = (string)$row["game_type"];
+        $n    = (int)$row["n"];
+        $frac = $pie_total > 0 ? $n / $pie_total : 0;
+        if ($frac <= 0) continue;
+
+        if (abs($frac - 1.0) < 1e-9) {
+            // Single-slice pie: SVG arc can't draw a 360° sweep, so
+            // we use two semicircles glued together.
+            $d = "M{$cx},{$cy} L{$cx},". ($cy - $r)
+               . " A{$r},{$r} 0 1 1 {$cx},". ($cy + $r)
+               . " A{$r},{$r} 0 1 1 {$cx},". ($cy - $r) . " Z";
+        } else {
+            $startA = $cum * 2 * M_PI - M_PI / 2;
+            $cum   += $frac;
+            $endA   = $cum * 2 * M_PI - M_PI / 2;
+            $sx = $cx + $r * cos($startA);
+            $sy = $cy + $r * sin($startA);
+            $ex = $cx + $r * cos($endA);
+            $ey = $cy + $r * sin($endA);
+            $largeArc = $frac > 0.5 ? 1 : 0;
+            $d = "M{$cx},{$cy} L{$sx},{$sy}"
+               . " A{$r},{$r} 0 {$largeArc} 1 {$ex},{$ey} Z";
+        }
+
+        $slices[] = [
+            "label" => $pie_label[$type] ?? $type,
+            "color" => $pie_color[$type] ?? "#888",
+            "n"     => $n,
+            "pct"   => (int)round($frac * 100),
+            "d"     => $d,
+        ];
+    }
+
+    return [
+        "recent"     => $recent,
+        "top_rounds" => $top,
+        "pie"        => [
+            "total"  => $pie_total,
+            "slices" => $slices,
+        ],
+    ];
 }
