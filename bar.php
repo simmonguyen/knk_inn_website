@@ -120,9 +120,14 @@ $BAR_TAB_PAGE = [
     'profile' => __DIR__ . '/profile.php',
 ];
 
+/* Plain-text labels — every output site must escape these itself.
+ * (They used to be pre-encoded HTML, but knk_bar_closed_html() also
+ * escapes, which double-encoded the ampersand into "Drinks &amp;
+ * orders" on the closed splash. Plain source + escape-at-output is
+ * the consistent fix.) */
 $BAR_TAB_LABEL = [
     'home'    => 'Welcome',
-    'drinks'  => 'Drinks &amp; orders',
+    'drinks'  => 'Drinks & orders',
     'music'   => 'Jukebox',
     'darts'   => 'Darts',
     'profile' => 'My account',
@@ -391,7 +396,7 @@ if ($BAR_TAB !== 'home') {
     <header class="bar-shell-header">
       <a href="/" class="bar-shell-brand">KnK <em>Inn</em></a>
       <div class="bar-shell-header-right">
-        <span class="bar-shell-tagline"><?= $BAR_TAB_LABEL[$BAR_TAB] ?></span>
+        <span class="bar-shell-tagline"><?= htmlspecialchars($BAR_TAB_LABEL[$BAR_TAB] ?? '', ENT_QUOTES, "UTF-8") ?></span>
         <?php
           $bar_avatar_classes = "bar-shell-avatar";
           if ($BAR_TAB === 'profile') $bar_avatar_classes .= " is-active";
