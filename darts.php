@@ -1075,21 +1075,11 @@ if ($show_lobby) {
         html += '<h1>Lobby — <span class="accent">' + escapeHtml(gameLabel(g.game_type)) + '</span></h1>';
         html += '<p class="lede">' + escapeHtml(g.format === 'doubles' ? 'Doubles · 4 players · pairs are 1+3 vs 2+4.' : ('Singles · ' + g.player_count + ' player' + (g.player_count === 1 ? '' : 's'))) + '</p>';
 
-        if (amHost) {
-          html += '<div class="card qr-card">';
-          html += '<h2 style="margin-top:0">Players join here</h2>';
-          html += '<img src="' + qrSrc + '" alt="QR code">';
-          html += '<div class="muted" style="margin-top:0.5rem">or type this code on the Darts page</div>';
-          html += '<div class="code">' + escapeHtml(g.join_code) + '</div>';
-          html += '</div>';
-        } else {
-          html += '<div class="card" style="text-align:center">';
-          html += '<div class="muted">Code</div>';
-          html += '<div style="font-family:Archivo Black, sans-serif; font-size:1.6rem; letter-spacing:0.18em; color:var(--gold); margin:0.3rem 0">' + escapeHtml(g.join_code) + '</div>';
-          html += '<div class="muted">Waiting for the host to start.</div>';
-          html += '</div>';
-        }
-
+        /* Roster comes first now — when the host accepts the game,
+         * the players + Start button are the action items they care
+         * about. The QR card sits at the bottom so guests pulling
+         * out their phones can find it without scrolling past
+         * controls they're not allowed to use. */
         html += '<h2>Roster</h2><div class="roster">';
         slots.forEach(function (slot) {
           var p = byslot[slot];
@@ -1110,6 +1100,24 @@ if ($show_lobby) {
           html += ready ? 'Start the game' : 'Need at least 1 player';
           html += '</button>';
           html += '<div id="lobbyErr" class="err" style="display:none"></div>';
+        }
+
+        /* QR card / join-code card at the bottom — the bit other
+         * phones scan to join. Placed last so the host's controls
+         * read top-down: see roster → press Start. */
+        if (amHost) {
+          html += '<div class="card qr-card" style="margin-top:1.1rem">';
+          html += '<h2 style="margin-top:0">Players join here</h2>';
+          html += '<img src="' + qrSrc + '" alt="QR code">';
+          html += '<div class="muted" style="margin-top:0.5rem">or type this code on the Darts page</div>';
+          html += '<div class="code">' + escapeHtml(g.join_code) + '</div>';
+          html += '</div>';
+        } else {
+          html += '<div class="card" style="text-align:center; margin-top:1.1rem">';
+          html += '<div class="muted">Code</div>';
+          html += '<div style="font-family:Archivo Black, sans-serif; font-size:1.6rem; letter-spacing:0.18em; color:var(--gold); margin:0.3rem 0">' + escapeHtml(g.join_code) + '</div>';
+          html += '<div class="muted">Waiting for the host to start.</div>';
+          html += '</div>';
         }
 
         html += '<a class="small-link" href="' + dartsUrl() + '" style="display:block; text-align:center; margin-top:0.9rem">← Leave the lobby</a>';
