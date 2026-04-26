@@ -36,6 +36,8 @@ require_once __DIR__ . "/guests_store.php";
 require_once __DIR__ . "/orders_store.php";
 require_once __DIR__ . "/smtp_send.php";
 require_once __DIR__ . "/email_template.php";
+require_once __DIR__ . "/follows_store.php";
+require_once __DIR__ . "/notifications_store.php";
 
 /* The anon-email domain matches the constant defined in order.php
  * (KNK_GUEST_ANON_DOMAIN). We re-declare it here so this file is
@@ -309,6 +311,11 @@ function knk_profile_validate_claim_token(string $token): ?array {
  *   - orders.json:        every order with email = anon_email
  *   - jukebox_queue:      every row with requester_email = anon_email
  *   - darts_players:      every row with guest_email = anon_email
+ *   - follows:            both follower_email and followee_email
+ *                          (with conflict-row pre-deletes — see
+ *                          knk_follows_rekey_email)
+ *   - notifications:      both recipient_email and actor_email,
+ *                          with self-notifications dropped post-merge
  *
  * Bookings and the bookings.json are left alone — bookings always
  * come in with a real email via /enquire.php, so an anon guest
@@ -352,11 +359,47 @@ function knk_profile_apply_claim(string $token): ?string {
         return null;
     }
 
+    // Step 2b — re-key the social graph + notifications.
+    //
+    // Follows has UNIQUE(follower_email, followee_email), so a naive
+    // bulk UPDATE would 1062 if both ($X, $anon) and ($X, $real) rows
+    // exist. knk_follows_rekey_email pre-deletes those conflicts and
+    // then runs the UPDATEs. Failure here is non-fatal — the bar still
+    // works without follows; we just log and continue. Notifications
+    // is similar: we rewrite both columns and drop any self-notifs the
+    // merge accidentally creates.
+    try {
+        knk_follows_rekey_email($anon_email, $real_email);
+    } catch (Throwable $e) {
+        error_log("knk_profile_apply_claim/follows: " . $e->getMessage());
+    }
+    try {
+        knk_notifications_rekey_email($anon_email, $real_email);
+    } catch (Throwable $e) {
+        error_log("knk_profile_apply_claim/notifications: " . $e->getMessage());
+    }
+
     // Step 3 — merge / rename the guests row.
     try {
         $pdo = knk_db();
         $real_existing = knk_guest_find_by_email($real_email);
         if ($real_existing) {
+            // The real row already exists — pull the anon row's
+            // avatar across before deleting it, but only if the real
+            // row doesn't already have one. (If it does, we keep the
+            // older / stable photo and let avatar_store clean up the
+            // anon's file when we delete its row below.)
+            $anon_row = knk_guest_find_by_email($anon_email);
+            $anon_avatar  = $anon_row  ? (string)($anon_row["avatar_path"]  ?? "") : "";
+            $real_avatar  = (string)($real_existing["avatar_path"] ?? "");
+            if ($anon_avatar !== "" && $real_avatar === "") {
+                $pdo->prepare("UPDATE guests SET avatar_path = ? WHERE id = ?")
+                    ->execute([$anon_avatar, (int)$real_existing["id"]]);
+                // Null it on the anon row so the file isn't deleted
+                // when we drop the row.
+                $pdo->prepare("UPDATE guests SET avatar_path = NULL WHERE email = ?")
+                    ->execute([$anon_email]);
+            }
             // Delete the anon row outright; the real row's counters
             // will be refreshed below.
             $pdo->prepare("DELETE FROM guests WHERE email = ?")
