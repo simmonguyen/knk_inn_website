@@ -346,14 +346,57 @@ function knk_darts_lobby_challenge_respond(int $challenge_id, string $email, boo
         $chal_row       = knk_guest_find_by_email($challenger);
         $chal_disp      = knk_profile_display_name_for($challenger, $chal_row);
 
-        // Create the game with the LOOKER as host.
-        [$game, $host] = knk_darts_create_game(
-            $chosen_board, "501", "singles", 2, $looker_disp, $email
-        );
-        $game_id = (int)$game["id"];
+        // Create the game with the LOOKER as host. If join_game then
+        // fails (e.g. the slot logic gets surprised by some pre-existing
+        // row, or a transient DB hiccup), we back out the half-formed
+        // game so we don't leave an orphan blocking the board.
+        $game_id = 0;
+        try {
+            [$game, $host] = knk_darts_create_game(
+                $chosen_board, "501", "singles", 2, $looker_disp, $email
+            );
+            $game_id = (int)$game["id"];
 
-        // Add the CHALLENGER as player 2.
-        knk_darts_join_game($game_id, $chal_disp, $challenger);
+            // Defensive sanity check — the host row should exist at
+            // slot 1 after create_game commits. If not, something's
+            // gone sideways (stale connection / duplicate trigger /
+            // half-rolled-back transaction) and we'd rather bail than
+            // attempt a join that's almost guaranteed to fail.
+            $check = $pdo->prepare(
+                "SELECT COUNT(*) FROM darts_players WHERE game_id = ?"
+            );
+            $check->execute([$game_id]);
+            $count = (int)$check->fetchColumn();
+            if ($count !== 1) {
+                throw new RuntimeException(
+                    "Game " . $game_id . " has " . $count
+                    . " players right after create — expected 1."
+                );
+            }
+
+            knk_darts_join_game($game_id, $chal_disp, $challenger);
+        } catch (Throwable $e) {
+            // Roll back the game so the board frees up.
+            if ($game_id > 0) {
+                try {
+                    $pdo->prepare("DELETE FROM darts_players WHERE game_id = ?")
+                        ->execute([$game_id]);
+                    $pdo->prepare("DELETE FROM darts_games WHERE id = ?")
+                        ->execute([$game_id]);
+                } catch (Throwable $cleanup) {
+                    error_log("knk_darts_lobby_challenge_respond/cleanup: "
+                            . $cleanup->getMessage());
+                }
+            }
+            error_log("knk_darts_lobby_challenge_respond/create+join: "
+                    . $e->getMessage());
+            return [
+                "ok"      => false,
+                "game_id" => null,
+                "error"   => "Couldn't start the game — try again. "
+                           . "(" . $e->getMessage() . ")",
+            ];
+        }
 
         // Mark the challenge accepted with the new game_id.
         $pdo->prepare(
