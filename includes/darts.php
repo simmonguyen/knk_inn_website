@@ -252,7 +252,12 @@ function knk_darts_join_game(int $game_id, string $name, string $guest_email = '
 
         $st = $pdo->prepare("SELECT slot_no FROM darts_players WHERE game_id = ? ORDER BY slot_no");
         $st->execute([$game_id]);
-        $taken = array_column($st->fetchAll(), 'slot_no');
+        // Cast to int — Matbao's mysqlnd build returns INT columns as
+        // strings even with PDO::ATTR_EMULATE_PREPARES = false, which
+        // makes the strict in_array() check below silently disagree
+        // with the loop's int $s. That bug surfaced as a SQLSTATE 1062
+        // 'Duplicate entry "X-1"' on the second player joining.
+        $taken = array_map('intval', array_column($st->fetchAll(), 'slot_no'));
         $next_slot = null;
         for ($s = 1; $s <= (int)$game['player_count']; $s++) {
             if (!in_array($s, $taken, true)) { $next_slot = $s; break; }
