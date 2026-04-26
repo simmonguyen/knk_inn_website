@@ -578,22 +578,32 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .jbx-up li .t { font-weight: 600; line-height: 1.2; }
   .jbx-up li .who { color: var(--muted); font-size: 0.68rem; display: block; margin-top: 2px; }
 
-  /* KnK Bar QR + scan link (sits at the bottom of the jukebox
-   * column). Wrapped in a white frame so the SVG renders as the
-   * intended black-on-white QR-style mark — without the frame the
-   * unfilled black-default shapes blend into the dark page.
+  /* QR slide stage at the bottom of the jukebox column. Two
+   * slides — bar.php (Music/Drinks/Darts) and share.php (Crash
+   * the Market) — alternate every ~20s, driven by JS at the
+   * bottom of the page. Only the slide carrying .is-active is
+   * visible; CSS handles the cross-fade.
    *
-   * Stacked vertically so the QR can be a comfortable scan size
+   * Stacked vertically so the QR is a comfortable scan size
    * (a phone needs ~80% of its screen width to focus on a small QR
    * from a bar-distance away). */
   .jbx-logo {
     margin-top: auto;          /* pin to bottom of the jukebox column */
     padding-top: 0.7rem;
     border-top: 1px solid var(--line);
+    position: relative;
+    min-height: 240px;
+  }
+  .jbx-slide {
+    position: absolute; left: 0; right: 0; top: 0.7rem;
     display: flex; flex-direction: column; align-items: center;
     gap: 0.5rem;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.55s ease;
   }
-  .jbx-logo .qr-frame {
+  .jbx-slide.is-active { opacity: 1; pointer-events: auto; }
+  .jbx-slide .qr-frame {
     flex: 0 0 auto;
     width: 130px; height: 130px;
     background: #fff;
@@ -601,19 +611,28 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     padding: 6px;
     display: flex; align-items: center; justify-content: center;
   }
-  .jbx-logo .qr-frame img {
+  .jbx-slide .qr-frame img {
     width: 100%; height: 100%;
     display: block;
   }
-  .jbx-logo .tagline {
+  .jbx-slide .tagline {
     color: var(--fg);
     font-size: 0.78rem; line-height: 1.35;
     text-align: center;
     min-width: 0;
   }
-  .jbx-logo .tagline .url {
+  .jbx-slide .tagline .url {
     color: var(--gold); font-weight: 700;
     word-break: break-all;
+  }
+  /* The "Crash the Market" slide gets a hot-red headline so it
+   * pops harder when it cycles in. */
+  .jbx-slide.is-share .tagline-hd {
+    color: #ff4d5b;
+    font-family: "Archivo Black", sans-serif;
+    font-size: 0.86rem; letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 0.15rem;
   }
 
   /* ============================================================
@@ -995,20 +1014,34 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       </ol>
     </div>
 
-    <!-- KnK Bar scan QR. Pinned to the bottom of this column via
-         margin-top:auto so it always sits in the same place
-         regardless of which other cards (now/radio/up-next) are
-         visible above it. The .qr-frame's white background is what
-         makes the SVG render correctly — the logo has unfilled
-         shapes that go invisible against the dark page bg. -->
-    <div class="jbx-logo" aria-hidden="true">
-      <div class="qr-frame">
-        <img src="/assets/img/knk-bar-logo.svg" alt="">
+    <!-- Two QR slides at the bottom of the jukebox column,
+         pinned via margin-top:auto. JS toggles .is-active between
+         them every ~20 s. The bar slide is the existing
+         "scan to play" prompt; the share slide promotes the
+         /share.php market-crash mechanic. -->
+    <div class="jbx-logo" aria-hidden="true" id="qr-stage">
+      <!-- Slide 1: bar.php (default visible) -->
+      <div class="jbx-slide is-bar is-active" data-slide="bar">
+        <div class="qr-frame">
+          <img src="/assets/img/qr-bar.svg" alt="">
+        </div>
+        <div class="tagline">
+          To queue Music, order a Drink or find a Darts Partner,
+          scan the QR or goto
+          <span class="url">knkinn.com/bar.php</span>
+        </div>
       </div>
-      <div class="tagline">
-        To queue Music, order a Drink or find a Darts Partner,
-        scan the QR or goto
-        <span class="url">knkinn.com/bar.php</span>
+      <!-- Slide 2: share.php — crash the market -->
+      <div class="jbx-slide is-share" data-slide="share">
+        <div class="qr-frame">
+          <img src="/assets/img/qr-share.svg" alt="">
+        </div>
+        <div class="tagline">
+          <div class="tagline-hd">Crash the market →</div>
+          Post about us on Facebook, Google &amp; TripAdvisor for
+          cheaper drinks. Scan or goto
+          <span class="url">knkinn.com/share.php</span>
+        </div>
       </div>
     </div>
   </section>
@@ -1138,6 +1171,23 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   tickClock();
   setInterval(tickClock, 30 * 1000);
+
+  // ----- QR slide carousel (bar ↔ share) -----
+  // Cycle the two QR slides at the bottom of the jukebox column.
+  // 20 s on each, cross-fade is handled by the .jbx-slide.is-active
+  // CSS rule. Pause stays on the bar slide if anything throws.
+  (function () {
+    var slides = document.querySelectorAll("#qr-stage .jbx-slide");
+    if (slides.length < 2) return;
+    var i = 0;
+    setInterval(function () {
+      try {
+        slides[i].classList.remove("is-active");
+        i = (i + 1) % slides.length;
+        slides[i].classList.add("is-active");
+      } catch (_) {}
+    }, 20 * 1000);
+  })();
 
   // ----- Helpers -----
   // Hostname for fallback URL hints — matches what PHP rendered.
