@@ -740,30 +740,58 @@ function knk_jukebox_client_ip(): string {
 /**
  * GET wrapper. cURL when available (Matbao's PHP 7.4 ships it),
  * file_get_contents fallback otherwise.
+ *
+ * One automatic retry on transient connect failures — Ben saw
+ * "Resolving timed out after 4004 milliseconds" intermittently from
+ * Matbao while reaching googleapis.com. The retry covers the common
+ * case (DNS hiccup) without making a fast-path search slow.
+ *
+ * Connect timeout bumped from 4s → 10s, total from 8s → 15s. The
+ * earlier values were tight: a slow Matbao → Google link (Vietnam
+ * sometimes routes via Singapore, adding latency) could TCP-handshake
+ * in 5-6 seconds and miss the 4s window.
  */
 function knk_jukebox_http_get(string $url): string {
-    if (function_exists("curl_init")) {
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 8);
-        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 4);
-        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-        curl_setopt($ch, CURLOPT_USERAGENT, "KnKInn-Jukebox/1.0");
-        $resp = curl_exec($ch);
-        $err  = curl_error($ch);
-        $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-        if ($resp === false) {
-            throw new RuntimeException("Network error: " . $err);
+    $tries = 0;
+    $last_err = "";
+    while ($tries < 2) {
+        $tries++;
+        if (function_exists("curl_init")) {
+            $ch = curl_init($url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+            curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_USERAGENT, "KnKInn-Jukebox/1.0");
+            $resp = curl_exec($ch);
+            $err  = curl_error($ch);
+            $code = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            curl_close($ch);
+            if ($resp !== false && $code < 500) {
+                return (string)$resp;
+            }
+            if ($code >= 500) {
+                throw new RuntimeException("YouTube returned {$code}.");
+            }
+            $last_err = $err !== "" ? $err : "unknown error";
+            // Fall through to retry. Tiny delay so a 100% borked
+            // upstream doesn't get hammered; one second is enough
+            // for a transient DNS / route flap to settle.
+            if ($tries < 2) {
+                usleep(800 * 1000);
+                continue;
+            }
+            throw new RuntimeException("Network error: " . $last_err);
         }
-        if ($code >= 500) {
-            throw new RuntimeException("YouTube returned {$code}.");
-        }
-        return (string)$resp;
+        // file_get_contents fallback. No retry here — the configurable
+        // bits are limited; if it fails once, fail loud.
+        $ctx = stream_context_create([
+            "http" => ["timeout" => 15, "ignore_errors" => true],
+        ]);
+        $resp = @file_get_contents($url, false, $ctx);
+        if ($resp === false) throw new RuntimeException("Network error talking to YouTube.");
+        return $resp;
     }
-    $ctx = stream_context_create(["http" => ["timeout" => 8, "ignore_errors" => true]]);
-    $resp = @file_get_contents($url, false, $ctx);
-    if ($resp === false) throw new RuntimeException("Network error talking to YouTube.");
-    return $resp;
+    throw new RuntimeException("Network error: " . $last_err);
 }

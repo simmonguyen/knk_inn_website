@@ -352,6 +352,39 @@ if ($BAR_TAB !== 'home') {
       width: 2.4rem; text-align: right;
       opacity: 0.7;
     }
+
+    /* WiFi prompt banner — guests on cellular use a fair bit of data
+     * navigating the bar tab; nudging them onto the bar's wifi makes
+     * everything snappier and saves their plan. One-tap dismiss
+     * persists in localStorage so it doesn't nag every page-load. */
+    .bar-wifi {
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.55rem 0.85rem;
+      margin: 0.65rem 0 0.4rem;
+      background: rgba(201,170,113,0.12);
+      border: 1px solid rgba(201,170,113,0.4);
+      border-radius: 10px;
+      color: #f5e9d1;
+      font-size: 0.88rem;
+    }
+    .bar-wifi.is-hidden { display: none; }
+    .bar-wifi .ic   { font-size: 1.1rem; }
+    .bar-wifi .body { flex: 1; line-height: 1.3; }
+    .bar-wifi .body strong { color: #c9aa71; }
+    .bar-wifi .pwd  {
+      font-family: "Archivo Black", monospace, sans-serif;
+      letter-spacing: 0.06em;
+      color: #c9aa71;
+    }
+    .bar-wifi .x {
+      flex: 0 0 auto;
+      width: 26px; height: 26px;
+      border: 0; background: transparent;
+      color: rgba(245,233,209,0.65);
+      font-size: 1.2rem; line-height: 1;
+      cursor: pointer; padding: 0;
+    }
+    .bar-wifi .x:hover { color: #f5e9d1; }
   </style>
 </head>
 <body>
@@ -430,6 +463,35 @@ if ($BAR_TAB !== 'home') {
     </header>
 
     <main class="bar-shell-main">
+      <!-- WiFi nudge — defaults to hidden until the JS confirms the
+           dismiss-flag is NOT set in localStorage. (Inverted default
+           so a flash on every reload doesn't happen for guests who've
+           already dismissed it.) -->
+      <div class="bar-wifi is-hidden" id="bar-wifi">
+        <span class="ic" aria-hidden="true">📶</span>
+        <span class="body">Connect to <strong>KnK Sports Bar</strong> WiFi · password <span class="pwd">888888889</span></span>
+        <button type="button" class="x" id="bar-wifi-x" aria-label="Dismiss">×</button>
+      </div>
+      <script>
+        (function () {
+          var BWK = "knk_bar_wifi_dismissed";
+          var el  = document.getElementById("bar-wifi");
+          if (!el) return;
+          try {
+            if (localStorage.getItem(BWK) !== "1") {
+              el.classList.remove("is-hidden");
+            }
+          } catch (e) { /* localStorage blocked → just leave hidden */ }
+          var x = document.getElementById("bar-wifi-x");
+          if (x) {
+            x.addEventListener("click", function () {
+              el.classList.add("is-hidden");
+              try { localStorage.setItem(BWK, "1"); } catch (e) {}
+            });
+          }
+        })();
+      </script>
+
       <?php if ($BAR_TAB === 'home'): ?>
         <div class="bar-home">
           <h1 class="bar-home-greeting">Welcome to <em>KnK Inn</em></h1>
