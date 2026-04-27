@@ -472,6 +472,100 @@ function knk_darts_record_throw(int $game_id, int $player_id, string $segment): 
 }
 
 /**
+ * Bust the current player's round — voids any darts they've already
+ * thrown this turn and records three MISS darts to fill the round at
+ * 0 points, then advances to the next player.
+ *
+ * Only meaningful in x01 games (501 / 301) where bust = "you went
+ * over, round counts as zero, lose your turn." For other game types
+ * the caller shouldn't expose the button — the API still rejects it
+ * defensively.
+ *
+ * Allowed by the host or the player whose turn it is.
+ */
+function knk_darts_bust_round(int $game_id, int $by_player_id): array {
+    $pdo = knk_db();
+    $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare("SELECT * FROM darts_games WHERE id = ? FOR UPDATE");
+        $st->execute([$game_id]);
+        $game = $st->fetch();
+        if (!$game)                        throw new RuntimeException("Game not found.");
+        if ($game['status'] !== 'playing') throw new RuntimeException("Game is not in progress.");
+
+        $type = (string)$game['game_type'];
+        if ($type !== '501' && $type !== '301') {
+            throw new RuntimeException("Bust only applies to 501 / 301.");
+        }
+
+        $st = $pdo->prepare("SELECT * FROM darts_players WHERE id = ? AND game_id = ?");
+        $st->execute([$by_player_id, $game_id]);
+        $by = $st->fetch();
+        if (!$by) throw new RuntimeException("Not in this game.");
+
+        $current_slot = (int)$game['current_slot_no'];
+        if (!$by['is_host'] && (int)$by['slot_no'] !== $current_slot) {
+            throw new RuntimeException("Only the host or the current thrower can bust.");
+        }
+
+        // Find the current player row — the bust applies to their
+        // turn, not the caller's.
+        $st = $pdo->prepare(
+            "SELECT * FROM darts_players WHERE game_id = ? AND slot_no = ?"
+        );
+        $st->execute([$game_id, $current_slot]);
+        $current_player = $st->fetch();
+        if (!$current_player) throw new RuntimeException("Active slot not found.");
+
+        $turn_no = (int)$game['current_turn_no'];
+
+        // Void any darts the current player has already thrown this turn.
+        $pdo->prepare(
+            "UPDATE darts_throws
+                SET voided = 1
+              WHERE game_id = ? AND slot_no = ? AND turn_no = ? AND voided = 0"
+        )->execute([$game_id, $current_slot, $turn_no]);
+
+        // Record 3 MISS darts so the round explicitly closes at 0.
+        // Going via INSERT direct (not knk_darts_record_throw) so the
+        // turn-cursor update happens once at the end via knk_darts_eval,
+        // not three times.
+        $ins = $pdo->prepare(
+            "INSERT INTO darts_throws (game_id, player_id, slot_no, turn_no, dart_no, segment, value)
+             VALUES (?, ?, ?, ?, ?, 'MISS', 0)"
+        );
+        for ($d = 1; $d <= 3; $d++) {
+            $ins->execute([
+                $game_id, (int)$current_player['id'], $current_slot,
+                $turn_no, $d,
+            ]);
+        }
+
+        // Re-evaluate game state and advance.
+        $players = knk_darts_load_players($game_id);
+        $throws  = knk_darts_load_throws($game_id, false);
+        $eval = knk_darts_eval($game, $players, $throws);
+
+        $pdo->prepare(
+            "UPDATE darts_games
+                SET state_json = ?, last_throw_at = NOW(),
+                    current_slot_no = ?, current_turn_no = ?
+              WHERE id = ?"
+        )->execute([
+            json_encode($eval['state'], JSON_UNESCAPED_UNICODE),
+            $eval['next_slot'], $eval['next_turn'],
+            $game_id,
+        ]);
+
+        $pdo->commit();
+        return $eval['state'];
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
  * Mark the most recent (non-voided) throw as voided, and roll the
  * cursor back if needed. Allowed by the host or the player who threw it.
  */

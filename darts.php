@@ -373,34 +373,58 @@ if ($show_lobby) {
       color: var(--gold);
     }
     .pad-card .turn-info { color: var(--cream-dim); font-size: 0.85rem; margin-bottom: 0.5rem; }
-    .pad-row { display: flex; gap: 0.35rem; margin-bottom: 0.35rem; }
+    /* Numpad — sized for fast tapping with a beer in the other
+     * hand. Bigger buttons, more gap, and -webkit-user-select:none
+     * so a fat-fingered tap doesn't select the button text. */
+    .pad-row { display: flex; gap: 0.55rem; margin-bottom: 0.55rem; }
     .pad-row .mult-chip {
-      flex: 1; padding: 0.55rem 0.4rem; text-align: center;
+      flex: 1; padding: 0.85rem 0.4rem; text-align: center;
       border: 1px solid rgba(201,170,113,0.3);
-      border-radius: 5px; background: rgba(24,12,3,0.55);
-      font-weight: 700; cursor: pointer; font-size: 0.85rem;
+      border-radius: 7px; background: rgba(24,12,3,0.55);
+      font-weight: 700; cursor: pointer; font-size: 0.95rem;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     .pad-row .mult-chip.selected { background: var(--gold); color: var(--brown-deep); border-color: var(--gold); }
     .pad-grid {
       display: grid;
       grid-template-columns: repeat(5, 1fr);
-      gap: 0.3rem;
+      gap: 0.55rem;
     }
     .pad-grid .seg-btn {
-      padding: 0.6rem 0;
+      padding: 0.95rem 0;
+      min-height: 3rem;
       text-align: center;
       border: 1px solid rgba(201,170,113,0.3);
-      border-radius: 5px;
+      border-radius: 7px;
       background: rgba(24,12,3,0.55);
       color: var(--cream);
       font-weight: 700;
       cursor: pointer;
-      font-size: 0.95rem;
+      font-size: 1.05rem;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
     }
     .pad-grid .seg-btn:active { background: var(--gold); color: var(--brown-deep); }
     .pad-grid .seg-btn.special { background: rgba(201,170,113,0.18); }
-    .pad-actions { display: flex; gap: 0.4rem; margin-top: 0.55rem; }
-    .pad-actions .btn { padding: 0.55rem; font-size: 0.85rem; }
+    .pad-actions { display: flex; gap: 0.5rem; margin-top: 0.7rem; flex-wrap: wrap; }
+    .pad-actions .btn {
+      padding: 0.7rem 0.6rem; font-size: 0.9rem;
+      user-select: none; -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    /* Confirm-round button — the explicit "advance to next player"
+     * tap. Hidden until 3 darts have landed and is-pending is set
+     * by the JS, then it slides up and pulses gold. */
+    .pad-actions .btn.is-pulsing {
+      background: var(--gold); color: var(--brown-deep);
+      border-color: var(--gold);
+      animation: pad-pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pad-pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(201,170,113,0.55); }
+      50%      { box-shadow: 0 0 0 6px rgba(201,170,113,0); }
+    }
 
     .turn-darts {
       display: flex; gap: 0.4rem; margin: 0.4rem 0 0.6rem;
@@ -1274,6 +1298,10 @@ if ($show_lobby) {
 
         html += '<div class="pad-actions">';
         html += '<button class="btn secondary" id="undoBtn">Undo last</button>';
+        var isX01 = (g.game_type === '501' || g.game_type === '301');
+        if (isX01) {
+          html += '<button class="btn secondary" id="bustBtn" title="Bust — round counts as 0, turn passes">Bust</button>';
+        }
         html += '<button class="btn danger" id="endBtn" title="End the game now — no winner recorded">End game</button>';
         html += '</div>';
         html += '<div id="padErr" class="err" style="display:none"></div>';
@@ -1314,6 +1342,28 @@ if ($show_lobby) {
               var err = $('#padErr'); err.textContent = e.message; err.style.display = 'block';
             });
         });
+        /* Bust — for x01 only. Voids any thrown darts in the current
+         * round and records 3 MISSes (round = 0), advances turn. The
+         * confirm guards against fat-fingered taps; bust is final. */
+        var bustBtnEl = $('#bustBtn');
+        if (bustBtnEl) {
+          bustBtnEl.addEventListener('click', function () {
+            if (!window.confirm('Bust this round? Counts as 0 and turn passes.')) return;
+            var fd = new FormData();
+            fd.append('game_id', String(GAME_ID));
+            fd.append('token', TOKEN);
+            fetch('/api/darts_bust.php', { method: 'POST', body: fd })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j.ok) throw new Error(j.error || 'Bust failed.');
+                poll();
+              })
+              .catch(function (e) {
+                var err = $('#padErr');
+                if (err) { err.textContent = e.message; err.style.display = 'block'; }
+              });
+          });
+        }
         /* End game — for when someone has to leave mid-match. Marks
          * the game abandoned (no winner). Confirm dialog so it's not
          * a fat-finger; staff have a separate Force-end on the
