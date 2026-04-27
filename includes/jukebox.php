@@ -828,3 +828,56 @@ function knk_jukebox_http_get(string $url): string {
     }
     throw new RuntimeException("Network error: " . $last_err);
 }
+
+/* ==========================================================
+ * RADIO ALT-STREAM SCHEDULE
+ * ========================================================== */
+
+/**
+ * Triple J runs talk-heavy shows that Ben actively dislikes. During
+ * those windows we swap the bar's radio fallback to the Hottest 100
+ * stream — same brand vibe, no chat. All times in Australia/Sydney
+ * so AEST/AEDT switches automatically, regardless of Saigon's UTC+7.
+ *
+ * Schedule (Sydney local):
+ *   Core         — Tuesday   21:00 – 23:00
+ *   Prism        — Wednesday 21:00 – 23:00
+ *   The Hook Up  — Sunday    21:00 – 22:00
+ *   Hack         — Monday–Friday 17:30 – 18:00
+ *
+ * Returns true if NOW falls inside any of those windows.
+ * Cheap to call (one DateTime construct, integer comparisons).
+ */
+function knk_radio_alt_stream_active(): bool {
+    try {
+        $now = new DateTime("now", new DateTimeZone("Australia/Sydney"));
+    } catch (Throwable $e) {
+        // If DateTimeZone barfs (TZ data missing on the host), default
+        // to "no swap" so the configured stream keeps playing.
+        return false;
+    }
+    $dow_iso  = (int)$now->format("N");      // 1=Mon, 7=Sun
+    $minutes  = ((int)$now->format("H")) * 60 + (int)$now->format("i");
+
+    // Each row: [DOW or '*', start_min, end_min].
+    $windows = [
+        // Hack — Mon–Fri 17:30 – 18:00
+        [1, 17 * 60 + 30, 18 * 60],
+        [2, 17 * 60 + 30, 18 * 60],
+        [3, 17 * 60 + 30, 18 * 60],
+        [4, 17 * 60 + 30, 18 * 60],
+        [5, 17 * 60 + 30, 18 * 60],
+        // Core — Tue 21:00 – 23:00
+        [2, 21 * 60, 23 * 60],
+        // Prism — Wed 21:00 – 23:00
+        [3, 21 * 60, 23 * 60],
+        // The Hook Up — Sun 21:00 – 22:00
+        [7, 21 * 60, 22 * 60],
+    ];
+    foreach ($windows as $w) {
+        if ($dow_iso === $w[0] && $minutes >= $w[1] && $minutes < $w[2]) {
+            return true;
+        }
+    }
+    return false;
+}

@@ -30,6 +30,7 @@ $out = [
     "now_playing"  => null,
     "up_next"      => [],
     "queue_length" => 0,
+    "radio_url"    => "",   // effective URL (alt-stream during talk shows)
     "error"        => null,
 ];
 
@@ -40,6 +41,18 @@ try {
     $out["poll_seconds"] = $out["enabled"]
         ? max(2, (int)$cfg["board_poll_seconds"])
         : 60;
+
+    /* Effective radio URL — swaps to the Hottest 100 stream during
+     * Triple J talk shows Ben dislikes (Hack / Core / Prism / The
+     * Hook Up). The TV polls this every state-poll and swaps the
+     * audio source if it changed since last tick. */
+    $base_radio_url = (string)($cfg["radio_url"] ?? "");
+    if ($base_radio_url !== "" && stripos($base_radio_url, "http://") === 0) {
+        $base_radio_url = "https://" . substr($base_radio_url, 7);
+    }
+    $out["radio_url"] = knk_radio_alt_stream_active()
+        ? "https://streaming.abc-cdn.net.au/audio/hls/triplejhottest.m3u8"
+        : $base_radio_url;
 
     $now = knk_jukebox_now_playing();
     if ($now) {

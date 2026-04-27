@@ -89,12 +89,20 @@ $jbx_now       = $jbx_enabled ? knk_jukebox_now_playing() : null;
 $jbx_up_next   = $jbx_enabled ? knk_jukebox_up_next(5) : [];
 
 /* Radio fallback (migration 009). Always upgrade http:// to https://
- * so the browser doesn't block mixed content on the live site. */
+ * so the browser doesn't block mixed content on the live site.
+ *
+ * During specific Triple J talk shows that Ben's not into, we swap
+ * to the Hottest 100 stream automatically — see
+ * knk_radio_alt_stream_active() below. The TV's poll re-evaluates
+ * every minute so the swap kicks in without a reload. */
 $radio_enabled = !empty($jbx_cfg["radio_enabled"]);
 $radio_url     = (string)($jbx_cfg["radio_url"] ?? "");
 if ($radio_url !== "" && stripos($radio_url, "http://") === 0) {
     $radio_url = "https://" . substr($radio_url, 7);
 }
+$radio_url_effective = knk_radio_alt_stream_active()
+    ? "https://streaming.abc-cdn.net.au/audio/hls/triplejhottest.m3u8"
+    : $radio_url;
 
 /* The "Request a song at..." pointer on the splash card. Points
  * at /bar.php (the unified bar shell) rather than /jukebox.php so
@@ -111,7 +119,7 @@ $jbx_initial = [
     "poll_seconds" => $jbx_poll,
     "radio"        => [
         "enabled" => $radio_enabled,
-        "url"     => $radio_url,
+        "url"     => $radio_url_effective,
     ],
     "now_playing"  => $jbx_now ? [
         "id"       => (int)$jbx_now["id"],
@@ -2620,6 +2628,23 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   function renderJukebox(s) {
     if (!s) return;
+
+    /* Radio URL refresh — server picks Hottest 100 vs configured
+     * stream based on the live Triple J schedule. If it changed
+     * since last poll, swap the <audio> source. We only swap when
+     * the radio is currently playing (no songs queued); that keeps
+     * the YouTube player undisturbed. */
+    if (typeof s.radio_url === "string" && s.radio_url !== "" &&
+        s.radio_url !== RADIO.url) {
+      RADIO.url = s.radio_url;
+      var radioElX = document.getElementById("tv-radio");
+      if (radioElX && radioPlaying) {
+        var sepX = (RADIO.url.indexOf("?") >= 0) ? "&" : "?";
+        radioElX.src = RADIO.url + sepX + "_=" + Date.now();
+        var pX = radioElX.play();
+        if (pX && pX.catch) pX.catch(function () {});
+      }
+    }
 
     var videoEl   = document.getElementById("jbx-video");
     var nowEl     = document.getElementById("jbx-now");
