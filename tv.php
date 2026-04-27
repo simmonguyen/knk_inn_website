@@ -809,10 +809,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     flex: 0 0 auto;
     display: flex; flex-direction: column;
     gap: 0.45rem;
-    padding-top: 0.45rem;
-    border-top: 1px solid rgba(201,170,113,0.18);
-    margin-top: 0.1rem;
+    margin-top: 0.4rem;
     overflow: hidden;
+    /* No top divider line — Ben said it felt heavy. The card
+     * borders below provide enough separation from the games. */
   }
   .darts-stats.is-hidden { display: none; }
   /* When 2+ boards are mid-game, the column is full of live scores —
@@ -835,26 +835,18 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  /* Recent games list */
+  /* Recent games list — no time column. The TV refreshes often
+   * enough that "X hours ago" felt redundant; the room knows what
+   * "recent" means. */
   .darts-stats .ds-recent { list-style: none; padding: 0; margin: 0; }
   .darts-stats .ds-recent li {
-    display: grid;
-    grid-template-columns: minmax(56px, auto) 1fr;
-    gap: 0.5rem;
-    padding: 0.18rem 0;
-    font-size: 0.74rem;
+    display: block;
+    padding: 0.22rem 0;
+    font-size: 0.78rem;
     border-bottom: 1px solid rgba(201,170,113,0.06);
-  }
-  .darts-stats .ds-recent li:last-child { border-bottom: none; }
-  .darts-stats .ds-recent .ago {
-    color: var(--muted);
-    letter-spacing: 0.04em;
-    font-size: 0.7rem;
-    align-self: center;
-  }
-  .darts-stats .ds-recent .body {
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
+  .darts-stats .ds-recent li:last-child { border-bottom: none; }
   .darts-stats .ds-recent .winner { color: var(--gold); font-weight: 700; }
   .darts-stats .ds-recent .vs     { color: var(--muted); font-weight: 500; }
   .darts-stats .ds-recent .loser  { color: var(--fg); }
@@ -1174,7 +1166,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   .tv-lyric-nudge:hover  { background: rgba(201,170,113,0.22); }
   .tv-lyric-nudge:active { transform: translateY(-50%) scale(0.94); }
-  .tv-lyric-nudge-left   { left:  1.2rem; }
+  /* Both nudges live on the right edge — Ben's preference. The
+   * left arrow shifts lyrics earlier, the right arrow later;
+   * keeping them paired makes the relationship obvious. */
+  .tv-lyric-nudge-left   { right: 4.4rem; }
   .tv-lyric-nudge-right  { right: 1.2rem; }
   .tv-ticker.is-lyric .tv-lyric-nudge { display: inline-flex; }
   .tv-ticker.is-hidden .tv-ticker-inner {
@@ -1559,10 +1554,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           <ul class="ds-recent">
             <?php foreach ($darts_stats["recent"] as $rg): ?>
               <li>
-                <span class="ago"><?= h($rg["ago"]) ?></span>
-                <span class="body">
-                  <span class="winner"><?= h($rg["winner"]) ?></span><span class="vs"> beat </span><span class="loser"><?= h($rg["loser"]) ?></span><span class="meta"> · <?= h($rg["type"]) ?></span>
-                </span>
+                <span class="winner"><?= h($rg["winner"]) ?></span><span class="vs"> beat </span><span class="loser"><?= h($rg["loser"]) ?></span><span class="meta"> · <?= h($rg["type"]) ?></span>
               </li>
             <?php endforeach; ?>
           </ul>
@@ -3051,15 +3043,15 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       DARTS_POLL = Math.max(2000, s.poll_seconds * 1000);
     }
 
-    /* Right-column stats — always visible, but compact when 2+
-     * boards are mid-game (only Recent shown; Top scoring + Most-
-     * played are hidden because the column is full of live scores).
-     * 0 or 1 games: all three stat cards visible. */
+    /* Right-column stats — always visible, but compact (Recent only)
+     * when the column is busy: 2+ live games OR a Looking-for-
+     * opponent panel is up. Otherwise show Recent + Top scoring. */
     var statsEl = document.getElementById("darts-stats");
     if (statsEl) {
+      var lookerCount = (s.lookers && s.lookers.length) ? s.lookers.length : 0;
       statsEl.classList.remove("is-hidden");
-      if (games.length > 1) statsEl.classList.add("is-compact");
-      else                  statsEl.classList.remove("is-compact");
+      if (games.length > 1 || lookerCount > 0) statsEl.classList.add("is-compact");
+      else                                     statsEl.classList.remove("is-compact");
       if (s.stats) renderDartsStats(s.stats);
     }
 
@@ -3120,13 +3112,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         html += '<ul class="ds-recent">';
         recent.forEach(function (rg) {
           html += '<li>'
-               +   '<span class="ago">' + escapeHtml(rg.ago) + '</span>'
-               +   '<span class="body">'
-               +     '<span class="winner">' + escapeHtml(rg.winner) + '</span>'
-               +     '<span class="vs"> beat </span>'
-               +     '<span class="loser">'  + escapeHtml(rg.loser)  + '</span>'
-               +     '<span class="meta"> · ' + escapeHtml(rg.type)  + '</span>'
-               +   '</span>'
+               +   '<span class="winner">' + escapeHtml(rg.winner) + '</span>'
+               +   '<span class="vs"> beat </span>'
+               +   '<span class="loser">'  + escapeHtml(rg.loser)  + '</span>'
+               +   '<span class="meta"> · ' + escapeHtml(rg.type)  + '</span>'
                + '</li>';
         });
         html += '</ul>';

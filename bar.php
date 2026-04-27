@@ -343,9 +343,13 @@ if ($BAR_TAB !== 'home') {
       font-size: 2rem; line-height: 1;
       width: 2.4rem; text-align: center;
     }
-    .bar-home-btn .label { flex: 1; }
+    /* Label centred between icon (left) and chev (right). To make
+     * "centre" actually visually centred, the chev gets the same
+     * 2.4rem width as the icon so they cancel out. */
+    .bar-home-btn .label { flex: 1; text-align: center; }
     .bar-home-btn .chev {
       color: #c9aa71; font-size: 1.4rem; line-height: 1;
+      width: 2.4rem; text-align: right;
       opacity: 0.7;
     }
   </style>
