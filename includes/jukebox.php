@@ -178,10 +178,24 @@ function knk_jukebox_pending(int $limit = 50): array {
 
 function knk_jukebox_recent(int $limit = 20): array {
     $limit = max(1, min(200, $limit));
+    /* LEFT JOIN guests on requester_email so /jukebox-admin's "Who"
+     * column can fall back to the guest's display_name when no
+     * requester_name was typed. The bar shell skipped the name/table
+     * form to keep the QR-scan flow short, so most rows have a blank
+     * requester_name but a real email. The COALESCE in the SELECT
+     * gives admin pages a single column to render, and the original
+     * requester_name is preserved on the row for any caller that
+     * still wants it. */
     return knk_db()->query(
-        "SELECT * FROM jukebox_queue
-         WHERE status IN ('played','skipped','rejected')
-         ORDER BY COALESCE(played_at, submitted_at) DESC LIMIT {$limit}"
+        "SELECT q.*,
+                COALESCE(NULLIF(TRIM(q.requester_name), ''),
+                         g.display_name,
+                         '') AS who_name
+           FROM jukebox_queue q
+      LEFT JOIN guests g ON g.email = q.requester_email
+          WHERE q.status IN ('played','skipped','rejected')
+       ORDER BY COALESCE(q.played_at, q.submitted_at) DESC
+          LIMIT {$limit}"
     )->fetchAll();
 }
 
@@ -421,6 +435,7 @@ function knk_jukebox_request_submit(array $in, string $ip): array {
           requester_email, status)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?)"
     );
+    $typed_name = trim((string)($in["name"] ?? ""));
     $stmt->execute([
         mb_substr($artist, 0, 200),
         mb_substr($title, 0, 200),
@@ -429,13 +444,22 @@ function knk_jukebox_request_submit(array $in, string $ip): array {
         mb_substr((string)$match["channel"], 0, 200),
         (int)$match["duration"],
         mb_substr((string)$match["thumb"], 0, 400),
-        mb_substr(trim((string)($in["name"] ?? "")), 0, 80),
+        mb_substr($typed_name, 0, 80),
         mb_substr(trim((string)($in["table_no"] ?? "")), 0, 20),
         mb_substr($ip, 0, 45),
         mb_substr($email, 0, 190),
         $status,
     ]);
     $id = (int)knk_db()->lastInsertId();
+
+    /* Promote the typed name to the guest profile when both an email
+     * and a name were supplied — same logic the darts join uses. Only
+     * overwrites the auto "Guest XXXX" placeholder, never a real
+     * /profile.php-set name. */
+    if ($email !== "" && $typed_name !== "" && function_exists('knk_profile_adopt_typed_name')) {
+        try { knk_profile_adopt_typed_name($email, $typed_name); }
+        catch (Throwable $e) { error_log("jukebox name-adopt: " . $e->getMessage()); }
+    }
 
     return [
         "id"            => $id,
@@ -609,13 +633,22 @@ function knk_jukebox_lyric_offset_set(string $video_id, float $offset_sec, ?int 
 function knk_jukebox_recent_played(int $limit = 25): array {
     $limit = max(1, min(100, $limit));
     try {
+        /* Same join-and-fallback pattern as knk_jukebox_recent — most
+         * bar-shell rows have a blank requester_name but a known
+         * requester_email, so we resolve display_name via the guests
+         * table. requester_name field is still selected for backwards
+         * compatibility with anywhere that reads it directly. */
         $stmt = knk_db()->prepare(
-            "SELECT id, youtube_video_id, youtube_title, youtube_channel,
-                    thumbnail_url, requester_name, played_at
-               FROM jukebox_queue
-              WHERE status = 'played'
-                AND played_at IS NOT NULL
-           ORDER BY played_at DESC
+            "SELECT q.id, q.youtube_video_id, q.youtube_title, q.youtube_channel,
+                    q.thumbnail_url, q.requester_name, q.played_at,
+                    COALESCE(NULLIF(TRIM(q.requester_name), ''),
+                             g.display_name,
+                             '') AS who_name
+               FROM jukebox_queue q
+          LEFT JOIN guests g ON g.email = q.requester_email
+              WHERE q.status = 'played'
+                AND q.played_at IS NOT NULL
+           ORDER BY q.played_at DESC
               LIMIT {$limit}"
         );
         $stmt->execute();

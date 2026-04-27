@@ -99,6 +99,40 @@ function knk_profile_display_name_for(string $email, ?array $guest_row = null): 
    ========================================================= */
 
 /**
+ * Promote a name typed at point-of-use (jukebox form, darts join,
+ * order form, etc.) onto the guest's profile display_name — but
+ * only if the current display_name is empty OR the auto-generated
+ * "Guest XXXX" placeholder. Never overwrites a name the guest set
+ * deliberately on /profile.php.
+ *
+ * Use this anywhere the system captures a typed name on an anon
+ * guest, so future references see their real name across pages
+ * (jukebox-admin's "who" column, /bar.php?tab=music recently
+ * played, the TV news ticker, friends list, etc.).
+ *
+ * Returns true if we updated, false if we declined to (real name
+ * already there) or hit a validation/DB error.
+ */
+function knk_profile_adopt_typed_name(string $email, string $typed_name): bool {
+    $email = strtolower(trim($email));
+    $name  = trim($typed_name);
+    if ($email === "" || !filter_var($email, FILTER_VALIDATE_EMAIL)) return false;
+    if ($name === "")        return false;
+
+    try {
+        $row = knk_guest_find_by_email($email);
+        $current = $row ? trim((string)($row["display_name"] ?? "")) : "";
+        $is_placeholder = ($current === "")
+            || (bool)preg_match('/^Guest\s+[0-9a-f]{4,}$/i', $current);
+        if (!$is_placeholder) return false;  // user has a real name already
+        return knk_profile_set_display_name($email, $name);
+    } catch (Throwable $e) {
+        error_log("knk_profile_adopt_typed_name: " . $e->getMessage());
+        return false;
+    }
+}
+
+/**
  * Update the display name on the guests row for this email.
  * Upserts the guests row if it doesn't exist yet (e.g. a brand-new
  * anon visitor that's never ordered anything).

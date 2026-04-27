@@ -615,7 +615,12 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
               <div class="meta">
                 <div class="t"><?= jbh_yt($row["youtube_title"]) ?></div>
                 <div class="who">
-                  <?php $rn = trim((string)$row["requester_name"]); ?>
+                  <?php
+                    /* Prefer the COALESCE'd who_name from the JOIN —
+                     * falls back to display_name when no requester_name
+                     * was typed (bar-shell flow skips that field). */
+                    $rn = trim((string)($row["who_name"] ?? $row["requester_name"]));
+                  ?>
                   <?= $rn !== "" ? jbh($rn) : "Guest" ?>
                   <span class="when"> · <?= jbh($ago_lbl) ?></span>
                 </div>

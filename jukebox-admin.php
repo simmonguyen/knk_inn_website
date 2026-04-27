@@ -567,7 +567,11 @@ function ja_when($s): string {
           <?php foreach ($recent as $r):
             $status = (string)$r["status"];
             $when = $r["played_at"] ?: $r["submitted_at"];
-            $who = trim((string)$r["requester_name"]);
+            /* who_name = COALESCE(requester_name, guests.display_name).
+             * Falls back from the form's typed name to the guest's
+             * profile name. Anonymous guests with neither still show
+             * a "—". See knk_jukebox_recent() for the JOIN. */
+            $who = trim((string)($r["who_name"] ?? $r["requester_name"]));
             $tbl = trim((string)$r["table_no"]);
             $whoStr = $who !== "" ? $who : "—";
             if ($tbl !== "") $whoStr .= " · T" . $tbl;

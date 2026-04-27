@@ -215,6 +215,16 @@ function knk_darts_create_game(int $board_id, string $game_type, string $format,
         $host_id = (int)$pdo->lastInsertId();
         $pdo->commit();
 
+        /* Adopt the typed name onto the guest profile so the rest of
+         * the system stops calling them "Guest XXXX". Only overwrites
+         * the auto-generated placeholder, never a real /profile.php
+         * name. Best-effort — if it fails we still return the host
+         * row, the game's already created. */
+        if ($email !== '' && $host_name !== '' && function_exists('knk_profile_adopt_typed_name')) {
+            try { knk_profile_adopt_typed_name($email, $host_name); }
+            catch (Throwable $e) { error_log("darts host name-adopt: " . $e->getMessage()); }
+        }
+
         $game = $pdo->prepare("SELECT * FROM darts_games WHERE id = ?");
         $game->execute([$game_id]);
         $game = $game->fetch();
@@ -276,6 +286,14 @@ function knk_darts_join_game(int $game_id, string $name, string $guest_email = '
         )->execute([$game_id, $next_slot, $name, $team_no, $token, mb_substr($email, 0, 190)]);
         $pid = (int)$pdo->lastInsertId();
         $pdo->commit();
+
+        /* Same name-adoption pattern as create_game — promotes the
+         * typed name to the guest profile if it's still on the auto
+         * "Guest XXXX" placeholder. */
+        if ($email !== '' && $name !== '' && function_exists('knk_profile_adopt_typed_name')) {
+            try { knk_profile_adopt_typed_name($email, $name); }
+            catch (Throwable $e) { error_log("darts join name-adopt: " . $e->getMessage()); }
+        }
 
         $st = $pdo->prepare("SELECT * FROM darts_players WHERE id = ?");
         $st->execute([$pid]);
