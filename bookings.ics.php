@@ -41,6 +41,21 @@ $ROOM_LABELS = [
 
 $holds = bookings_list_all(true);
 
+/* Optional ?type= filter — when set, the feed only contains
+ * bookings for one room type. Used for OTA channel sync (Airbnb /
+ * Booking.com / Tripadvisor each accept an iCal URL per listing,
+ * so we publish three: ?type=standard-nowindow, ?type=standard-
+ * balcony, ?type=vip). Leave blank for the legacy all-types
+ * feed Simmo subscribes to from his Google Calendar. */
+$type_filter = trim((string)($_GET["type"] ?? ""));
+$valid_types = ["standard-nowindow", "standard-balcony", "vip"];
+if ($type_filter !== "" && !in_array($type_filter, $valid_types, true)) {
+    http_response_code(400);
+    header("Content-Type: text/plain; charset=UTF-8");
+    echo "Unknown type. Use one of: " . implode(", ", $valid_types);
+    exit;
+}
+
 /* Only include bookings that still hold their dates: confirmed, and non-expired pending. */
 $events = [];
 $now = time();
@@ -48,6 +63,7 @@ foreach ($holds as $h) {
     $status = $h["status"] ?? "pending";
     if ($status === "declined" || $status === "expired") continue;
     if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
+    if ($type_filter !== "" && ($h["room"] ?? "") !== $type_filter) continue;
     $events[] = $h;
 }
 
@@ -59,9 +75,14 @@ $lines[] = "VERSION:2.0";
 $lines[] = "PRODID:-//KnK Inn//Bookings//EN";
 $lines[] = "CALSCALE:GREGORIAN";
 $lines[] = "METHOD:PUBLISH";
-$lines[] = "X-WR-CALNAME:KnK Inn bookings";
+$cal_name = $type_filter !== ""
+    ? ("KnK Inn — " . ($ROOM_LABELS[$type_filter] ?? $type_filter))
+    : "KnK Inn bookings";
+$lines[] = "X-WR-CALNAME:" . $cal_name;
 $lines[] = "X-WR-TIMEZONE:Asia/Ho_Chi_Minh";
-$lines[] = "X-WR-CALDESC:Confirmed and pending room bookings for KnK Inn.";
+$lines[] = "X-WR-CALDESC:" . ($type_filter !== ""
+    ? "Confirmed + pending bookings for " . ($ROOM_LABELS[$type_filter] ?? $type_filter) . " — for OTA channel sync."
+    : "Confirmed and pending room bookings for KnK Inn.");
 
 foreach ($events as $h) {
     $id     = $h["id"] ?? "";
