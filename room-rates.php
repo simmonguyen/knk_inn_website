@@ -117,6 +117,18 @@ if ($action !== "" && $current_room) {
 $flash = $_SESSION[$flash_key] ?? "";  unset($_SESSION[$flash_key]);
 $error = $_SESSION[$err_key]   ?? "";  unset($_SESSION[$err_key]);
 
+/* Optional quote preview — staff types a check-in/check-out and we
+ * show what the booking engine would charge. Read-only, no DB
+ * writes — purely to give Simmo confidence the rate calendar is
+ * doing what he expects. Inputs come in via GET so it doesn't
+ * conflict with the PRG flow above. */
+$quote = null;
+$quote_in  = trim((string)($_GET["q_in"]  ?? ""));
+$quote_out = trim((string)($_GET["q_out"] ?? ""));
+if ($current_room && $quote_in !== "" && $quote_out !== "") {
+    $quote = knk_room_rate_quote($current_slug, $quote_in, $quote_out);
+}
+
 /* Calendar window — default to today + 90 days. The query string
  * lets staff jump further out by passing ?from=YYYY-MM-DD&days=N. */
 $from_q = (string)($_GET["from"]  ?? "");
@@ -309,6 +321,55 @@ function rr_vnd(int $n): string  { return number_format($n) . " ₫"; }
         </div>
       </div>
     <?php endif; ?>
+
+    <!-- Quote preview — sanity-check the rate calendar by punching
+         in a stay range. Pure GET so it doesn't fight the PRG flow. -->
+    <div class="rr-card">
+      <h2>Quote preview</h2>
+      <form method="get" class="rr-row" action="">
+        <input type="hidden" name="room" value="<?= rr_h($current_slug) ?>">
+        <div class="field"><label for="rr-q-in">Check-in</label>
+          <input id="rr-q-in"  type="date" name="q_in"  value="<?= rr_h($quote_in) ?>"></div>
+        <div class="field"><label for="rr-q-out">Check-out</label>
+          <input id="rr-q-out" type="date" name="q_out" value="<?= rr_h($quote_out) ?>"></div>
+        <button type="submit">Quote</button>
+      </form>
+      <?php if ($quote && $quote["nights"] > 0): ?>
+        <div style="margin-top:0.7rem; padding:0.7rem 0.9rem; background:rgba(245,233,209,0.04); border-radius:8px;">
+          <div style="display:flex; justify-content:space-between; gap:0.6rem; flex-wrap:wrap; align-items:center; margin-bottom:0.5rem;">
+            <strong style="color:var(--gold,#c9aa71); font-size:1.05rem;">
+              <?= rr_vnd((int)$quote["total"]) ?> for <?= (int)$quote["nights"] ?> night(s)
+            </strong>
+            <span class="rr-help" style="margin:0;">
+              Avg <?= rr_vnd((int)$quote["average"]) ?> / night
+              <?= $quote["any_zero"] ? '<span style="color:#ff8a8a;"> — has zero-priced nights, fix before listing</span>' : '' ?>
+            </span>
+          </div>
+          <ul style="list-style:none; padding:0; margin:0; max-height:220px; overflow-y:auto; font-size:0.85rem;">
+            <?php foreach ($quote["lines"] as $ln):
+              $sn = $ln["season_slug"];
+              $color = ($sn !== null && isset($season_by_slug[$sn]))
+                  ? $season_by_slug[$sn]["color_hex"] : "transparent";
+            ?>
+              <li style="display:flex; gap:0.6rem; align-items:center; padding:0.25rem 0; border-bottom:1px solid rgba(245,233,209,0.06);">
+                <span style="display:inline-block; width:8px; height:14px; border-radius:2px; background:<?= rr_h($color) ?>;"></span>
+                <span style="flex:0 0 150px;"><?= rr_h($ln["date"]) ?> · <?= rr_h(date("D", strtotime($ln["date"]))) ?></span>
+                <span style="flex:1 1 auto; color:rgba(245,233,209,0.55);">
+                  <?= $ln["is_override"]
+                       ? ($sn !== null && isset($season_by_slug[$sn]) ? rr_h($season_by_slug[$sn]["display_name"]) : "Override")
+                       : "Default" ?>
+                </span>
+                <strong><?= rr_vnd((int)$ln["vnd"]) ?></strong>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        </div>
+      <?php elseif ($quote_in !== "" || $quote_out !== ""): ?>
+        <p class="rr-help" style="color:#ff8a8a;">Enter a valid date range with check-out after check-in.</p>
+      <?php else: ?>
+        <p class="rr-help">Pick check-in / check-out dates above to preview the total.</p>
+      <?php endif; ?>
+    </div>
 
     <!-- Calendar grid. Days grouped by month; padding cells for week-of-month
          alignment so Mondays line up. -->
