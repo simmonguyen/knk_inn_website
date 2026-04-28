@@ -577,7 +577,18 @@ function knk_darts_confirm_round(int $game_id, int $by_player_id): array {
         $by = $st->fetch();
         if (!$by) throw new RuntimeException("Not in this game.");
         $is_thrower = ((int)$by['slot_no'] === (int)$game['current_slot_no']);
-        if (!$by['is_host'] && !$is_thrower) {
+        /* Permission mirrors record_throw — host_only stays strict
+         * (only the host can confirm — they're the one scoring).
+         * any_player lets anyone in the game confirm (they were the
+         * one tapping). self_only / unset falls through to the
+         * legacy "host or thrower" rule. */
+        $sm = (string)($game['scoring_mode'] ?? '');
+        if ($sm === '') $sm = 'self_only';
+        $allowed = false;
+        if ($sm === 'host_only')        $allowed = (bool)$by['is_host'];
+        elseif ($sm === 'any_player')   $allowed = true;     // recorder is in this game (we just looked them up)
+        else                            $allowed = $by['is_host'] || $is_thrower;
+        if (!$allowed) {
             throw new RuntimeException("Only the host or the thrower can confirm.");
         }
 
