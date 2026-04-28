@@ -1,58 +1,74 @@
 # KnK Inn — Apache / LiteSpeed config
 #
-# Two jobs:
-#   1. Whitelist social-media link-preview scrapers so they never
-#      hit any server-level bot block (Matbao's LiteSpeed setup
-#      ships with default mod_security rules that 403 anything
-#      with "bot" in the User-Agent — including facebookexternalhit).
-#   2. Belt-and-braces around the existing robots.txt — even if a
-#      caching layer serves a stale or wrong robots.txt, these
-#      rules guarantee the scrapers can read the homepage and the
-#      OG image they need.
+# Diagnosis state (2026-04-28):
+#   robots.txt is correct and live, yet Facebook's debugger reports
+#   HTTP 403 from facebookexternalhit. That's a server-level WAF /
+#   mod_security 403 — happening BEFORE robots.txt is read. FB's
+#   "could be a robots.txt block" error is misleading.
 #
-# Adding more scrapers later: drop another BrowserMatchNoCase line
-# alongside the existing ones.
+# Goal: convince Matbao's mod_security and any other UA-blocking
+# layer to let social-preview scrapers through. We try several
+# approaches because LiteSpeed shared hosting often partially
+# honours .htaccess directives — best to cover all the bases.
 
-# Mark social-media scrapers as friendly. BrowserMatchNoCase is
-# case-insensitive — covers UA-string variants.
-BrowserMatchNoCase "facebookexternalhit"     is_social_bot
-BrowserMatchNoCase "facebookcatalog"         is_social_bot
-BrowserMatchNoCase "Facebot"                 is_social_bot
-BrowserMatchNoCase "Twitterbot"              is_social_bot
-BrowserMatchNoCase "LinkedInBot"             is_social_bot
-BrowserMatchNoCase "WhatsApp"                is_social_bot
-BrowserMatchNoCase "TelegramBot"             is_social_bot
-BrowserMatchNoCase "Slackbot"                is_social_bot
-BrowserMatchNoCase "Discordbot"              is_social_bot
-BrowserMatchNoCase "Pinterestbot"            is_social_bot
+# ------------------------------------------------------------------
+# 1. Tag known social scrapers via SetEnvIfNoCase. This is
+#    universally supported (Apache 2.2+, LiteSpeed) and gives us
+#    an env var we can use in subsequent rules.
+# ------------------------------------------------------------------
+SetEnvIfNoCase User-Agent "facebookexternalhit"      KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "facebookcatalog"          KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "Facebot"                  KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "Twitterbot"               KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "LinkedInBot"              KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "WhatsApp"                 KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "TelegramBot"              KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "Slackbot"                 KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "Discordbot"               KNK_SOCIAL_BOT=1
+SetEnvIfNoCase User-Agent "Pinterestbot"             KNK_SOCIAL_BOT=1
 
-# Disable mod_security for known social scrapers. ModSec is what
-# usually 403s these UAs on Matbao. We only relax it for the
-# whitelisted bots — everyone else still gets the default rules.
+# ------------------------------------------------------------------
+# 2. mod_security 2.x — the standard rule pattern that disables
+#    the whole rule engine for matching User-Agents. Phase:1 fires
+#    before request body parsing, so it's the earliest possible
+#    intervention. id 1000 is our private namespace.
+# ------------------------------------------------------------------
+<IfModule mod_security2.c>
+    SecRule REQUEST_HEADERS:User-Agent "@rx (?i)(facebookexternalhit|facebookcatalog|facebot|twitterbot|linkedinbot|whatsapp|telegrambot|slackbot|discordbot|pinterestbot)" \
+        "id:1000,phase:1,nolog,allow,ctl:ruleEngine=Off,ctl:auditEngine=Off"
+</IfModule>
+
+# Some Matbao installs use the older mod_security (1.x / unversioned).
 <IfModule mod_security.c>
-    SecRuleEngine On
-    <If "reqenv('is_social_bot') == '1'">
-        SecRuleEngine Off
-    </If>
+    SecFilterEngine Off
 </IfModule>
 
-# Same intent for LiteSpeed's bot-detection module if it's active.
-<IfModule LiteSpeed>
-    <If "reqenv('is_social_bot') == '1'">
-        Header set X-Bot-Whitelist "social-preview-scraper"
-    </If>
+# ------------------------------------------------------------------
+# 3. Visible proof header — when a social bot fetches the page,
+#    they (and we) get back X-KnK-Bot-Pass: yes. If the response
+#    still has no such header in the FB debugger's "Server Response"
+#    view, this .htaccess never ran and the issue is upstream of
+#    Apache / LiteSpeed (CDN, account-level WAF, Matbao support
+#    ticket territory).
+# ------------------------------------------------------------------
+<IfModule mod_headers.c>
+    Header always set X-KnK-Bot-Pass "yes" env=KNK_SOCIAL_BOT
 </IfModule>
 
-# Some scrapers (Facebook's especially) want CORS headers when
-# fetching og:image cross-origin. Costs nothing to add.
+# ------------------------------------------------------------------
+# 4. CORS for static images — some scrapers strict about og:image
+#    cross-origin fetches.
+# ------------------------------------------------------------------
 <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg)$">
     <IfModule mod_headers.c>
         Header set Access-Control-Allow-Origin "*"
     </IfModule>
 </FilesMatch>
 
-# Default cache for static assets (no impact on bot scraping but
-# while we're touching the docroot config — it's a freebie).
+# ------------------------------------------------------------------
+# 5. Static asset cache — unrelated to bots, but nice to have while
+#    we're touching the docroot config.
+# ------------------------------------------------------------------
 <FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|ico|css|js|woff2)$">
     <IfModule mod_expires.c>
         ExpiresActive On
