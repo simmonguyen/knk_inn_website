@@ -129,14 +129,53 @@ $gallery_defaults = [
     </div>
 
     <div class="room-gallery">
-<?php foreach ($gallery_defaults as $idx => $default):
-    $src = $rp('room_balcony', $idx, $default);
-    $alt = $ra('room_balcony', $idx, 'Standard — Balcony photo ' . ($idx - 1));
+<?php
+    /* New photo set — Rooms 4, 6, 8 (the F2/F3/F4 standard-balcony
+     * units). Each one's tile opens its own room-specific lightbox.
+     * Falls back to the existing slot-driven thumbnails if the new
+     * folders are missing. */
+    require_once __DIR__ . "/../includes/photo_galleries.php";
+    $room_groups = [
+        ['slug' => 'room-4', 'label' => 'Room 4 — Floor 2'],
+        ['slug' => 'room-6', 'label' => 'Room 6 — Floor 3'],
+        ['slug' => 'room-8', 'label' => 'Room 8 — Floor 4'],
+    ];
+    $rendered_new = false;
+    foreach ($room_groups as $rg) {
+        $photos = knk_gallery_photos($rg['slug']);
+        if (empty($photos)) continue;
+        $rendered_new = true;
+        // Photo paths are already site-absolute ("/assets/img/...")
+        // so they work from /rooms/<slug>.php without any "../" dance.
+        $thumb = $photos[0];
+        ?>
+        <button type="button" class="room-card"
+                data-knk-gallery="<?= htmlspecialchars(json_encode($photos), ENT_QUOTES, "UTF-8") ?>"
+                style="padding:0;border:0;background:transparent;display:block;cursor:zoom-in;position:relative;">
+          <img src="<?= htmlspecialchars($thumb) ?>" alt="<?= htmlspecialchars($rg['label']) ?>" loading="lazy">
+          <span style="position:absolute;left:0;right:0;bottom:0;padding:0.5rem 0.7rem;
+                       background:linear-gradient(0deg, rgba(0,0,0,0.65), rgba(0,0,0,0));
+                       color:#f5e9d1;font-weight:700;font-size:0.85rem;text-align:left;">
+            <?= htmlspecialchars($rg['label']) ?>
+            <span style="opacity:0.7;font-weight:400;"> · <?= count($photos) ?> photos</span>
+          </span>
+        </button>
+        <?php
+    }
+    /* Fallback to the original slot-driven gallery if no new photos
+     * are present — keeps old deploys working before the photo
+     * folders ship. */
+    if (!$rendered_new) {
+        foreach ($gallery_defaults as $idx => $default):
+            $src = $rp('room_balcony', $idx, $default);
+            $alt = $ra('room_balcony', $idx, 'Standard — Balcony photo ' . ($idx - 1));
 ?>
       <div class="room-card" data-lb data-lb-src="<?= htmlspecialchars($src) ?>">
         <img src="<?= htmlspecialchars($src) ?>" alt="<?= htmlspecialchars($alt) ?>" loading="lazy">
       </div>
-<?php endforeach; ?>
+<?php   endforeach;
+    }
+?>
     </div>
 
     <div class="section-head" style="text-align:left;margin-top:4rem;">
@@ -234,5 +273,6 @@ $gallery_defaults = [
 <script src="../assets/js/i18n.js?v=13"></script>
 <script src="../assets/js/main.js?v=13"></script>
 <script src="../assets/js/booking.js"></script>
+<?php if (function_exists('knk_render_lightbox_markup')) knk_render_lightbox_markup(); ?>
 </body>
 </html>

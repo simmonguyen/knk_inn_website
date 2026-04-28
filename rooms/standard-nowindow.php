@@ -123,14 +123,38 @@ $gallery_defaults = [
     </div>
 
     <div class="room-gallery">
-<?php foreach ($gallery_defaults as $idx => $default):
-    $src = $rp('room_nowindow', $idx, $default);
-    $alt = $ra('room_nowindow', $idx, 'Standard — No Window photo ' . ($idx - 1));
+<?php
+    /* New photo set — Room 1 (Floor 1, no window). The full set
+     * renders as individual tiles directly so the page reads like
+     * a single-room gallery rather than a "pick a unit" grid. Falls
+     * back to the slot-driven thumbnails when the new folder is
+     * missing. */
+    require_once __DIR__ . "/../includes/photo_galleries.php";
+    $room1_photos = knk_gallery_photos('room-1');
+    if (!empty($room1_photos)) {
+        // Photo paths are site-absolute ("/assets/img/...") so they
+        // work from /rooms/standard-nowindow.php as-is.
+        $abs_json = htmlspecialchars(json_encode($room1_photos), ENT_QUOTES, "UTF-8");
+        foreach ($room1_photos as $i => $src) {
+?>
+      <button type="button" class="room-card"
+              data-knk-gallery="<?= $abs_json ?>"
+              style="padding:0;border:0;background:transparent;display:block;cursor:zoom-in;">
+        <img src="<?= htmlspecialchars($src) ?>" alt="Room 1 photo <?= $i + 1 ?>" loading="lazy">
+      </button>
+<?php
+        }
+    } else {
+        foreach ($gallery_defaults as $idx => $default):
+            $src = $rp('room_nowindow', $idx, $default);
+            $alt = $ra('room_nowindow', $idx, 'Standard — No Window photo ' . ($idx - 1));
 ?>
       <div class="room-card" data-lb data-lb-src="<?= htmlspecialchars($src) ?>">
         <img src="<?= htmlspecialchars($src) ?>" alt="<?= htmlspecialchars($alt) ?>" loading="lazy">
       </div>
-<?php endforeach; ?>
+<?php   endforeach;
+    }
+?>
     </div>
 
     <div class="section-head" style="text-align:left;margin-top:4rem;">
@@ -228,5 +252,6 @@ $gallery_defaults = [
 <script src="../assets/js/i18n.js?v=13"></script>
 <script src="../assets/js/main.js?v=13"></script>
 <script src="../assets/js/booking.js"></script>
+<?php if (function_exists('knk_render_lightbox_markup')) knk_render_lightbox_markup(); ?>
 </body>
 </html>
