@@ -148,6 +148,24 @@ elseif ($action === "save_ip_whitelist") {
             : "Staff IP whitelist is OFF.";
     }
 }
+elseif ($action === "save_daily_digest") {
+    $on = !empty($_POST["enabled"]) ? "1" : "0";
+    knk_setting_set("daily_digest_enabled", $on, $me_id);
+    knk_audit("settings.update", "settings", "daily_digest_enabled", ["value" => $on]);
+    $flash = $on === "1" ? "Daily digest is ON." : "Daily digest is OFF.";
+}
+elseif ($action === "save_daily_digest_email") {
+    $em = trim((string)($_POST["digest_email"] ?? ""));
+    if ($em !== "" && !filter_var($em, FILTER_VALIDATE_EMAIL)) {
+        $error = "That doesn't look like a valid email.";
+    } else {
+        knk_setting_set("daily_digest_email", $em, $me_id);
+        knk_audit("settings.update", "settings", "daily_digest_email", ["value" => $em]);
+        $flash = $em !== ""
+            ? "Daily digest will go to " . $em . "."
+            : "Daily digest email cleared — falls back to the owner notification email.";
+    }
+}
 elseif ($action === "save_rates_export_key") {
     /* Room-rates export key. Lets the OTA channel manager call
      * /api/room_rates_export.php?key=… to pull the next 90 days
@@ -559,6 +577,51 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
         <p class="muted" style="margin-top:0.7rem; font-size:0.85rem;">
           Example URL for the VIP F3 room, next 90 days:<br>
           <code style="word-break: break-all;">https://<?= htmlspecialchars($sample, ENT_QUOTES, "UTF-8") ?>/api/room_rates_export.php?key=<?= htmlspecialchars($rates_key, ENT_QUOTES, "UTF-8") ?>&amp;room=vip-3&amp;days=90</code>
+        </p>
+      <?php endif; ?>
+    </section>
+
+    <!-- Daily morning digest -->
+    <section class="card">
+      <h2>Daily morning digest</h2>
+      <p class="explain">
+        Once a day at 7am Saigon, Simmo gets a one-page email with
+        today's check-ins, tomorrow's heads-up, last night's drink
+        revenue, and a 7-day forecast. Add the cron line in
+        DirectAdmin (Cron Jobs panel):<br>
+        <code style="font-size:0.78rem;">0 0 * * * curl -s "https://knkinn.com/cron/daily_digest.php?key=Knk@070475" &gt; /dev/null 2&gt;&amp;1</code>
+      </p>
+      <?php $dd_on = knk_setting_bool("daily_digest_enabled", true); ?>
+      <form method="post" class="inline-form" style="margin-top:0.6rem;">
+        <input type="hidden" name="action" value="save_daily_digest">
+        <?php if (!$dd_on): ?>
+          <input type="hidden" name="enabled" value="1">
+          <button type="submit">Turn ON</button>
+        <?php else: ?>
+          <button type="submit">Turn OFF</button>
+        <?php endif; ?>
+      </form>
+      <p class="muted" style="margin-top:0.7rem;">
+        Status: <strong><?= $dd_on ? "ON" : "OFF" ?></strong>
+      </p>
+
+      <?php $dd_email = (string)knk_setting("daily_digest_email", ""); ?>
+      <p class="explain" style="margin-top:1rem;">
+        Send the digest to a different email than the order alerts?
+        Set it here. Empty falls back to the Owner notification email
+        above, then to the first owner-role user.
+      </p>
+      <form method="post" class="inline-form" style="margin-top:0.4rem;">
+        <input type="hidden" name="action" value="save_daily_digest_email">
+        <input type="email" name="digest_email"
+               placeholder="e.g. simmo@knkinn.com"
+               value="<?= htmlspecialchars($dd_email, ENT_QUOTES, "UTF-8") ?>"
+               autocomplete="off">
+        <button type="submit">Save email</button>
+      </form>
+      <?php if ($dd_email !== ""): ?>
+        <p class="muted" style="margin-top:0.5rem;">
+          Currently going to <strong><?= htmlspecialchars($dd_email, ENT_QUOTES, "UTF-8") ?></strong>.
         </p>
       <?php endif; ?>
     </section>
