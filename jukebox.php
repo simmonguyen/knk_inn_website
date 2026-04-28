@@ -633,6 +633,14 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
                   <?= jbh($pt["channel"]) ?>
                 </div>
               </div>
+              <div class="knk-pl-actions" style="flex:0 0 auto; display:flex; flex-direction:column; align-items:center; gap:0.15rem; margin-left:0.3rem;">
+                <button type="button" class="knk-pl-up" data-row-id="<?= (int)$pt["id"] ?>"
+                        title="Move up" aria-label="Move up"
+                        style="background:transparent; border:1px solid rgba(245,233,209,0.18); color:rgba(245,233,209,0.7); font-size:0.7rem; line-height:1; padding:0.15rem 0.45rem; border-radius:6px; cursor:pointer;">▲</button>
+                <button type="button" class="knk-pl-down" data-row-id="<?= (int)$pt["id"] ?>"
+                        title="Move down" aria-label="Move down"
+                        style="background:transparent; border:1px solid rgba(245,233,209,0.18); color:rgba(245,233,209,0.7); font-size:0.7rem; line-height:1; padding:0.15rem 0.45rem; border-radius:6px; cursor:pointer;">▼</button>
+              </div>
               <button type="button" class="knk-pl-play" data-row-id="<?= (int)$pt["id"] ?>"
                       title="Add to the jukebox queue" aria-label="Play this track"
                       style="flex:0 0 auto; background:rgba(201,170,113,0.15); border:1px solid rgba(201,170,113,0.4); color:var(--gold,#c9aa71); font-size:0.95rem; font-weight:700; padding:0.3rem 0.6rem; border-radius:999px; cursor:pointer; margin-left:0.3rem;">▶</button>
@@ -824,6 +832,52 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
           });
         }
         document.querySelectorAll('.knk-pl-play').forEach(wirePlay);
+
+        // Up / Down reorder. Debounce the POST so a quick flurry of
+        // taps only fires once — bar wifi can be slow and chasing
+        // every nudge with its own request feels janky.
+        var reorderT = null;
+        function postCurrentOrder() {
+          var ids = [];
+          list.querySelectorAll('li[data-row-id]').forEach(function (el) {
+            var v = parseInt(el.getAttribute('data-row-id') || '0', 10);
+            if (v) ids.push(v);
+          });
+          if (ids.length === 0) return;
+          var fd = new FormData();
+          fd.append('row_ids', JSON.stringify(ids));
+          fetch('/api/playlist_reorder.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (j) {
+              if (!j || !j.ok) flash((j && j.error) || 'Couldn’t save the new order.', true);
+            })
+            .catch(function () {
+              flash('Couldn’t save the new order.', true);
+            });
+        }
+        function scheduleReorder() {
+          if (reorderT) clearTimeout(reorderT);
+          reorderT = setTimeout(postCurrentOrder, 600);
+        }
+        function moveLi(li, dir) {
+          if (!li) return;
+          if (dir < 0) {
+            var prev = li.previousElementSibling;
+            if (prev) list.insertBefore(li, prev);
+          } else {
+            var next = li.nextElementSibling;
+            if (next) list.insertBefore(next, li);
+          }
+        }
+        list.addEventListener('click', function (ev) {
+          var t = ev.target;
+          if (!t) return;
+          if (t.classList && t.classList.contains('knk-pl-up')) {
+            moveLi(t.closest('li'), -1); scheduleReorder();
+          } else if (t.classList && t.classList.contains('knk-pl-down')) {
+            moveLi(t.closest('li'), +1); scheduleReorder();
+          }
+        });
 
         // Play all — the big button in the playlist header.
         var pall = document.getElementById('knkPlaylistPlayAll');
