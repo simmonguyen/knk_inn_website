@@ -533,11 +533,10 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
       <h2>Room-rates export key</h2>
       <p class="explain">
         Channel managers (Airbnb, Booking.com, Tripadvisor) read your
-        nightly rates from <code>/api/room_rates_export.php</code>.
-        That endpoint is locked behind a key — paste a value below and
-        give the channel-manager URL <code>?key=…&amp;room=…</code>.
-        Hit Regenerate to invalidate the old key (e.g. if you suspect
-        it leaked).
+        nightly rates from <code>/api/room_rates_export.php</code> and
+        availability from <code>/api/room_availability_export.php</code>.
+        Both endpoints share this one key — paste a value below or hit
+        Regenerate to spin a fresh one.
       </p>
       <?php $rates_key = (string)knk_setting("room_rates_export_key", ""); ?>
       <form method="post" class="inline-form" style="margin-top:0.6rem;">
