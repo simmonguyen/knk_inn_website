@@ -361,6 +361,38 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     font-size: 1.05rem; letter-spacing: 0.04em;
   }
   .tv-bar .brand em { color: var(--gold); font-style: normal; }
+
+  /* News ticker — flows between brand and clock with the latest
+   * order / jukebox queue / darts result events. Real guest names.
+   * Updates every 30s via /api/tv_newsfeed.php. */
+  .tv-bar .newsfeed {
+    flex: 1; min-width: 0;
+    margin: 0 1rem;
+    overflow: hidden;
+    color: rgba(245,233,209,0.85);
+    font-size: 0.9rem;
+    font-weight: 600;
+    white-space: nowrap;
+    position: relative;
+  }
+  .tv-bar .newsfeed-track {
+    display: inline-block;
+    padding-left: 100%;
+    /* Animation duration is set in JS based on track width so a
+     * long event list scrolls slower than a short one. */
+    animation: nf-marquee linear infinite;
+    will-change: transform;
+  }
+  .tv-bar .newsfeed-item   { display: inline-block; padding-right: 3rem; }
+  .tv-bar .newsfeed .who   { color: var(--gold); }
+  .tv-bar .newsfeed .verb  { color: rgba(245,233,209,0.55); font-weight: 400; }
+  .tv-bar .newsfeed .what  { color: var(--fg); }
+  .tv-bar .newsfeed.is-empty { color: rgba(245,233,209,0.35); font-weight: 400; }
+  @keyframes nf-marquee {
+    from { transform: translateX(0); }
+    to   { transform: translateX(-100%); }
+  }
+
   .tv-bar .clock {
     font-variant-numeric: tabular-nums;
     color: var(--gold); font-weight: 700;
@@ -1332,6 +1364,9 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
 <header class="tv-bar">
   <div class="brand">KnK <em>Inn</em> TV</div>
+  <div class="newsfeed is-empty" id="tv-newsfeed">
+    <span class="newsfeed-track" id="tv-newsfeed-track">Quiet at the bar… waiting for orders.</span>
+  </div>
   <div class="clock" id="tv-clock">--:--</div>
 </header>
 
@@ -3186,6 +3221,62 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   loop(pollMarket,  function () { return MARKET_POLL; });
   loop(pollJukebox, function () { return JBX_POLL;    });
   loop(pollDarts,   function () { return DARTS_POLL;  });
+
+  // ============================================================
+  // Newsfeed ticker — header strip between brand and clock.
+  // Polls every 30s, marquees real guest activity (orders + songs)
+  // across the top of the TV. Quiet-bar fallback says "Quiet at
+  // the bar…" so the strip never looks broken.
+  // ============================================================
+  var NF_POLL = 30000;
+  var nfEl    = document.getElementById("tv-newsfeed");
+  var nfTrack = document.getElementById("tv-newsfeed-track");
+
+  function nfEscape(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+
+  function renderNewsfeed(events) {
+    if (!nfEl || !nfTrack) return;
+    if (!events || events.length === 0) {
+      nfEl.classList.add("is-empty");
+      nfTrack.style.animation = "none";
+      nfTrack.style.transform = "";
+      nfTrack.innerHTML = "Quiet at the bar… waiting for orders.";
+      return;
+    }
+    nfEl.classList.remove("is-empty");
+    var html = "";
+    events.forEach(function (ev) {
+      html += '<span class="newsfeed-item">'
+           +   '<span class="who">' + nfEscape(ev.who)  + '</span> '
+           +   '<span class="verb">' + nfEscape(ev.verb) + '</span> '
+           +   '<span class="what">' + nfEscape(ev.what) + '</span>'
+           + '</span>';
+    });
+    nfTrack.innerHTML = html;
+    // Compute a duration that scales with content — readable but
+    // not glacial. ~80 px / second.
+    nfTrack.style.animation = "none";
+    // Force reflow so the new track width is measured fresh.
+    void nfTrack.offsetWidth;
+    var trackPx = nfTrack.scrollWidth;
+    var durSec  = Math.max(20, Math.round(trackPx / 80));
+    nfTrack.style.animation = "nf-marquee " + durSec + "s linear infinite";
+  }
+
+  function pollNewsfeed() {
+    fetch("/api/tv_newsfeed.php", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) return;
+        renderNewsfeed(j.events || []);
+      })
+      .catch(function () { /* keep last frame */ });
+  }
+  loop(pollNewsfeed, function () { return NF_POLL; });
 
 })();
 </script>
