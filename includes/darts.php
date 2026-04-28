@@ -451,10 +451,111 @@ function knk_darts_record_throw(int $game_id, int $player_id, string $segment): 
             // Stamp finishing positions.
             knk_darts_finalise_positions($game_id, $players, $eval);
         } else {
+            /* Confirm-round freeze (x01 only) — when this throw was
+             * dart #3 of the current player's turn, don't let the
+             * cursor advance yet. Hold current_slot_no/current_turn_no
+             * on the thrower and set awaiting_confirm=1; the player
+             * has to tap "Confirm round" or "Undo" before play moves
+             * on. Lets them fix a fat-finger on dart 3 without losing
+             * the round. (Bust: $eval already handled it inside the
+             * eval state — we still freeze, but the round score is
+             * committed as 0 so Confirm just passes the turn.)
+             *
+             * Other game types skip the freeze — their tap rhythm is
+             * stable enough that auto-advance has been fine. */
+            $is_x01 = ((string)$game['game_type'] === '501'
+                    || (string)$game['game_type'] === '301');
+            $freeze = false;
+            if ($is_x01 && $dart_no >= 3) {
+                $freeze = true;
+            }
+            if ($freeze) {
+                $pdo->prepare(
+                    "UPDATE darts_games
+                        SET state_json = ?, last_throw_at = NOW(),
+                            current_slot_no = ?, current_turn_no = ?,
+                            awaiting_confirm = 1
+                      WHERE id = ?"
+                )->execute([
+                    json_encode($eval['state'], JSON_UNESCAPED_UNICODE),
+                    (int)$game['current_slot_no'],
+                    (int)$game['current_turn_no'],
+                    $game_id,
+                ]);
+            } else {
+                $pdo->prepare(
+                    "UPDATE darts_games
+                        SET state_json = ?, last_throw_at = NOW(),
+                            current_slot_no = ?, current_turn_no = ?,
+                            awaiting_confirm = 0
+                      WHERE id = ?"
+                )->execute([
+                    json_encode($eval['state'], JSON_UNESCAPED_UNICODE),
+                    $eval['next_slot'], $eval['next_turn'],
+                    $game_id,
+                ]);
+            }
+        }
+
+        $pdo->commit();
+        return $eval['state'];
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
+/**
+ * Confirm a frozen round and advance to the next player. Only
+ * valid when awaiting_confirm=1. Re-runs the eval from scratch so
+ * the next_slot/next_turn calculation is consistent with whatever
+ * state Undo / etc. have left the round in.
+ */
+function knk_darts_confirm_round(int $game_id, int $by_player_id): array {
+    $pdo = knk_db();
+    $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare("SELECT * FROM darts_games WHERE id = ? FOR UPDATE");
+        $st->execute([$game_id]);
+        $game = $st->fetch();
+        if (!$game)                             throw new RuntimeException("Game not found.");
+        if ($game['status'] !== 'playing')      throw new RuntimeException("Game is not in progress.");
+        if (empty($game['awaiting_confirm']))   throw new RuntimeException("Nothing to confirm.");
+
+        $st = $pdo->prepare("SELECT * FROM darts_players WHERE id = ? AND game_id = ?");
+        $st->execute([$by_player_id, $game_id]);
+        $by = $st->fetch();
+        if (!$by) throw new RuntimeException("Not in this game.");
+        $is_thrower = ((int)$by['slot_no'] === (int)$game['current_slot_no']);
+        if (!$by['is_host'] && !$is_thrower) {
+            throw new RuntimeException("Only the host or the thrower can confirm.");
+        }
+
+        $players = knk_darts_load_players($game_id);
+        $throws  = knk_darts_load_throws($game_id, false);
+        $eval = knk_darts_eval($game, $players, $throws);
+
+        if ($eval['finished']) {
+            $pdo->prepare(
+                "UPDATE darts_games
+                    SET state_json = ?, status = 'finished', finished_at = NOW(),
+                        last_throw_at = NOW(),
+                        current_slot_no = NULL,
+                        awaiting_confirm = 0,
+                        winner_slot_no = ?, winner_team_no = ?
+                  WHERE id = ?"
+            )->execute([
+                json_encode($eval['state'], JSON_UNESCAPED_UNICODE),
+                $eval['winner_slot'], $eval['winner_team'],
+                $game_id,
+            ]);
+            knk_darts_finalise_positions($game_id, $players, $eval);
+        } else {
             $pdo->prepare(
                 "UPDATE darts_games
                     SET state_json = ?, last_throw_at = NOW(),
-                        current_slot_no = ?, current_turn_no = ?
+                        current_slot_no = ?, current_turn_no = ?,
+                        awaiting_confirm = 0
                   WHERE id = ?"
             )->execute([
                 json_encode($eval['state'], JSON_UNESCAPED_UNICODE),
@@ -602,12 +703,20 @@ function knk_darts_undo_throw(int $game_id, int $by_player_id): array {
         $throws  = knk_darts_load_throws($game_id, false);
         $eval = knk_darts_eval($game, $players, $throws);
 
+        /* Undo unsticks an awaiting_confirm freeze — the round's no
+         * longer "complete" once we void a dart, so the player needs
+         * to re-throw before the next confirm prompt. Also: if undo
+         * happened from the OTHER side of the cursor (host pulling
+         * something back), the cursor should land on whichever
+         * player's turn the eval now points at, with the freeze
+         * cleared. */
         $pdo->prepare(
             "UPDATE darts_games
                 SET state_json = ?, last_throw_at = NOW(),
                     current_slot_no = ?, current_turn_no = ?,
                     status = 'playing', finished_at = NULL,
-                    winner_slot_no = NULL, winner_team_no = NULL
+                    winner_slot_no = NULL, winner_team_no = NULL,
+                    awaiting_confirm = 0
               WHERE id = ?"
         )->execute([
             json_encode($eval['state'], JSON_UNESCAPED_UNICODE),
@@ -1330,6 +1439,7 @@ function knk_darts_view_state(int $game_id, ?string $session_token = null): arra
             'current_slot_no' => $game['current_slot_no'] !== null ? (int)$game['current_slot_no'] : null,
             'current_turn_no' => (int)$game['current_turn_no'],
             'current_dart_no' => $current_dart_no,
+            'awaiting_confirm'=> !empty($game['awaiting_confirm']),
             'winner_slot_no'  => $game['winner_slot_no'] !== null ? (int)$game['winner_slot_no'] : null,
             'winner_team_no'  => $game['winner_team_no'] !== null ? (int)$game['winner_team_no'] : null,
         ],

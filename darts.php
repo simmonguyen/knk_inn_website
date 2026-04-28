@@ -1421,7 +1421,21 @@ if ($show_lobby) {
 
         root.innerHTML = html;
 
-        if (myTurn) wireNumpad(s);
+        if (myTurn) {
+          wireNumpad(s);
+          /* If the round is awaiting confirm (3rd dart of x01 just
+           * landed), reveal the gold-pulsing Confirm button and grey
+           * out the seg buttons so misclicks don't try to record a
+           * 4th dart. */
+          var conf = $('#confirmRoundBtn');
+          if (conf && g.awaiting_confirm) {
+            conf.style.display = '';
+            $$('.pad-grid .seg-btn').forEach(function (el) {
+              el.style.opacity = '0.4';
+              el.style.pointerEvents = 'none';
+            });
+          }
+        }
       }
 
       function renderScoreLine(g, sb, p) {
@@ -1506,6 +1520,15 @@ if ($show_lobby) {
         if (isX01) {
           html += '<button class="btn secondary" id="bustBtn" title="Bust — round counts as 0, turn passes">Bust</button>';
         }
+        /* Confirm-round button — only renders for x01. Server starts
+         * out of sight (display:none) and the JS reveals it whenever
+         * the polled state has awaiting_confirm=true on this player's
+         * turn. Pulses gold so it's the obvious next action. */
+        if (isX01) {
+          html += '<button class="btn is-pulsing" id="confirmRoundBtn" '
+               +  'style="display:none;" '
+               +  'title="Lock in this round and pass the turn">Confirm round</button>';
+        }
         html += '<button class="btn danger" id="endBtn" title="End the game now — no winner recorded">End game</button>';
         html += '</div>';
         html += '<div id="padErr" class="err" style="display:none"></div>';
@@ -1546,6 +1569,34 @@ if ($show_lobby) {
               var err = $('#padErr'); err.textContent = e.message; err.style.display = 'block';
             });
         });
+        /* Confirm round — only meaningful when state.awaiting_confirm
+         * is true (server set it after dart 3 of an x01 turn). POSTs
+         * to clear the flag and advance to the next player. Server
+         * runs the eval again so a finishing dart still finishes the
+         * game on confirm. */
+        var confirmRoundBtnEl = $('#confirmRoundBtn');
+        if (confirmRoundBtnEl) {
+          confirmRoundBtnEl.addEventListener('click', function () {
+            confirmRoundBtnEl.disabled = true;
+            confirmRoundBtnEl.textContent = 'Confirming…';
+            var fd = new FormData();
+            fd.append('game_id', String(GAME_ID));
+            fd.append('token', TOKEN);
+            fetch('/api/darts_confirm_round.php', { method: 'POST', body: fd })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j.ok) throw new Error(j.error || 'Confirm failed.');
+                poll();
+              })
+              .catch(function (e) {
+                confirmRoundBtnEl.disabled = false;
+                confirmRoundBtnEl.textContent = 'Confirm round';
+                var err = $('#padErr');
+                if (err) { err.textContent = e.message; err.style.display = 'block'; }
+              });
+          });
+        }
+
         /* Bust — for x01 only. Voids any thrown darts in the current
          * round and records 3 MISSes (round = 0), advances turn. The
          * confirm guards against fat-fingered taps; bust is final. */
