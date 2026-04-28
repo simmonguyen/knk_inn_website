@@ -561,7 +561,7 @@ function ja_when($s): string {
       <?php else: ?>
         <table class="events">
           <thead>
-            <tr><th>When</th><th>Status</th><th>Title</th><th>Searched</th><th>Who</th></tr>
+            <tr><th>When</th><th>Status</th><th>Title</th><th>Searched</th><th>Who</th><th>Lyrics?</th></tr>
           </thead>
           <tbody>
           <?php foreach ($recent as $r):
@@ -575,6 +575,14 @@ function ja_when($s): string {
             $tbl = trim((string)$r["table_no"]);
             $whoStr = $who !== "" ? $who : "—";
             if ($tbl !== "") $whoStr .= " · T" . $tbl;
+            /* Lyrics status — populated by tv.php's LRCLIB callback.
+             * 'unknown' = never tried yet (TV hasn't played this row). */
+            $ly = (string)($r["lyrics_status"] ?? "unknown");
+            $lyLabel = "—";
+            $lyColor = "color:var(--cream-dim,#d8c9ab)";
+            if      ($ly === "synced")  { $lyLabel = "✓ synced";  $lyColor = "color:#2fdc7a;font-weight:600"; }
+            elseif  ($ly === "plain")   { $lyLabel = "plain";     $lyColor = "color:var(--gold,#c9aa71)"; }
+            elseif  ($ly === "missing") { $lyLabel = "✗ none";    $lyColor = "color:#d94343"; }
           ?>
             <tr>
               <td><?= jah(ja_when($when)) ?></td>
@@ -582,6 +590,7 @@ function ja_when($s): string {
               <td><?= jah_yt($r["youtube_title"]) ?></td>
               <td style="color:var(--cream-dim,#d8c9ab)"><?= jah($r["artist_text"]) ?> — <?= jah($r["title_text"]) ?></td>
               <td><?= jah($whoStr) ?></td>
+              <td style="<?= $lyColor ?>;font-size:0.85rem"><?= jah($lyLabel) ?></td>
             </tr>
           <?php endforeach; ?>
           </tbody>

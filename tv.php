@@ -2302,19 +2302,49 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         /* If the song changed while we were fetching, this response
          * is for a stale id — just drop it. */
         if (lyricsForId !== songId) return;
-        if (!rec || !rec.syncedLyrics) { lyricsState = "none"; return; }
-        var parsed = parseLRC(rec.syncedLyrics);
-        if (parsed.length === 0) { lyricsState = "none"; return; }
-        lyricsLines   = parsed;
-        lyricsLastIdx = -1;
-        lyricsState   = "ready";
-        startLyricLoop();
+        if (!rec || (!rec.syncedLyrics && !rec.plainLyrics)) {
+          lyricsState = "none";
+          reportLyricsStatus(songId, "missing");
+          return;
+        }
+        if (rec.syncedLyrics) {
+          var parsed = parseLRC(rec.syncedLyrics);
+          if (parsed.length === 0) {
+            lyricsState = "none";
+            reportLyricsStatus(songId, "plain");
+            return;
+          }
+          lyricsLines   = parsed;
+          lyricsLastIdx = -1;
+          lyricsState   = "ready";
+          reportLyricsStatus(songId, "synced");
+          startLyricLoop();
+        } else {
+          /* Plain text only — we don't render it (no timestamps),
+           * but record it for the admin column. */
+          lyricsState = "none";
+          reportLyricsStatus(songId, "plain");
+        }
       })
       .catch(function () {
         /* CORS / network — treat as "no lyrics" so the pre-roll
          * doesn't sit on its hands waiting forever. */
         if (lyricsForId === songId) lyricsState = "none";
+        // Don't report on a network blip — would mark the row as
+        // missing when LRCLIB might have it next play.
       });
+  }
+
+  /* Fire-and-forget POST so /jukebox-admin can show a "Lyrics?"
+   * column. Idempotent on the server side: same queue_id can be
+   * stamped multiple times — last status wins. */
+  function reportLyricsStatus(queueId, status) {
+    if (!queueId || !status) return;
+    var fd = new FormData();
+    fd.append("queue_id", String(queueId | 0));
+    fd.append("status", String(status));
+    fetch("/api/lyric_status.php", { method: "POST", body: fd, cache: "no-store" })
+      .catch(function () { /* fire-and-forget */ });
   }
 
   function clearLyrics() {
