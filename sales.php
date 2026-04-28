@@ -19,7 +19,7 @@ $me = knk_require_permission("sales");
 
 /* ---------- Tab routing ---------- */
 $tab = (string)($_GET["tab"] ?? "daily");
-if (!in_array($tab, ["daily", "mix", "weekday"], true)) $tab = "daily";
+if (!in_array($tab, ["daily", "mix", "weekday", "forecast"], true)) $tab = "daily";
 
 /* ---------- Data ---------- */
 $today_ymd = date("Y-m-d");
@@ -28,6 +28,7 @@ $daily30  = [];
 $kpi_30d  = ["room" => 0, "drinks" => 0, "combined" => 0, "drink_orders" => 0, "room_nights" => 0];
 $kpi_all  = ["room" => 0, "drinks" => 0, "combined" => 0, "drink_orders" => 0, "room_nights" => 0];
 $by_wday  = [];
+$forecast = ["by_month" => [], "totals" => ["confirmed"=>0,"pending"=>0,"combined"=>0,"next_30"=>0,"rooms_30"=>0], "rows" => []];
 
 if ($tab === "daily") {
     $daily30 = knk_sales_daily_totals(30);
@@ -35,6 +36,8 @@ if ($tab === "daily") {
 } elseif ($tab === "mix") {
     $kpi_30d = knk_sales_period_totals(30);
     $kpi_all = knk_sales_period_totals(0);
+} elseif ($tab === "forecast") {
+    $forecast = knk_sales_room_forecast(180);
 } else { // weekday
     $by_wday = knk_sales_orders_by_weekday();
 }
@@ -272,6 +275,7 @@ function pct(int $part, int $whole): string {
     <a href="sales.php?tab=daily"    class="<?= $tab === "daily"    ? "is-active" : "" ?>">Last 30 days</a>
     <a href="sales.php?tab=mix"      class="<?= $tab === "mix"      ? "is-active" : "" ?>">Drinks vs Rooms</a>
     <a href="sales.php?tab=weekday"  class="<?= $tab === "weekday"  ? "is-active" : "" ?>">By weekday</a>
+    <a href="sales.php?tab=forecast" class="<?= $tab === "forecast" ? "is-active" : "" ?>">Forecast</a>
   </div>
 
   <?php if ($tab === "daily"): /* =============== TAB 1 =============== */ ?>
@@ -402,7 +406,7 @@ function pct(int $part, int $whole): string {
     </p>
   </section>
 
-  <?php else: /* =============== TAB 3: WEEKDAY =============== */ ?>
+  <?php elseif ($tab === "weekday"): /* =============== TAB 3: WEEKDAY =============== */ ?>
 
   <section class="panel">
     <h2>Drink orders by weekday <span class="sub">all time, cancelled orders excluded</span></h2>
@@ -454,6 +458,136 @@ function pct(int $part, int $whole): string {
       Counts every drink order by the day of the week it was placed. Useful for spotting which nights are busiest and where to put staff.
     </p>
   </section>
+
+  <?php else: /* =============== TAB 4: FORECAST =============== */
+    $ft = $forecast["totals"];
+    $by_month = $forecast["by_month"];
+    $rows     = $forecast["rows"];
+    /* Pick a stable max for the bar widths so confirmed and pending
+     * within a month share the same scale across all months. */
+    $max_month = 0;
+    foreach ($by_month as $b) {
+        $sum = (int)$b["confirmed"] + (int)$b["pending"];
+        if ($sum > $max_month) $max_month = $sum;
+    }
+    if ($max_month <= 0) $max_month = 1;
+  ?>
+
+  <section class="panel">
+    <h2>Forecast <span class="sub">future bookings on the books, next 6 months</span></h2>
+
+    <div class="kpis">
+      <div class="kpi">
+        <div class="l">Confirmed</div>
+        <div class="v"><?= h(vnd_short((int)$ft["confirmed"])) ?></div>
+        <div class="s">already locked in</div>
+      </div>
+      <div class="kpi">
+        <div class="l">Pending</div>
+        <div class="v"><?= h(vnd_short((int)$ft["pending"])) ?></div>
+        <div class="s">awaiting confirm/decline</div>
+      </div>
+      <div class="kpi">
+        <div class="l">Combined</div>
+        <div class="v"><?= h(vnd_short((int)$ft["combined"])) ?></div>
+        <div class="s">forecast revenue</div>
+      </div>
+      <div class="kpi">
+        <div class="l">Next 30 days</div>
+        <div class="v"><?= h(vnd_short((int)$ft["next_30"])) ?></div>
+        <div class="s"><?= (int)$ft["rooms_30"] ?> room-nights</div>
+      </div>
+    </div>
+
+    <?php if (empty($by_month)): ?>
+      <div class="empty">Nothing on the books yet — confirmed and pending bookings show up here as guests enquire.</div>
+    <?php else: ?>
+      <table class="forecast-table" style="width:100%; border-collapse:collapse; margin-top:1.2rem;">
+        <thead>
+          <tr>
+            <th style="text-align:left; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Month</th>
+            <th style="text-align:left; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Revenue</th>
+            <th style="text-align:right; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php foreach ($by_month as $month => $vals):
+            $c = (int)$vals["confirmed"];
+            $p = (int)$vals["pending"];
+            $sum = $c + $p;
+            $w_c = ($c / $max_month) * 100;
+            $w_p = ($p / $max_month) * 100;
+          ?>
+            <tr>
+              <td style="padding:0.55rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06); white-space:nowrap; font-weight:600;">
+                <?= h(date("F Y", strtotime($month . "-01"))) ?>
+              </td>
+              <td style="padding:0.55rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06); width:60%;">
+                <div style="display:flex; height:18px; border-radius:5px; overflow:hidden; background:rgba(245,233,209,0.04);">
+                  <div title="Confirmed: <?= h(vnd($c)) ?>"
+                       style="width:<?= $w_c ?>%; background:rgba(122,165,106,0.85);"></div>
+                  <div title="Pending: <?= h(vnd($p)) ?>"
+                       style="width:<?= $w_p ?>%; background:rgba(217,122,90,0.7);"></div>
+                </div>
+                <div style="font-size:0.78rem; color:rgba(245,233,209,0.55); margin-top:0.25rem;">
+                  Confirmed <?= h(vnd_short($c)) ?> · Pending <?= h(vnd_short($p)) ?>
+                </div>
+              </td>
+              <td style="padding:0.55rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06); text-align:right; font-weight:700;">
+                <?= h(vnd($sum)) ?>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        </tbody>
+      </table>
+    <?php endif; ?>
+
+    <p class="note">
+      Walks every confirmed and non-stale pending booking with a checkout in the future,
+      asks the rate engine for the actual nightly quote (so seasonal overrides flow through),
+      and groups by calendar month. <strong>Confirmed</strong> = locked in, <strong>Pending</strong> = guest enquired but Simmo hasn't yet hit Confirm/Decline.
+    </p>
+  </section>
+
+  <?php if (!empty($rows)): ?>
+  <section class="panel">
+    <h2>Upcoming bookings <span class="sub"><?= count($rows) ?> on the books</span></h2>
+    <table class="forecast-table" style="width:100%; border-collapse:collapse;">
+      <thead>
+        <tr>
+          <th style="text-align:left; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Check-in</th>
+          <th style="text-align:left; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Room</th>
+          <th style="text-align:left; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Guest</th>
+          <th style="text-align:left; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Status</th>
+          <th style="text-align:right; padding:0.5rem 0.6rem; color:rgba(245,233,209,0.6); font-weight:600; text-transform:uppercase; font-size:0.78rem; letter-spacing:0.04em; border-bottom:1px solid rgba(245,233,209,0.12);">Total</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php foreach ($rows as $r):
+          $is_pending = ($r["status"] === "pending");
+        ?>
+          <tr>
+            <td style="padding:0.5rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06); white-space:nowrap;">
+              <?= h($r["checkin"]) ?>
+              <span style="color:rgba(245,233,209,0.4); font-size:0.78rem;">→ <?= h($r["checkout"]) ?></span>
+            </td>
+            <td style="padding:0.5rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06);"><?= h($r["room"]) ?></td>
+            <td style="padding:0.5rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06);"><?= h($r["guest"]) ?></td>
+            <td style="padding:0.5rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06);">
+              <span style="display:inline-block; padding:0.15rem 0.5rem; border-radius:999px; font-size:0.78rem;
+                background:<?= $is_pending ? 'rgba(217,122,90,0.2); color:#ffb59d' : 'rgba(122,165,106,0.2); color:#b6dba0' ?>;">
+                <?= h(ucfirst($r["status"])) ?>
+              </span>
+            </td>
+            <td style="padding:0.5rem 0.6rem; border-bottom:1px solid rgba(245,233,209,0.06); text-align:right; font-weight:700;">
+              <?= h(vnd((int)$r["total"])) ?>
+            </td>
+          </tr>
+        <?php endforeach; ?>
+      </tbody>
+    </table>
+  </section>
+  <?php endif; ?>
 
   <?php endif; /* end tab branches */ ?>
 

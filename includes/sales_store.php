@@ -160,3 +160,160 @@ function knk_sales_orders_by_weekday(): array {
     }
     return $out;
 }
+
+/* ---------- Forward-looking room revenue forecast (Tab 4) ----------
+ *
+ * Walks every booking that's still on the books (confirmed +
+ * non-stale pending) with a checkout in the future, and asks the
+ * rate engine (migration 026) for the actual nightly quote. This
+ * means seasonal overrides flow through — a pending Tet booking
+ * forecasts the Tet rate, not the rack rate.
+ *
+ * Falls back to (price_vnd_per_night × nights) when the rate engine
+ * can't price the stay (no rooms registered yet, or zero-rated
+ * nights), so the forecast still reflects what was originally
+ * quoted to the guest.
+ *
+ * Returns:
+ *   [
+ *     "by_month" => [ "YYYY-MM" => ["confirmed" => int, "pending" => int], ... ],
+ *     "totals"   => [
+ *        "confirmed" => int VND, "pending" => int VND, "combined" => int VND,
+ *        "next_30"   => int VND,            // confirmed + pending in next 30 days
+ *        "rooms_30"  => int                 // distinct room-nights in next 30 days
+ *     ],
+ *     "rows" => [ <one row per booking, sorted by checkin> ],
+ *   ]
+ */
+function knk_sales_room_forecast(int $horizon_days = 365): array {
+    if ($horizon_days < 7)   $horizon_days = 7;
+    if ($horizon_days > 730) $horizon_days = 730;
+
+    /* Pull the rate engine lazily — sales.php is gated under a
+     * different permission than room-rates and we don't want a
+     * missing migration to crash the dashboard. */
+    $have_rate_engine = false;
+    if (file_exists(__DIR__ . "/room_rates_store.php")) {
+        require_once __DIR__ . "/room_rates_store.php";
+        $have_rate_engine = function_exists('knk_rooms_by_type');
+    }
+
+    [$fp, $data] = bookings_open();
+    bookings_close($fp);
+
+    $now      = time();
+    $today_ts = strtotime(date("Y-m-d") . " 00:00:00");
+    $end_ts   = strtotime("+{$horizon_days} days", $today_ts);
+    $win30_ts = strtotime("+30 days", $today_ts);
+
+    $by_month = [];
+    $rows     = [];
+    $tot_conf = 0; $tot_pend = 0;
+    $next30   = 0; $nights30 = 0;
+
+    foreach ($data["holds"] as $h) {
+        $status = $h["status"] ?? "pending";
+        if (in_array($status, ["declined", "expired", "cancelled", "completed"], true)) continue;
+        if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
+        if (knk_sales_is_block($h)) continue;          // skip manual blocks
+        $checkin  = (string)($h["checkin"]  ?? "");
+        $checkout = (string)($h["checkout"] ?? "");
+        if ($checkin === "" || $checkout === "") continue;
+        $hs = strtotime($checkin);
+        $he = strtotime($checkout);
+        if (!$hs || !$he || $he <= $today_ts) continue;  // already left
+        if ($hs > $end_ts) continue;                     // beyond horizon
+
+        $type    = (string)($h["room"] ?? "");
+        $nights  = (int)($h["nights"] ?? 0);
+        if ($nights <= 0) $nights = max(1, (int)(($he - $hs) / 86400));
+
+        /* Try the rate engine first. We quote against the cheapest
+         * active physical room of the type — same approximation
+         * enquire.php uses. */
+        $total = 0;
+        $lines = [];
+        if ($have_rate_engine) {
+            try {
+                $candidates = knk_rooms_by_type($type);
+                if (!empty($candidates)) {
+                    usort($candidates, function ($a, $b) {
+                        return ((int)$a["default_vnd_per_night"]) - ((int)$b["default_vnd_per_night"]);
+                    });
+                    $q = knk_room_rate_quote((string)$candidates[0]["slug"], $checkin, $checkout);
+                    if (!empty($q) && $q["nights"] > 0 && empty($q["any_zero"])) {
+                        $total = (int)$q["total"];
+                        $lines = $q["lines"];
+                    }
+                }
+            } catch (Throwable $e) {
+                /* swallow — fall through to legacy snapshot */
+            }
+        }
+        if ($total <= 0) {
+            $total = ((int)($h["price_vnd_per_night"] ?? 0)) * $nights;
+        }
+
+        /* Spread the booking across calendar months for the by_month
+         * grouping. We use per-night $lines if the rate engine
+         * returned them, otherwise treat each night as having
+         * total/nights. */
+        $per_night = [];
+        if (!empty($lines)) {
+            foreach ($lines as $ln) {
+                $per_night[(string)$ln["date"]] = (int)$ln["vnd"];
+            }
+        } else {
+            for ($t = $hs; $t < $he; $t = strtotime("+1 day", $t)) {
+                $per_night[date("Y-m-d", $t)] = (int)round($total / max(1, $nights));
+            }
+        }
+
+        foreach ($per_night as $night_ymd => $vnd) {
+            $night_ts = strtotime($night_ymd);
+            if ($night_ts < $today_ts || $night_ts > $end_ts) continue;
+            $month = substr($night_ymd, 0, 7);
+            if (!isset($by_month[$month])) $by_month[$month] = ["confirmed" => 0, "pending" => 0];
+            if ($status === "confirmed") {
+                $by_month[$month]["confirmed"] += $vnd;
+                $tot_conf                     += $vnd;
+            } else {
+                $by_month[$month]["pending"]   += $vnd;
+                $tot_pend                     += $vnd;
+            }
+            if ($night_ts < $win30_ts) {
+                $next30   += $vnd;
+                $nights30 += 1;
+            }
+        }
+
+        $rows[] = [
+            "id"       => (string)($h["id"] ?? ""),
+            "room"     => $type,
+            "checkin"  => $checkin,
+            "checkout" => $checkout,
+            "nights"   => $nights,
+            "status"   => $status,
+            "guest"    => (string)($h["guest"]["name"] ?? ""),
+            "total"    => $total,
+        ];
+    }
+
+    /* Sort by_month and rows for stable output. */
+    ksort($by_month);
+    usort($rows, function ($a, $b) {
+        return strcmp($a["checkin"], $b["checkin"]);
+    });
+
+    return [
+        "by_month" => $by_month,
+        "totals"   => [
+            "confirmed" => $tot_conf,
+            "pending"   => $tot_pend,
+            "combined"  => $tot_conf + $tot_pend,
+            "next_30"   => $next30,
+            "rooms_30"  => $nights30,
+        ],
+        "rows"     => $rows,
+    ];
+}
