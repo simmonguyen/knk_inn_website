@@ -38,6 +38,18 @@ $gallery_defaults = [
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>VIP — Private Bathtub — KnK Inn</title>
 <meta name="description" content="Book the VIP — Private Bathtub at KnK Inn — private bathtub, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
+<?php $og_img = "https://knkinn.com/" . ltrim($rp('room_vip', 1, 'rm_04.jpg'), './'); ?>
+<meta property="og:title"        content="VIP with Private Bathtub — KnK Inn, Saigon">
+<meta property="og:description"  content="VIP room at KnK Inn with private bathtub. Strong AC, rain shower, fast Wi-Fi. District 1.">
+<meta property="og:image"        content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
+<meta property="og:url"          content="https://knkinn.com/rooms/vip.php">
+<meta property="og:type"         content="website">
+<meta property="og:site_name"    content="KnK Inn">
+<meta property="og:locale"       content="en_US">
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="VIP with Private Bathtub — KnK Inn">
+<meta name="twitter:description" content="Private bathtub · strong AC · rain shower · fast Wi-Fi. District 1, Saigon.">
+<meta name="twitter:image"       content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">

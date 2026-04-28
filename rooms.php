@@ -28,6 +28,22 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Rooms — KnK Inn</title>
 <meta name="description" content="Boutique rooms at KnK Inn — quiet, clean, comfortable accommodation in the heart of District 1, Ho Chi Minh City.">
+<?php
+  /* Use the first room-types tile as the OG/Twitter image — that's
+   * the "Standard No Window" hero on the rooms grid. */
+  $og_img = "https://knkinn.com/" . htmlspecialchars(knk_photo_src($slots, 'rooms_types', 1, 'rm_00.jpg'), ENT_QUOTES, "UTF-8");
+?>
+<meta property="og:title"        content="Rooms — KnK Inn, Saigon">
+<meta property="og:description"  content="Boutique rooms in District 1: standard, balcony, and VIP with private bathtub. Aussie pub-style hotel + bar.">
+<meta property="og:image"        content="<?= $og_img ?>">
+<meta property="og:url"          content="https://knkinn.com/rooms.php">
+<meta property="og:type"         content="website">
+<meta property="og:site_name"    content="KnK Inn">
+<meta property="og:locale"       content="en_US">
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="Rooms — KnK Inn, Saigon">
+<meta name="twitter:description" content="Boutique rooms in District 1 — standard, balcony, or VIP with private bathtub.">
+<meta name="twitter:image"       content="<?= $og_img ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">

@@ -46,6 +46,23 @@ $gallery_defaults = [
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Standard — Balcony — KnK Inn</title>
 <meta name="description" content="Book the Standard — Balcony at KnK Inn — balcony, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
+<?php
+  /* OG / Twitter cards — driven by the same hero photo the page uses,
+   * so what shows up on Facebook / WhatsApp / Tripadvisor previews
+   * matches what guests see when they tap through. */
+  $og_img = "https://knkinn.com/" . ltrim($rp('room_balcony', 1, 'rm_02.jpg'), './');
+?>
+<meta property="og:title"        content="Standard with Balcony — KnK Inn, Saigon">
+<meta property="og:description"  content="Balcony room at KnK Inn — quiet, clean, fast Wi-Fi. Heart of District 1's backpacker scene.">
+<meta property="og:image"        content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
+<meta property="og:url"          content="https://knkinn.com/rooms/standard-balcony.php">
+<meta property="og:type"         content="website">
+<meta property="og:site_name"    content="KnK Inn">
+<meta property="og:locale"       content="en_US">
+<meta name="twitter:card"        content="summary_large_image">
+<meta name="twitter:title"       content="Standard with Balcony — KnK Inn">
+<meta name="twitter:description" content="Balcony · strong AC · rain shower · fast Wi-Fi. District 1, Saigon.">
+<meta name="twitter:image"       content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Inter:wght@400;500;600;700&family=Caveat:wght@700&display=swap" rel="stylesheet">
