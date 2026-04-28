@@ -424,10 +424,34 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
     <div class="brand"><strong>KnK</strong> <em>Inn</em></div>
 <?php endif; ?>
 
+<?php if (!defined('KNK_BAR_FRAME')): ?>
     <h1>Pick a <span class="accent">song.</span></h1>
     <p class="lede">
       Type an artist and a song title. We'll find it on YouTube and play it on the bar TV.
     </p>
+<?php else: ?>
+    <!-- Bar-shell tab strip — three lightweight in-page tabs that
+         swap which group of cards is visible. The cards themselves
+         still render server-side; this is just CSS+JS chrome that
+         hides the inactive ones. Default tab is Search since that's
+         what 90% of guests came in to do. -->
+    <div class="knk-music-tabs" id="knkMusicTabs"
+         style="display:flex; gap:0.4rem; margin:0.2rem 0 0.8rem; padding:0.3rem; background:rgba(245,233,209,0.05); border-radius:12px;">
+      <button type="button" class="knk-music-tab is-on" data-music-target="search"
+              style="flex:1 1 0; min-width:0; padding:0.55rem 0.4rem; background:transparent; border:0; border-radius:9px; color:var(--cream,#f5e9d1); font-size:0.92rem; font-weight:600; cursor:pointer;">Search</button>
+      <button type="button" class="knk-music-tab" data-music-target="queue"
+              style="flex:1 1 0; min-width:0; padding:0.55rem 0.4rem; background:transparent; border:0; border-radius:9px; color:var(--cream,#f5e9d1); font-size:0.92rem; font-weight:600; cursor:pointer;">Queue</button>
+      <button type="button" class="knk-music-tab" data-music-target="playlist"
+              style="flex:1 1 0; min-width:0; padding:0.55rem 0.4rem; background:transparent; border:0; border-radius:9px; color:var(--cream,#f5e9d1); font-size:0.92rem; font-weight:600; cursor:pointer;">My playlist</button>
+    </div>
+    <style>
+      .knk-music-tab.is-on {
+        background: rgba(201,170,113,0.22) !important;
+        color: var(--gold,#c9aa71) !important;
+        box-shadow: inset 0 0 0 1px rgba(201,170,113,0.4);
+      }
+    </style>
+<?php endif; ?>
 
     <?php if (!$enabled): ?>
       <div class="card closed-card">
@@ -462,7 +486,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
         </div>
       <?php endif; ?>
 
-      <form class="card" method="post" action="<?= jbh($KNK_SELF_URL) ?>" autocomplete="off">
+      <form class="card" method="post" action="<?= jbh($KNK_SELF_URL) ?>" autocomplete="off" data-music-tab="search">
         <input type="hidden" name="action" value="submit">
 
         <div class="field">
@@ -517,7 +541,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
            with Cancel buttons next to anything still pending or
            queued. Only shown inside the bar shell (where we have
            an authenticated session via the anon cookie). -->
-      <div class="card">
+      <div class="card" data-music-tab="queue">
         <h2 class="section">Your songs</h2>
         <ul class="my-songs">
           <?php foreach ($my_songs as $ms):
@@ -558,7 +582,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
       <?php endif; ?>
 
       <?php if ($now_playing): ?>
-        <div class="card">
+        <div class="card" data-music-tab="queue">
           <h2 class="section">Now playing</h2>
           <div class="now-playing">
             <?php if (!empty($now_playing["thumbnail_url"])): ?>
@@ -572,7 +596,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
         </div>
       <?php endif; ?>
 
-      <div class="card">
+      <div class="card" data-music-tab="queue">
         <h2 class="section">Up next (<?= count($up_next) ?>)</h2>
         <?php if (empty($up_next)): ?>
           <div class="empty">Nothing queued. Be the first.</div>
@@ -606,7 +630,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
            guest has an order_email session). Tracks they've saved
            with the ⊕ button on Recently-played rows. Each row has
            a small × to remove. Future: drag-reorder + Play All. -->
-      <div class="card knk-playlist-card" id="knkPlaylistCard">
+      <div class="card knk-playlist-card" id="knkPlaylistCard" data-music-tab="playlist">
         <h2 class="section" style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem;">
           <span>My playlist <span class="muted" style="font-size:0.85rem; font-weight:400;" id="knkPlaylistCount">(<?= count($bar_playlist) ?>)</span></span>
           <button type="button" id="knkPlaylistPlayAll"
@@ -658,7 +682,7 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
            same panel renders standalone (table-side QR codes get
            it too) so guests can scroll the bar's "what's been on"
            regardless of where they came in. -->
-      <div class="card">
+      <div class="card" data-music-tab="playlist">
         <h2 class="section">Recently played at KnK</h2>
         <ul class="bar-recent">
           <?php foreach ($bar_recent as $row):
@@ -923,6 +947,48 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
       <?php endif; ?>
 
     <?php endif; ?>
+
+<?php if (defined('KNK_BAR_FRAME')): ?>
+    <script>
+    /* Music tab strip — Search / Queue / My playlist.
+     *
+     * Picks the active target from #hash (e.g. ?tab=music#playlist)
+     * so that "Save to playlist" deep-links can drop guests onto
+     * the right card. Falls back to Search.
+     *
+     * Handles missing tab content gracefully: if a guest has no
+     * playlist yet, the Playlist tab still works — it just shows
+     * the "Recently played at KnK" wall (which is also tagged
+     * data-music-tab="playlist"). */
+    (function () {
+      var strip = document.getElementById('knkMusicTabs');
+      if (!strip) return;
+      var tabs = Array.prototype.slice.call(strip.querySelectorAll('.knk-music-tab'));
+      var cards = Array.prototype.slice.call(document.querySelectorAll('[data-music-tab]'));
+
+      function show(target) {
+        cards.forEach(function (c) {
+          c.style.display = (c.getAttribute('data-music-tab') === target) ? '' : 'none';
+        });
+        tabs.forEach(function (t) {
+          var on = (t.getAttribute('data-music-target') === target);
+          if (on) t.classList.add('is-on'); else t.classList.remove('is-on');
+        });
+        try { history.replaceState(null, '', '#' + target); } catch (e) {}
+      }
+
+      tabs.forEach(function (t) {
+        t.addEventListener('click', function () {
+          show(t.getAttribute('data-music-target') || 'search');
+        });
+      });
+
+      var initial = (location.hash || '').replace('#', '');
+      if (initial !== 'queue' && initial !== 'playlist') initial = 'search';
+      show(initial);
+    })();
+    </script>
+<?php endif; ?>
 
 <?php if (!defined('KNK_BAR_FRAME')): ?>
     <p class="footer-note">
