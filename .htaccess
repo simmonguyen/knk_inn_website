@@ -1,0 +1,61 @@
+# KnK Inn — Apache / LiteSpeed config
+#
+# Two jobs:
+#   1. Whitelist social-media link-preview scrapers so they never
+#      hit any server-level bot block (Matbao's LiteSpeed setup
+#      ships with default mod_security rules that 403 anything
+#      with "bot" in the User-Agent — including facebookexternalhit).
+#   2. Belt-and-braces around the existing robots.txt — even if a
+#      caching layer serves a stale or wrong robots.txt, these
+#      rules guarantee the scrapers can read the homepage and the
+#      OG image they need.
+#
+# Adding more scrapers later: drop another BrowserMatchNoCase line
+# alongside the existing ones.
+
+# Mark social-media scrapers as friendly. BrowserMatchNoCase is
+# case-insensitive — covers UA-string variants.
+BrowserMatchNoCase "facebookexternalhit"     is_social_bot
+BrowserMatchNoCase "facebookcatalog"         is_social_bot
+BrowserMatchNoCase "Facebot"                 is_social_bot
+BrowserMatchNoCase "Twitterbot"              is_social_bot
+BrowserMatchNoCase "LinkedInBot"             is_social_bot
+BrowserMatchNoCase "WhatsApp"                is_social_bot
+BrowserMatchNoCase "TelegramBot"             is_social_bot
+BrowserMatchNoCase "Slackbot"                is_social_bot
+BrowserMatchNoCase "Discordbot"              is_social_bot
+BrowserMatchNoCase "Pinterestbot"            is_social_bot
+
+# Disable mod_security for known social scrapers. ModSec is what
+# usually 403s these UAs on Matbao. We only relax it for the
+# whitelisted bots — everyone else still gets the default rules.
+<IfModule mod_security.c>
+    SecRuleEngine On
+    <If "reqenv('is_social_bot') == '1'">
+        SecRuleEngine Off
+    </If>
+</IfModule>
+
+# Same intent for LiteSpeed's bot-detection module if it's active.
+<IfModule LiteSpeed>
+    <If "reqenv('is_social_bot') == '1'">
+        Header set X-Bot-Whitelist "social-preview-scraper"
+    </If>
+</IfModule>
+
+# Some scrapers (Facebook's especially) want CORS headers when
+# fetching og:image cross-origin. Costs nothing to add.
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|svg)$">
+    <IfModule mod_headers.c>
+        Header set Access-Control-Allow-Origin "*"
+    </IfModule>
+</FilesMatch>
+
+# Default cache for static assets (no impact on bot scraping but
+# while we're touching the docroot config — it's a freebie).
+<FilesMatch "\.(jpg|jpeg|png|gif|webp|svg|ico|css|js|woff2)$">
+    <IfModule mod_expires.c>
+        ExpiresActive On
+        ExpiresDefault "access plus 7 days"
+    </IfModule>
+</FilesMatch>
