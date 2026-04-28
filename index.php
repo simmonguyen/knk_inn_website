@@ -544,6 +544,10 @@ function p_src(array $slots, string $section, int $i, string $default): string {
           <span class="info-block-label">Facebook</span>
           <div class="info-block-value"><a href="https://facebook.com/KnKinn" target="_blank" rel="noopener">facebook.com/KnKinn</a></div>
         </div>
+        <div class="info-block">
+          <span class="info-block-label">TripAdvisor</span>
+          <div class="info-block-value"><a href="https://www.tripadvisor.com/Hotel_Review-g293925-d34346393-Reviews-KnK_Inn_Homestay_Sports_Pub_Rooftop_Garden-Ho_Chi_Minh_City.html" target="_blank" rel="noopener">Review us on TripAdvisor</a></div>
+        </div>
         <table class="hours-table">
           <tr><td>Morning session</td><td>08:00 – 12:00</td></tr>
           <tr><td>Evening / Bar</td><td>16:30 – 23:00</td></tr>

@@ -486,12 +486,9 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
         <code>knkinn.com/share.php</code>) and tap a platform to share or
         write a review. Each tap fires a market crash on the top trending
         drinks &mdash; <strong>tier&nbsp;1</strong> Facebook (10%, 2&nbsp;min),
-        <strong>tier&nbsp;2</strong> Google review (20%, 2&nbsp;min).
+        <strong>tier&nbsp;2</strong> Google review (20%, 2&nbsp;min),
+        <strong>tier&nbsp;3</strong> TripAdvisor review (35%, 5&nbsp;min).
         24h cooldown per guest per platform so one regular can't spam it.
-        <br><br>
-        <em>TripAdvisor is parked until the listing is approved. Once
-        the URL field below is filled in we&rsquo;ll re-enable it as
-        tier&nbsp;3 (35%, 5&nbsp;min).</em>
       </p>
 
       <div class="status-row">
@@ -549,9 +546,7 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
                  style="width:100%; padding:0.5rem;">
         </label>
         <label>
-          <span style="display:block;font-size:0.85rem;color:var(--cream-faint,#aaa);">
-            TripAdvisor review URL <em>(currently parked &mdash; listing pending approval)</em>
-          </span>
+          <span style="display:block;font-size:0.85rem;color:var(--cream-faint,#aaa);">TripAdvisor review URL</span>
           <input type="url" name="share_url_tripadvisor"
                  value="<?= htmlspecialchars($share_url_ta, ENT_QUOTES, "UTF-8") ?>"
                  placeholder="https://www.tripadvisor.com/UserReviewEdit-..."

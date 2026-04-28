@@ -86,22 +86,23 @@ function knk_share_platforms(): array {
             // the override).
             "deep_link"    => "https://www.google.com/maps/search/" . rawurlencode("KnK Inn 96 De Tham District 1 Saigon"),
         ],
-        // TripAdvisor — disabled until Ben's listing is approved.
-        // Re-enable by uncommenting this block once the
-        // TripAdvisor URL is filled in via /settings.php. The DB
-        // schema, audit-log, and cooldown logic are all already
-        // platform-agnostic, so no other code changes needed.
-        //
-        // "tripadvisor" => [
-        //     "key"          => "tripadvisor",
-        //     "label"        => "TripAdvisor",
-        //     "tier"         => 3,
-        //     "drop_pct"     => 35,
-        //     "duration_min" => 5,
-        //     "delay_sec"    => 150,
-        //     "action"       => "review",
-        //     "deep_link"    => "https://www.tripadvisor.com/Search?q=" . rawurlencode("KnK Inn Saigon"),
-        // ],
+        // TripAdvisor — enabled 2026-04-28 once the listing was
+        // approved. settings.share_url_tripadvisor wins over the
+        // deep_link below if Simmo wants to point at the
+        // /UserReviewEdit-... URL specifically (deep-links straight
+        // to the review form). Default deep_link is the public
+        // hotel-review page so guests landing without a settings
+        // override still get to the right listing.
+        "tripadvisor" => [
+            "key"          => "tripadvisor",
+            "label"        => "TripAdvisor",
+            "tier"         => 3,
+            "drop_pct"     => 35,
+            "duration_min" => 5,
+            "delay_sec"    => 150,
+            "action"       => "review",
+            "deep_link"    => "https://www.tripadvisor.com/Hotel_Review-g293925-d34346393-Reviews-KnK_Inn_Homestay_Sports_Pub_Rooftop_Garden-Ho_Chi_Minh_City.html",
+        ],
     ];
 }
 
