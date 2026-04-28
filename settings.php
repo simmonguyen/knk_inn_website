@@ -126,6 +126,40 @@ elseif ($action === "save_share_urls") {
     ]);
     $flash = "Share-rally URLs saved.";
 }
+elseif ($action === "save_ip_whitelist") {
+    /* Self-lockout protection: refuse to enable the whitelist
+     * unless the caller's own IP is on the list, otherwise the
+     * next request would 403 us out of /settings.php. */
+    $on   = !empty($_POST["enabled"]) ? "1" : "0";
+    $list = trim((string)($_POST["staff_ip_whitelist"] ?? ""));
+    $caller_ip = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+    if ($on === "1" && $caller_ip !== "" && !knk_ip_in_whitelist($caller_ip, $list)) {
+        $error = "Refusing to lock you out. Add your current IP ("
+               . htmlspecialchars($caller_ip, ENT_QUOTES, "UTF-8")
+               . ") to the list before turning the gate on.";
+    } else {
+        knk_setting_set("staff_ip_whitelist_enabled", $on, $me_id);
+        knk_setting_set("staff_ip_whitelist", $list, $me_id);
+        knk_audit("settings.update", "settings", "staff_ip_whitelist", [
+            "enabled" => $on, "list" => $list,
+        ]);
+        $flash = $on === "1"
+            ? "Staff IP whitelist is ON — only listed addresses can reach admin pages."
+            : "Staff IP whitelist is OFF.";
+    }
+}
+elseif ($action === "save_hostess_email") {
+    $he = trim((string)($_POST["hostess_email"] ?? ""));
+    if ($he !== "" && !filter_var($he, FILTER_VALIDATE_EMAIL)) {
+        $error = "That doesn't look like a valid email.";
+    } else {
+        knk_setting_set("hostess_email", $he, $me_id);
+        knk_audit("settings.update", "settings", "hostess_email", ["value" => $he]);
+        $flash = $he !== ""
+            ? "Hostess email saved — drink orders + bills + lonely-looker alerts go to " . $he . "."
+            : "Hostess email cleared — falls back to the bar inbox.";
+    }
+}
 
 if ($action !== "") {
     $qs = [];
@@ -440,6 +474,76 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
                  style="width:100%; padding:0.5rem;">
         </label>
         <div><button type="submit">Save URLs</button></div>
+      </form>
+    </section>
+
+    <!-- Hostess email -->
+    <section class="card">
+      <h2>Hostess email</h2>
+      <p class="explain">
+        Where the bar-side notifications land — drink orders from
+        /bar.php, "Check Bill" requests from a guest's tab, and the
+        "🎯 Someone's waiting for darts" alerts after 10 minutes
+        without a challenger. Empty falls back to the main bar inbox.
+      </p>
+      <?php $hostess_email = (string)knk_setting("hostess_email", ""); ?>
+      <form method="post" class="inline-form" style="margin-top:0.6rem;">
+        <input type="hidden" name="action" value="save_hostess_email">
+        <input type="email" name="hostess_email"
+               placeholder="thirsty@knkinn.com"
+               value="<?= htmlspecialchars($hostess_email, ENT_QUOTES, "UTF-8") ?>"
+               autocomplete="off">
+        <button type="submit">Save email</button>
+      </form>
+      <?php if ($hostess_email !== ""): ?>
+        <p class="muted" style="margin-top:0.7rem">
+          Currently routing to <strong><?= htmlspecialchars($hostess_email, ENT_QUOTES, "UTF-8") ?></strong>.
+        </p>
+      <?php endif; ?>
+    </section>
+
+    <!-- Staff IP whitelist -->
+    <section class="card">
+      <h2>Staff IP whitelist</h2>
+      <p class="explain">
+        Locks every staff page (bookings, orders, photos, settings,
+        users, market-admin, jukebox-admin, darts-admin, menu) to a
+        list of approved IP addresses. Customers using <code>/bar.php</code>
+        and the public site stay reachable from anywhere — only the
+        staff side gets gated.
+      </p>
+      <?php
+        $ipw_on   = knk_setting_bool("staff_ip_whitelist_enabled", false);
+        $ipw_list = (string)knk_setting("staff_ip_whitelist", "");
+        $caller   = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+      ?>
+      <p class="explain" style="margin-top:0.4rem;">
+        Comma- or newline-separated. Each entry can be a single IPv4
+        (<code>27.74.115.220</code>) or a CIDR range
+        (<code>192.168.1.0/24</code>). Your current IP is
+        <strong><?= htmlspecialchars($caller, ENT_QUOTES, "UTF-8") ?: "—" ?></strong>
+        — make sure it's on the list before turning the gate on, or you'll lock yourself out.
+      </p>
+      <div class="status-row" style="margin-top:0.6rem;">
+        <?php if ($ipw_on): ?>
+          <span class="status-pill on"><span class="dot"></span>On</span>
+        <?php else: ?>
+          <span class="status-pill off"><span class="dot"></span>Off</span>
+        <?php endif; ?>
+      </div>
+      <form method="post" style="margin-top:0.7rem; display:flex; flex-direction:column; gap:0.5rem;">
+        <input type="hidden" name="action" value="save_ip_whitelist">
+        <label>
+          <span style="display:block;font-size:0.85rem;color:var(--cream-faint,#aaa);">Allowed addresses (comma- or newline-separated)</span>
+          <textarea name="staff_ip_whitelist" rows="4"
+                    placeholder="27.74.115.220&#10;192.168.1.0/24"
+                    style="width:100%; padding:0.5rem; font-family:monospace;"><?= htmlspecialchars($ipw_list, ENT_QUOTES, "UTF-8") ?></textarea>
+        </label>
+        <label style="display:flex;align-items:center;gap:0.4rem;">
+          <input type="checkbox" name="enabled" value="1"<?= $ipw_on ? " checked" : "" ?>>
+          <span>Enforce — anyone not on the list gets a 403 before login</span>
+        </label>
+        <div><button type="submit">Save whitelist</button></div>
       </form>
     </section>
 

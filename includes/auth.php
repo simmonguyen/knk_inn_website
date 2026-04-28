@@ -169,6 +169,13 @@ function knk_logout(): void {
  * Gate a page. Redirects to /login.php if not logged in.
  * ------------------------------------------------------------------ */
 function knk_require_login(): array {
+    /* IP whitelist — first line of defence on staff pages. Off by
+     * default; once Ben enables it in /settings.php, anything not
+     * matching the bar's local subnet or his explicit allowlist
+     * gets a hard 403 before login is even attempted. Stops a
+     * leaked password from working from a random cellular IP. */
+    knk_enforce_staff_ip_whitelist();
+
     $u = knk_current_user();
     if (!$u) {
         $next = $_SERVER["REQUEST_URI"] ?? "/";
@@ -176,6 +183,80 @@ function knk_require_login(): array {
         exit;
     }
     return $u;
+}
+
+/* --------------------------------------------------------------------
+ * IP whitelist gate.
+ *
+ * Reads the boolean setting `staff_ip_whitelist_enabled` and, if on,
+ * checks REMOTE_ADDR against the comma-separated `staff_ip_whitelist`
+ * setting. Each entry can be a single IPv4 (27.74.115.220) or a CIDR
+ * range (192.168.1.0/24). Any match passes; anything else gets a 403.
+ *
+ * Disabled: returns immediately, no behaviour change.
+ * Enabled, list empty: refuses all (deliberate fail-closed — easier
+ *   to spot a misconfiguration than silently allow everything).
+ * ------------------------------------------------------------------ */
+function knk_enforce_staff_ip_whitelist(): void {
+    /* Lazy-load the settings store the first time we need it.
+     * auth.php gets included from a lot of places so we don't want
+     * to demand it as a top-level dep. */
+    if (!function_exists("knk_setting_bool")) {
+        $store = __DIR__ . "/settings_store.php";
+        if (is_file($store)) require_once $store;
+    }
+    if (!function_exists("knk_setting_bool")) return; // still missing → skip
+    if (!knk_setting_bool("staff_ip_whitelist_enabled", false)) return;
+
+    $ip = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+    if ($ip === "") {
+        // Loopback / CLI — let it through so cron and migrate.php
+        // don't lock themselves out.
+        return;
+    }
+
+    $list = (string)knk_setting("staff_ip_whitelist", "");
+    if (knk_ip_in_whitelist($ip, $list)) return;
+
+    http_response_code(403);
+    header("Content-Type: text/html; charset=utf-8");
+    echo "<!doctype html><meta charset=utf-8><title>Blocked</title>";
+    echo "<div style='font-family:system-ui,sans-serif;max-width:34rem;margin:6rem auto;padding:0 1rem;color:#3a230d;'>";
+    echo "<h1 style='color:#a78348;'>Locked down</h1>";
+    echo "<p>Staff pages are restricted to the bar network and a few approved addresses. Your IP <strong>" . htmlspecialchars($ip, ENT_QUOTES, "UTF-8") . "</strong> isn't on the list.</p>";
+    echo "<p style='color:#6e5d40;font-size:0.9rem;'>If that's a mistake, ask Simmo to add it in <code>/settings.php</code>.</p>";
+    echo "</div>";
+    exit;
+}
+
+/**
+ * Is $ip in $whitelist (comma-separated IPv4s and/or CIDRs)?
+ * Pure function — no globals — so it's easy to test.
+ */
+function knk_ip_in_whitelist(string $ip, string $whitelist): bool {
+    $ip = trim($ip);
+    if ($ip === "") return false;
+    $ip_long = ip2long($ip);
+    if ($ip_long === false) return false;
+
+    foreach (preg_split('/[\s,]+/', $whitelist) as $entry) {
+        $entry = trim($entry);
+        if ($entry === "") continue;
+        if (strpos($entry, "/") !== false) {
+            // CIDR
+            list($net, $bits) = explode("/", $entry, 2);
+            $net_long = ip2long(trim($net));
+            $bits_int = (int)$bits;
+            if ($net_long === false || $bits_int < 0 || $bits_int > 32) continue;
+            if ($bits_int === 0) return true; // 0.0.0.0/0 — everyone
+            $mask = -1 << (32 - $bits_int);
+            if (($ip_long & $mask) === ($net_long & $mask)) return true;
+        } else {
+            $entry_long = ip2long($entry);
+            if ($entry_long !== false && $entry_long === $ip_long) return true;
+        }
+    }
+    return false;
 }
 
 /* --------------------------------------------------------------------
