@@ -786,6 +786,21 @@ if ($show_lobby) {
           <div class="chip" data-format="doubles">Doubles (4 only)</div>
         </div>
 
+        <h2>Who's keeping score?</h2>
+        <!-- Scoring mode (migration 027). Drives who's allowed to
+             tap the score buttons during a turn:
+               self_only  — each player on their own phone (default)
+               any_player — anyone in the game can score for the thrower
+               host_only  — one phone for the whole game (you're it) -->
+        <div class="row" id="scoringModeRow">
+          <div class="chip selected" data-scoring-mode="self_only">Each player</div>
+          <div class="chip" data-scoring-mode="any_player">Anyone</div>
+          <div class="chip" data-scoring-mode="host_only">Just me</div>
+        </div>
+        <p class="small" style="margin:0.3rem 0 0; color:rgba(245,233,209,0.55); font-size:0.82rem;">
+          <strong>Each player</strong>: each phone scores its own throws · <strong>Anyone</strong>: any phone in the game can score the current thrower · <strong>Just me</strong>: only your phone scores (single-device mode).
+        </p>
+
         <h2>Your name</h2>
         <input type="text" name="host_name" id="hostName" placeholder="e.g. Tom" maxlength="40" autocapitalize="words">
 
@@ -1061,7 +1076,7 @@ if ($show_lobby) {
      * HOST SETUP
      * ============================================================ */
     if (VIEW === 'host_setup') (function () {
-      var selected = { game_type: null, player_count: null, format: 'singles' };
+      var selected = { game_type: null, player_count: null, format: 'singles', scoring_mode: 'self_only' };
 
       $$('[data-game-tile]').forEach(function (el) {
         el.addEventListener('click', function () {
@@ -1108,6 +1123,15 @@ if ($show_lobby) {
         });
       });
 
+      // Scoring mode picker — single-select chip group, like format.
+      $$('#scoringModeRow .chip').forEach(function (el) {
+        el.addEventListener('click', function () {
+          $$('#scoringModeRow .chip').forEach(function (e) { e.classList.remove('selected'); });
+          el.classList.add('selected');
+          selected.scoring_mode = el.getAttribute('data-scoring-mode') || 'self_only';
+        });
+      });
+
       $('#hostStartBtn').addEventListener('click', function () {
         var err = $('#setupError');
         err.style.display = 'none';
@@ -1122,6 +1146,7 @@ if ($show_lobby) {
         fd.append('format', selected.format);
         fd.append('player_count', String(selected.player_count));
         fd.append('host_name', name);
+        fd.append('scoring_mode', selected.scoring_mode);
 
         $('#hostStartBtn').disabled = true;
         $('#hostStartBtn').textContent = 'Opening lobby...';
@@ -1381,6 +1406,16 @@ if ($show_lobby) {
         var byslot = {};
         s.players.forEach(function (p) { byslot[p.slot_no] = p; });
         var myTurn = (s.me.slot_no && s.me.slot_no === g.current_slot_no);
+        /* Migration 027 — scoring_mode determines who's allowed to
+         * tap the numpad. self_only is the strict legacy behaviour;
+         * any_player lets anyone in the game score for the current
+         * thrower; host_only is single-device mode where only slot 1
+         * runs the scoreboard. The numpad render below uses
+         * canIScore (which is myTurn || mode-allows). */
+        var canIScore;
+        if (g.scoring_mode === 'host_only')        canIScore = !!s.me.is_host;
+        else if (g.scoring_mode === 'any_player')  canIScore = !!s.me.slot_no;
+        else                                       canIScore = myTurn;
 
         var html = '';
         html += '<h1>' + escapeHtml(gameLabel(g.game_type)) + ' <span class="muted" style="font-size:1rem; font-weight:400">· ' + escapeHtml(BOARD_NAME) + '</span></h1>';
@@ -1410,8 +1445,18 @@ if ($show_lobby) {
           html += '</div>';
         }
 
-        // Numpad — only the active player sees it.
-        if (myTurn) {
+        // Numpad visibility depends on scoring_mode (above). In
+        // any_player and host_only modes someone other than the
+        // current thrower may need to tap it.
+        if (canIScore) {
+          if (!myTurn) {
+            var thrower = byslot[g.current_slot_no];
+            var name = thrower ? thrower.name : 'Someone';
+            html += '<div class="card" style="text-align:center; padding:0.7rem; background:rgba(201,170,113,0.12); border:1px solid rgba(201,170,113,0.35);">'
+                  + '<div style="color:var(--gold,#c9aa71); font-weight:700;">Scoring for ' + escapeHtml(name) + '</div>'
+                  + '<div class="muted" style="font-size:0.8rem; margin-top:0.2rem;">Dart ' + g.current_dart_no + ' of 3</div>'
+                  + '</div>';
+          }
           html += renderNumpad(s);
         } else {
           var who = byslot[g.current_slot_no] ? byslot[g.current_slot_no].name : 'Someone';
@@ -1421,7 +1466,7 @@ if ($show_lobby) {
 
         root.innerHTML = html;
 
-        if (myTurn) {
+        if (canIScore) {
           wireNumpad(s);
           /* If the round is awaiting confirm (3rd dart of x01 just
            * landed), reveal the gold-pulsing Confirm button and grey

@@ -35,6 +35,10 @@ try {
     $format       = (string)($_POST['format'] ?? 'singles');
     $player_count = (int)($_POST['player_count'] ?? 2);
     $host_name    = (string)($_POST['host_name'] ?? '');
+    /* Scoring mode (added in migration 027): self_only, any_player,
+     * or host_only. The store enforces a whitelist — anything else
+     * silently coerces to self_only. */
+    $scoring_mode = (string)($_POST['scoring_mode'] ?? 'self_only');
     /* Pass the bar-shell guest identity (anon or claimed) so the game
      * shows up on the host's profile history. The phone's session cookie
      * carries it from /bar.php → /api/darts_create.php. */
@@ -42,7 +46,7 @@ try {
 
     if ($board_id <= 0) throw new RuntimeException("Pick a board.");
 
-    list($game, $host) = knk_darts_create_game($board_id, $game_type, $format, $player_count, $host_name, $guest_email);
+    list($game, $host) = knk_darts_create_game($board_id, $game_type, $format, $player_count, $host_name, $guest_email, $scoring_mode);
 
     $out = [
         'ok'             => true,

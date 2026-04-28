@@ -166,13 +166,17 @@ function knk_darts_cleanup_stale(): void {
  *
  * Returns [game_row, host_player_row].
  */
-function knk_darts_create_game(int $board_id, string $game_type, string $format, int $player_count, string $host_name, string $guest_email = ''): array {
+function knk_darts_create_game(int $board_id, string $game_type, string $format, int $player_count, string $host_name, string $guest_email = '', string $scoring_mode = 'self_only'): array {
     if (!in_array($game_type, KNK_DARTS_GAME_TYPES, true)) {
         throw new RuntimeException("Unknown game type.");
     }
     if (!in_array($format, KNK_DARTS_FORMATS, true)) {
         throw new RuntimeException("Unknown format.");
     }
+    /* Whitelist scoring modes — anything else falls back to the
+     * strict default. See migration 027 for the rationale. */
+    $valid_modes = ['self_only', 'any_player', 'host_only'];
+    if (!in_array($scoring_mode, $valid_modes, true)) $scoring_mode = 'self_only';
     $player_count = max(1, min(KNK_DARTS_MAX_PLAYERS, $player_count));
     $host_name = trim($host_name);
     if ($host_name === '') $host_name = 'Host';
@@ -180,6 +184,13 @@ function knk_darts_create_game(int $board_id, string $game_type, string $format,
 
     if ($format === 'doubles' && $player_count !== 4) {
         throw new RuntimeException("Doubles requires exactly 4 players.");
+    }
+    /* host_only with a single player is silly (you'd be the host
+     * and the only thrower) but harmless — the modes still
+     * resolve to "you can score". For solo practice we keep
+     * self_only as the sensible default. */
+    if ($player_count === 1 && $scoring_mode !== 'self_only') {
+        $scoring_mode = 'self_only';
     }
 
     knk_darts_cleanup_stale();
@@ -193,10 +204,10 @@ function knk_darts_create_game(int $board_id, string $game_type, string $format,
     $pdo->beginTransaction();
     try {
         $pdo->prepare(
-            "INSERT INTO darts_games (board_id, game_type, format, player_count, status, host_slot_no, join_code, config, state_json)
-             VALUES (?, ?, ?, ?, 'lobby', 1, ?, ?, ?)"
+            "INSERT INTO darts_games (board_id, game_type, format, player_count, status, scoring_mode, host_slot_no, join_code, config, state_json)
+             VALUES (?, ?, ?, ?, 'lobby', ?, 1, ?, ?, ?)"
         )->execute([
-            $board_id, $game_type, $format, $player_count, $code,
+            $board_id, $game_type, $format, $player_count, $scoring_mode, $code,
             json_encode(knk_darts_default_config($game_type), JSON_UNESCAPED_UNICODE),
             json_encode(knk_darts_default_state($game_type, $player_count, $format), JSON_UNESCAPED_UNICODE),
         ]);
@@ -400,10 +411,44 @@ function knk_darts_record_throw(int $game_id, int $player_id, string $segment): 
 
         $st = $pdo->prepare("SELECT * FROM darts_players WHERE id = ? AND game_id = ?");
         $st->execute([$player_id, $game_id]);
-        $player = $st->fetch();
-        if (!$player) throw new RuntimeException("Player not in this game.");
-        if ((int)$player['slot_no'] !== (int)$game['current_slot_no']) {
-            throw new RuntimeException("It's not your turn.");
+        $recorder = $st->fetch();
+        if (!$recorder) throw new RuntimeException("Player not in this game.");
+
+        /* Permission check varies by scoring_mode (migration 027):
+         *   self_only  — only the current thrower records their own throws
+         *   any_player — anyone in the game records the current thrower's
+         *   host_only  — only slot 1 (the host) records — single-device mode
+         *
+         * Backward-compat: a game row written before 027 will have an
+         * empty/missing scoring_mode — treat that as self_only. */
+        $scoring_mode = (string)($game['scoring_mode'] ?? '');
+        if ($scoring_mode === '') $scoring_mode = 'self_only';
+
+        if ($scoring_mode === 'self_only') {
+            if ((int)$recorder['slot_no'] !== (int)$game['current_slot_no']) {
+                throw new RuntimeException("It's not your turn.");
+            }
+        } elseif ($scoring_mode === 'host_only') {
+            if ((int)$recorder['is_host'] !== 1) {
+                throw new RuntimeException("Only the host can score in this game.");
+            }
+        }
+        /* any_player — recorder just needs to be in the game, which we
+         * already checked above. The current thrower is whoever is in
+         * current_slot_no, regardless of who's tapping the buttons. */
+
+        /* Resolve the actual thrower (whose stats we credit the throw
+         * to). In self_only this is == recorder; in the other two
+         * modes we have to look up the player at current_slot_no. */
+        if ((int)$recorder['slot_no'] === (int)$game['current_slot_no']) {
+            $thrower = $recorder;
+        } else {
+            $st = $pdo->prepare(
+                "SELECT * FROM darts_players WHERE game_id = ? AND slot_no = ? LIMIT 1"
+            );
+            $st->execute([$game_id, (int)$game['current_slot_no']]);
+            $thrower = $st->fetch();
+            if (!$thrower) throw new RuntimeException("No active thrower for this turn.");
         }
 
         // Which dart number is this within the current turn?
@@ -413,18 +458,23 @@ function knk_darts_record_throw(int $game_id, int $player_id, string $segment): 
         );
         $st->execute([$game_id, $game['current_turn_no'], $game['current_slot_no']]);
         $already = (int)$st->fetchColumn();
-        if ($already >= 3) throw new RuntimeException("You've already thrown 3 darts this turn.");
+        if ($already >= 3) throw new RuntimeException("Three darts already thrown this turn.");
         $dart_no = $already + 1;
 
-        // Append the throw.
+        // Append the throw — credited to the current thrower, not the recorder.
         $pdo->prepare(
             "INSERT INTO darts_throws (game_id, player_id, slot_no, turn_no, dart_no, segment, value)
              VALUES (?, ?, ?, ?, ?, ?, ?)"
         )->execute([
-            $game_id, $player_id, $player['slot_no'],
+            $game_id, (int)$thrower['id'], (int)$thrower['slot_no'],
             $game['current_turn_no'], $dart_no,
             strtoupper($segment), (int)$parsed['value'],
         ]);
+
+        /* Bind $player to the thrower for the rest of this function —
+         * downstream code (eval, freeze, audit) reads $player as
+         * "whose throw was this", which is the thrower in every mode. */
+        $player = $thrower;
 
         // Re-evaluate the whole game state from scratch — the easiest
         // way to keep state and throws perfectly consistent.
@@ -1435,6 +1485,7 @@ function knk_darts_view_state(int $game_id, ?string $session_token = null): arra
             'player_count'    => (int)$game['player_count'],
             'status'          => $game['status'],
             'host_slot_no'    => (int)$game['host_slot_no'],
+            'scoring_mode'    => (string)($game['scoring_mode'] ?? 'self_only'),
             'join_code'       => $game['join_code'],
             'current_slot_no' => $game['current_slot_no'] !== null ? (int)$game['current_slot_no'] : null,
             'current_turn_no' => (int)$game['current_turn_no'],
