@@ -249,6 +249,63 @@ function p_src(array $slots, string $section, int $i, string $default): string {
   </div>
 </section>
 
+<!-- ONLY AT KNK — bar-tech experience showcase. Live-prices Beer
+     Stock Market on the TV, smart darts, and the YouTube jukebox.
+     Built in-house, none of it sold off the shelf. -->
+<section class="section" id="only-here" style="background:linear-gradient(180deg,var(--brown-dark),var(--brown-deep));">
+  <div class="container">
+    <div class="section-head" style="text-align:center;margin-bottom:3rem;">
+      <span class="eyebrow">Only at KnK</span>
+      <h2 class="display-lg">The bar that <em>plays back.</em></h2>
+      <p class="sports-sub" style="max-width:680px;margin:1.2rem auto 0;">
+        Three things you won't find in any other bar in the District —
+        built in-house, free for guests to play with, all running on the big TV.
+      </p>
+    </div>
+
+    <div class="features-grid">
+
+      <!-- Beer Stock Market — the headliner. -->
+      <div class="feature-card reveal">
+        <div class="feature-num">📈</div>
+        <h3 class="feature-title">The Beer Stock Market</h3>
+        <p class="feature-desc">
+          <strong>South-East Asia's first.</strong> Drink prices move with demand —
+          order more of one and the price climbs. Share us on socials and the
+          board crashes for everyone in the bar. Live on the TV, all night.
+        </p>
+      </div>
+
+      <!-- Smart Darts. -->
+      <div class="feature-card reveal reveal-delay-1">
+        <div class="feature-num">🎯</div>
+        <h3 class="feature-title">Smart Darts</h3>
+        <p class="feature-desc">
+          Scan the QR by the board, build a lobby, score on your phone.
+          Five game modes, live leaderboards, friendly challenges with regulars.
+          Your stats follow you across visits.
+        </p>
+      </div>
+
+      <!-- Jukebox. -->
+      <div class="feature-card reveal reveal-delay-2">
+        <div class="feature-num">🎵</div>
+        <h3 class="feature-title">Bar Jukebox</h3>
+        <p class="feature-desc">
+          Pick any tune from YouTube, watch it queue up on the TV with
+          synced lyrics. Save a personal playlist that follows you back
+          next visit. Triple J streams when the queue's quiet.
+        </p>
+      </div>
+
+    </div>
+
+    <p style="text-align:center;margin-top:2.5rem;color:var(--cream-dim);font-size:0.95rem;">
+      All three are free for guests. Walk in, scan a QR, you're in.
+    </p>
+  </div>
+</section>
+
 <!-- SPORTS -->
 <section class="section" id="sports">
   <div class="container">
