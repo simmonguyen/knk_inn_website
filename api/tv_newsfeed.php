@@ -33,20 +33,18 @@ try {
     $pdo = knk_db();
     $events = [];
 
-    /* --- ORDERS — last 90 minutes --- */
-    /* The orders table schema varies a bit across deploys (a few
-     * stores wrap it via includes/orders_store.php). Prefer
-     * customer_name when set; fall back to the guests display_name
-     * via the customer_email join. Drink names come out of order_items. */
+    /* --- ORDERS — last 90 minutes ---
+     * Schema (migration 001): orders.guest_email + order_items.item_name.
+     * No "customer_name" / "customer_email" — names come solely from the
+     * profile join via guest_email. */
     try {
         $st = $pdo->prepare(
             "SELECT o.id, o.created_at,
-                    o.customer_name AS typed_name,
-                    o.customer_email AS email,
+                    o.guest_email AS email,
                     g.display_name AS profile_name,
-                    GROUP_CONCAT(oi.name ORDER BY oi.id SEPARATOR ', ') AS drinks
+                    GROUP_CONCAT(oi.item_name ORDER BY oi.id SEPARATOR ', ') AS drinks
                FROM orders o
-          LEFT JOIN guests g ON g.email = o.customer_email
+          LEFT JOIN guests g ON g.email = o.guest_email
           LEFT JOIN order_items oi ON oi.order_id = o.id
               WHERE o.created_at >= DATE_SUB(NOW(), INTERVAL 90 MINUTE)
            GROUP BY o.id
@@ -55,8 +53,7 @@ try {
         );
         $st->execute();
         foreach ($st->fetchAll() as $r) {
-            $name = trim((string)($r["typed_name"] ?? ""));
-            if ($name === "") $name = trim((string)($r["profile_name"] ?? ""));
+            $name = trim((string)($r["profile_name"] ?? ""));
             // Anon emails get the auto "Guest XXXX" placeholder; if
             // that's what we got, downgrade to a simple "Someone".
             if ($name === "" || preg_match('/^Guest\s+[0-9a-f]{4,}$/i', $name)) {

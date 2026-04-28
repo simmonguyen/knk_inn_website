@@ -783,6 +783,57 @@ $past    = array_values(array_filter($history, fn($o) => ($o["status"] ?? "") ==
   })();
 </script>
 
+<?php if (defined('KNK_BAR_FRAME')): ?>
+<!-- Check Bill — emails the hostess (thirsty@knkinn.com) the
+     guest's drinks tab from the last 4 hours so she can ring it up
+     in the till. Only renders inside the bar shell (KNK_BAR_FRAME).
+     Independent of the order menu form, sits at the bottom. -->
+<section class="card" style="margin-top:1.6rem; text-align:center;">
+  <h3 style="margin:0 0 0.5rem">Done for the night?</h3>
+  <p class="lede" style="margin:0 0 0.9rem">
+    Tap below and we'll send your tab to the bar so they can settle up.
+  </p>
+  <button type="button" id="checkBillBtn" class="btn"
+          style="background:var(--gold,#c9aa71); color:#1b0f04; border:0;
+                 padding:0.85rem 1.4rem; border-radius:8px;
+                 font-family:'Archivo Black',sans-serif; font-size:0.95rem;
+                 letter-spacing:0.04em; cursor:pointer; min-width:240px;">
+    🧾 Check Bill
+  </button>
+  <div id="checkBillStatus"
+       style="margin-top:0.7rem; font-size:0.9rem; color:rgba(245,233,209,0.8); display:none;"></div>
+</section>
+<script>
+(function () {
+  var btn = document.getElementById("checkBillBtn");
+  var st  = document.getElementById("checkBillStatus");
+  if (!btn || !st) return;
+  btn.addEventListener("click", function () {
+    if (!window.confirm("Send your bill to the bar now? They'll settle up with you.")) return;
+    btn.disabled = true; btn.textContent = "Sending…";
+    st.style.display = "none";
+    var fd = new FormData();
+    fetch("/api/bill_send.php", { method: "POST", body: fd, credentials: "same-origin" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || "Couldn't send the bill.");
+        btn.textContent = "✓ Bill sent to the bar";
+        btn.style.background = "rgba(47,220,122,0.7)";
+        btn.style.color = "#0c2a18";
+        st.style.display = "block";
+        st.textContent = "The bartender has your " + (j.count || 0) + " orders. Settle up at the till.";
+      })
+      .catch(function (e) {
+        btn.disabled = false; btn.textContent = "🧾 Check Bill";
+        st.style.display = "block";
+        st.style.color = "#ffb6b6";
+        st.textContent = e.message || "Couldn't send.";
+      });
+  });
+})();
+</script>
+<?php endif; ?>
+
 <?php if (!defined('KNK_BAR_FRAME')): ?>
 </body>
 </html>
