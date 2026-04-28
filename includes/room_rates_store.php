@@ -119,6 +119,26 @@ function knk_rooms_by_type(string $type): array {
     }
 }
 
+/**
+ * Display rate for a room *type* (the website uses 'standard-nowindow',
+ * 'standard-balcony', 'vip'; the rate engine works on per-room slugs).
+ * Returns the lowest default among the active rooms of that type so
+ * the public page can show "From XXX VND / night".
+ *
+ * Returns 0 if the type has no active rooms.
+ */
+function knk_room_type_lowest_default(string $type): int {
+    $rooms = knk_rooms_by_type($type);
+    if (empty($rooms)) return 0;
+    $min = 0;
+    foreach ($rooms as $r) {
+        $v = (int)$r["default_vnd_per_night"];
+        if ($v <= 0) continue;
+        if ($min === 0 || $v < $min) $min = $v;
+    }
+    return $min;
+}
+
 /* ==========================================================
  * READ — rates
  * ========================================================== */

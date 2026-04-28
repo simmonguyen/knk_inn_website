@@ -10,7 +10,10 @@
  * Slot 1 = hero banner.  Slots 2..4 = gallery tiles.
  */
 require_once __DIR__ . '/../includes/photo_slots_store.php';
+require_once __DIR__ . '/../includes/room_rates_store.php';
 $slots = knk_slots_load();
+$live_price_vnd = knk_room_type_lowest_default('standard-nowindow');
+if ($live_price_vnd <= 0) $live_price_vnd = 600000;
 
 // We're one folder deep, so all asset URLs need a "../" prefix.
 $rp = function (string $section, int $idx, string $default) use ($slots): string {
@@ -105,7 +108,7 @@ $gallery_defaults = [
              data-room-id="standard-nowindow"
              data-room-name="Standard — No Window"
              data-room-type="standard"
-             data-price="600000">
+             data-price="<?= (int)$live_price_vnd ?>">
         </div>
       </div>
 

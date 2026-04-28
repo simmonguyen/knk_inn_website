@@ -10,7 +10,10 @@
  * Slot 1 = hero banner.  Slots 2..6 = gallery tiles.
  */
 require_once __DIR__ . '/../includes/photo_slots_store.php';
+require_once __DIR__ . '/../includes/room_rates_store.php';
 $slots = knk_slots_load();
+$live_price_vnd = knk_room_type_lowest_default('vip');
+if ($live_price_vnd <= 0) $live_price_vnd = 900000;
 
 $rp = function (string $section, int $idx, string $default) use ($slots): string {
     return '../' . knk_photo_src($slots, $section, $idx, $default);
@@ -106,7 +109,7 @@ $gallery_defaults = [
              data-room-id="vip"
              data-room-name="VIP — Private Bathtub"
              data-room-type="vip"
-             data-price="900000">
+             data-price="<?= (int)$live_price_vnd ?>">
         </div>
       </div>
 

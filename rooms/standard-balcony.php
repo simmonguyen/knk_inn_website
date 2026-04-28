@@ -10,7 +10,13 @@
  * Slot 1 = hero banner.  Slots 2..11 = gallery tiles.
  */
 require_once __DIR__ . '/../includes/photo_slots_store.php';
+require_once __DIR__ . '/../includes/room_rates_store.php';
 $slots = knk_slots_load();
+/* Live nightly rate from the rate engine (migration 026). Falls
+ * back to the previous hardcoded number if the rooms table hasn't
+ * been seeded yet — defensive against deploy-before-migrate. */
+$live_price_vnd = knk_room_type_lowest_default('standard-balcony');
+if ($live_price_vnd <= 0) $live_price_vnd = 700000;
 
 $rp = function (string $section, int $idx, string $default) use ($slots): string {
     return '../' . knk_photo_src($slots, $section, $idx, $default);
@@ -111,7 +117,7 @@ $gallery_defaults = [
              data-room-id="standard-balcony"
              data-room-name="Standard — Balcony"
              data-room-type="standard"
-             data-price="700000">
+             data-price="<?= (int)$live_price_vnd ?>">
         </div>
       </div>
 

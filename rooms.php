@@ -10,7 +10,15 @@
  * aren't in the DB yet (e.g. before migration 013 has been run).
  */
 require_once __DIR__ . '/includes/photo_slots_store.php';
+require_once __DIR__ . '/includes/room_rates_store.php';
 $slots = knk_slots_load();
+
+/* Live "From XXX VND / night" copy from the rate engine. Falls back
+ * to the previous hardcoded copy if the rooms registry isn't seeded. */
+$rate_nowindow = knk_room_type_lowest_default('standard-nowindow'); if ($rate_nowindow <= 0) $rate_nowindow = 600000;
+$rate_balcony  = knk_room_type_lowest_default('standard-balcony');  if ($rate_balcony  <= 0) $rate_balcony  = 700000;
+$rate_vip      = knk_room_type_lowest_default('vip');               if ($rate_vip      <= 0) $rate_vip      = 900000;
+$fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',') . ' ₫'; };
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -108,7 +116,7 @@ $slots = knk_slots_load();
       <a class="room-card room-card-link" href="rooms/standard-nowindow.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 1, 'rm_00.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 1, 'Standard room, no window')) ?>">
         <div class="room-card-overlay">
-          <span class="room-card-floor">From 600,000 ₫ / night</span>
+          <span class="room-card-floor">From <?= $fmt_vnd($rate_nowindow) ?> / night</span>
           <span class="room-card-name">Standard · No Window</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
@@ -117,7 +125,7 @@ $slots = knk_slots_load();
       <a class="room-card room-card-link" href="rooms/standard-balcony.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 2, 'rm_02.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 2, 'Standard room with balcony')) ?>">
         <div class="room-card-overlay">
-          <span class="room-card-floor">From 700,000 ₫ / night</span>
+          <span class="room-card-floor">From <?= $fmt_vnd($rate_balcony) ?> / night</span>
           <span class="room-card-name">Standard · Balcony</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
@@ -126,7 +134,7 @@ $slots = knk_slots_load();
       <a class="room-card room-card-link" href="rooms/vip.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 3, 'rm_04.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 3, 'VIP room with private bathtub')) ?>">
         <div class="room-card-overlay">
-          <span class="room-card-floor">From 900,000 ₫ / night</span>
+          <span class="room-card-floor">From <?= $fmt_vnd($rate_vip) ?> / night</span>
           <span class="room-card-name">VIP · Private Bathtub</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
