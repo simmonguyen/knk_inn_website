@@ -474,6 +474,8 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
     .pill.pending   { background: rgba(201,170,113,0.15); color: var(--gold); border: 1px solid rgba(201,170,113,0.4); }
     .pill.declined  { background: rgba(255,154,138,0.12); color: #ff9a8a; border: 1px solid rgba(255,154,138,0.35); }
     .pill.expired   { background: rgba(255,255,255,0.05); color: var(--cream-faint); border: 1px solid rgba(255,255,255,0.15); }
+    .pill.completed { background: rgba(122,165,106,0.10); color: #b6dba0; border: 1px solid rgba(122,165,106,0.3); }
+    .pill.cancelled { background: rgba(255,154,138,0.08); color: #ffb59d; border: 1px solid rgba(255,154,138,0.2); }
 
     /* ---------- Unified occupancy calendar ---------- */
     .months {

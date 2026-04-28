@@ -218,6 +218,41 @@ function bookings_create_hold(array $input): array {
     }
 }
 
+/**
+ * Sweep for confirmed bookings whose checkout is in the past, flip
+ * them to "completed". Idempotent — already-completed bookings are
+ * untouched. Designed to run from cron so the upcoming list, the
+ * snapshot widget, and the forecast all stop counting stays that
+ * have already happened.
+ *
+ * Returns the number of rows promoted.
+ */
+function bookings_auto_complete_past(): int {
+    [$fp, $data] = bookings_open();
+    $today_ts = strtotime(date("Y-m-d") . " 00:00:00");
+    $promoted = 0;
+    $dirty    = false;
+    foreach ($data["holds"] as $i => $h) {
+        if (($h["status"] ?? "") !== "confirmed") continue;
+        $co = strtotime((string)($h["checkout"] ?? ""));
+        if (!$co || $co > $today_ts) continue;
+        /* Don't touch manual blocks — they're not real stays and
+         * can stretch indefinitely without expiring. */
+        $name = strtolower(trim((string)($h["guest"]["name"] ?? "")));
+        if ($name === "blocked") continue;
+        $data["holds"][$i]["status"]       = "completed";
+        $data["holds"][$i]["completed_at"] = time();
+        $promoted++;
+        $dirty = true;
+    }
+    if ($dirty) {
+        bookings_save($fp, $data);
+    } else {
+        bookings_close($fp);
+    }
+    return $promoted;
+}
+
 /** Look up a hold by token (constant-time compare). Returns [hold, index] or null. */
 function bookings_find_by_token(string $token): ?array {
     [$fp, $data] = bookings_open();

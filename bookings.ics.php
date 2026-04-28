@@ -61,7 +61,7 @@ $events = [];
 $now = time();
 foreach ($holds as $h) {
     $status = $h["status"] ?? "pending";
-    if ($status === "declined" || $status === "expired") continue;
+    if (in_array($status, ["declined", "expired", "cancelled", "completed"], true)) continue;
     if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
     if ($type_filter !== "" && ($h["room"] ?? "") !== $type_filter) continue;
     $events[] = $h;

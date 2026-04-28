@@ -79,9 +79,10 @@ try {
     $units_total = knk_room_inventory($type);
 
     /* Walk every active hold for this type, build a per-date count.
-     * "Active" = pending-not-stale, confirmed, or completed (anything
-     * declined/expired/cancelled is ignored). The TTL check mirrors
-     * bookings_blocked_dates() so the two views can never disagree. */
+     * "Active" = pending-not-stale or confirmed. Anything declined,
+     * expired, cancelled, or completed is ignored — completed stays
+     * have a past checkout so they couldn't be blocking future
+     * dates anyway, but skipping them keeps the per-day loop quick. */
     $now = time();
     [$fp, $data] = bookings_open();
     bookings_close($fp);
@@ -95,7 +96,7 @@ try {
     foreach ($data["holds"] as $h) {
         if (($h["room"] ?? "") !== $type) continue;
         $status = $h["status"] ?? "pending";
-        if ($status === "declined" || $status === "expired" || $status === "cancelled") continue;
+        if (in_array($status, ["declined", "expired", "cancelled", "completed"], true)) continue;
         if ($status === "pending" && ($now - ($h["created_at"] ?? 0)) > KNK_HOLD_TTL) continue;
         $hs = strtotime((string)($h["checkin"]  ?? ""));
         $he = strtotime((string)($h["checkout"] ?? ""));
