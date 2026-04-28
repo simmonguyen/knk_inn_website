@@ -118,6 +118,16 @@ $my_songs     = (defined('KNK_BAR_FRAME') && $my_email !== "")
  * cheap indexed query and the list fits in any context. */
 $bar_recent = knk_jukebox_recent_played(25);
 
+/* Per-guest playlist — used by the "My playlist" card in the bar
+ * shell. Empty array when there's no order_email (standalone
+ * /jukebox.php access). knk_playlist_list() is owner-scoped so a
+ * stray email doesn't leak. */
+require_once __DIR__ . "/includes/jukebox_playlists.php";
+$bar_playlist_email = strtolower(trim((string)($_SESSION["order_email"] ?? "")));
+$bar_playlist = ($bar_playlist_email !== "")
+    ? knk_playlist_list($bar_playlist_email)
+    : [];
+
 /* One-shot flash banner from a recent cancel POST. */
 $jb_flash = (string)($_SESSION["jukebox_flash"] ?? "");
 unset($_SESSION["jukebox_flash"]);
@@ -591,6 +601,42 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
         <?php endif; ?>
       </div>
 
+      <?php if ($bar_playlist_email !== ''): ?>
+      <!-- My playlist — only shown inside the bar shell (where the
+           guest has an order_email session). Tracks they've saved
+           with the ⊕ button on Recently-played rows. Each row has
+           a small × to remove. Future: drag-reorder + Play All. -->
+      <div class="card knk-playlist-card" id="knkPlaylistCard">
+        <h2 class="section" style="display:flex; align-items:center; justify-content:space-between;">
+          <span>My playlist</span>
+          <span class="muted" style="font-size:0.85rem; font-weight:400;" id="knkPlaylistCount"><?= count($bar_playlist) ?></span>
+        </h2>
+        <?php if (empty($bar_playlist)): ?>
+          <div class="muted" id="knkPlaylistEmpty" style="font-size:0.92rem; padding:0.4rem 0;">
+            Tap the <strong>⊕</strong> next to any track in <em>Recently played</em> to save it here.
+          </div>
+        <?php endif; ?>
+        <ul class="bar-recent" id="knkPlaylistList">
+          <?php foreach ($bar_playlist as $pt): ?>
+            <li data-row-id="<?= (int)$pt["id"] ?>">
+              <?php if (!empty($pt["thumbnail"])): ?>
+                <img src="<?= jbh($pt["thumbnail"]) ?>" alt="">
+              <?php endif; ?>
+              <div class="meta">
+                <div class="t"><?= jbh_yt($pt["title"]) ?></div>
+                <div class="who">
+                  <?= jbh($pt["channel"]) ?>
+                </div>
+              </div>
+              <button type="button" class="knk-pl-remove" data-row-id="<?= (int)$pt["id"] ?>"
+                      title="Remove from playlist" aria-label="Remove from playlist"
+                      style="flex:0 0 auto; background:transparent; border:0; color:rgba(245,233,209,0.55); font-size:1.2rem; padding:0.3rem 0.5rem; cursor:pointer;">×</button>
+            </li>
+          <?php endforeach; ?>
+        </ul>
+      </div>
+      <?php endif; ?>
+
       <?php if (!empty($bar_recent)): ?>
       <!-- Public history wall — every guest's plays, all time. The
            same panel renders standalone (table-side QR codes get
@@ -625,10 +671,100 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
                   <span class="when"> · <?= jbh($ago_lbl) ?></span>
                 </div>
               </div>
+              <?php if ($bar_playlist_email !== ''): ?>
+                <!-- Add-to-playlist button. Only shown inside the bar
+                     shell since standalone /jukebox.php has no
+                     order_email to attach the playlist to. -->
+                <button type="button" class="knk-pl-add"
+                        data-video-id="<?= jbh($row["youtube_video_id"]) ?>"
+                        data-title="<?= jbh($row["youtube_title"]) ?>"
+                        data-channel="<?= jbh($row["youtube_channel"]) ?>"
+                        data-thumb="<?= jbh($row["thumbnail_url"]) ?>"
+                        data-source="recent"
+                        title="Save to your playlist" aria-label="Save to your playlist"
+                        style="flex:0 0 auto; background:rgba(201,170,113,0.15); border:1px solid rgba(201,170,113,0.4); color:var(--gold,#c9aa71); font-size:1.05rem; font-weight:700; padding:0.35rem 0.7rem; border-radius:999px; cursor:pointer; margin-left:0.4rem;">⊕</button>
+              <?php endif; ?>
             </li>
           <?php endforeach; ?>
         </ul>
       </div>
+      <?php endif; ?>
+
+      <?php if ($bar_playlist_email !== ''): ?>
+      <script>
+      (function () {
+        var card = document.getElementById('knkPlaylistCard');
+        var list = document.getElementById('knkPlaylistList');
+        var emptyEl = document.getElementById('knkPlaylistEmpty');
+        var countEl = document.getElementById('knkPlaylistCount');
+        if (!card || !list) return;
+
+        function bumpCount(delta) {
+          var n = parseInt((countEl && countEl.textContent) || '0', 10) || 0;
+          n = Math.max(0, n + delta);
+          if (countEl) countEl.textContent = String(n);
+          if (emptyEl) emptyEl.style.display = (n === 0) ? '' : 'none';
+        }
+
+        // Add buttons next to each Recently-played row.
+        document.querySelectorAll('.knk-pl-add').forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            if (btn.disabled) return;
+            btn.disabled = true;
+            var origText = btn.textContent;
+            btn.textContent = '…';
+            var fd = new FormData();
+            fd.append('video_id', btn.getAttribute('data-video-id') || '');
+            fd.append('title',    btn.getAttribute('data-title')    || '');
+            fd.append('channel',  btn.getAttribute('data-channel')  || '');
+            fd.append('thumbnail',btn.getAttribute('data-thumb')    || '');
+            fd.append('source',   btn.getAttribute('data-source')   || 'manual');
+            fetch('/api/playlist_add.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j || !j.ok) throw new Error((j && j.error) || 'Couldn’t save.');
+                btn.textContent = '✓';
+                btn.style.color = '#2fdc7a';
+                btn.style.borderColor = 'rgba(47,220,122,0.5)';
+                if (countEl) countEl.textContent = String(j.count | 0);
+                if (emptyEl) emptyEl.style.display = (j.count > 0) ? 'none' : '';
+                /* Don’t re-enable — Add is one-shot per row. The
+                 * server’s UNIQUE makes a second tap a no-op anyway. */
+              })
+              .catch(function (e) {
+                btn.disabled = false;
+                btn.textContent = origText;
+                window.alert(e.message || 'Couldn’t save.');
+              });
+          });
+        });
+
+        // Remove buttons inside My playlist.
+        function wireRemove(btn) {
+          btn.addEventListener('click', function () {
+            var li = btn.closest('li');
+            var rid = parseInt(btn.getAttribute('data-row-id') || '0', 10);
+            if (!rid || !li) return;
+            btn.disabled = true;
+            var fd = new FormData();
+            fd.append('row_id', String(rid));
+            fetch('/api/playlist_remove.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j || !j.ok) throw new Error((j && j.error) || 'Couldn’t remove.');
+                li.remove();
+                if (countEl) countEl.textContent = String(j.count | 0);
+                if (emptyEl) emptyEl.style.display = (j.count > 0) ? 'none' : '';
+              })
+              .catch(function (e) {
+                btn.disabled = false;
+                window.alert(e.message || 'Couldn’t remove.');
+              });
+          });
+        }
+        document.querySelectorAll('.knk-pl-remove').forEach(wireRemove);
+      })();
+      </script>
       <?php endif; ?>
 
     <?php endif; ?>
