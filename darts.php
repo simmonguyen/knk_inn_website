@@ -1248,8 +1248,31 @@ if ($show_lobby) {
         html += '</div>';
 
         if (amHost) {
+          /* Game-type changer — the lobby's created with a default
+           * (501 for Challenge-accept lobbies) but the host can swap
+           * before tapping Start. Each option resets the scoreboard
+           * to that game's defaults, server-side. */
+          html += '<div style="margin-top:1.1rem; display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">';
+          html += '<label for="gameTypeSel" class="muted" style="font-size:0.85rem;">Game:</label>';
+          html += '<select id="gameTypeSel" style="padding:0.5rem 0.7rem; flex:1; min-width:0; border-radius:6px; border:1px solid rgba(201,170,113,0.35); background:rgba(24,12,3,0.55); color:var(--cream);">';
+          var gtOpts = [
+            ['501','501 — finish on a double'],
+            ['301','301 — quicker x01'],
+            ['cricket','Cricket — close 15-20 + bull'],
+            ['aroundclock','Around the Clock — 1 to 20 then bull'],
+            ['killer','Killer — last one standing'],
+            ['halveit','Halve It — six rounds'],
+          ];
+          for (var i = 0; i < gtOpts.length; i++) {
+            var sel = (gtOpts[i][0] === g.game_type) ? ' selected' : '';
+            html += '<option value="' + gtOpts[i][0] + '"' + sel + '>'
+                 + escapeHtml(gtOpts[i][1]) + '</option>';
+          }
+          html += '</select>';
+          html += '</div>';
+
           var ready = (s.players.length >= 1);
-          html += '<button id="startBtn" style="margin-top:1.1rem"' + (ready ? '' : ' disabled') + '>';
+          html += '<button id="startBtn" style="margin-top:0.8rem"' + (ready ? '' : ' disabled') + '>';
           html += ready ? 'Start the game' : 'Need at least 1 player';
           html += '</button>';
           html += '<div id="lobbyErr" class="err" style="display:none"></div>';
@@ -1300,6 +1323,36 @@ if ($show_lobby) {
         }
 
         if (amHost) {
+          /* Game-type changer — POSTs the new type, server resets
+           * scoreboard defaults, then we re-render the lobby (which
+           * pulls a fresh state with the new game label up top). */
+          var gtSel = $('#gameTypeSel');
+          if (gtSel) {
+            gtSel.addEventListener('change', function () {
+              var newType = gtSel.value;
+              if (!newType || newType === g.game_type) return;
+              gtSel.disabled = true;
+              var fd = new FormData();
+              fd.append('game_id', String(GAME_ID));
+              fd.append('token', TOKEN);
+              fd.append('game_type', newType);
+              fetch('/api/darts_change_type.php', { method: 'POST', body: fd })
+                .then(function (r) { return r.json(); })
+                .then(function (j) {
+                  if (!j.ok) throw new Error(j.error || 'Could not change game.');
+                  /* poll() will pick up the new game_type on the next
+                   * tick and re-render via render(s). */
+                  poll();
+                  gtSel.disabled = false;
+                })
+                .catch(function (e) {
+                  gtSel.disabled = false;
+                  gtSel.value = g.game_type; // revert UI
+                  var err = $('#lobbyErr'); err.textContent = e.message; err.style.display = 'block';
+                });
+            });
+          }
+
           $('#startBtn').addEventListener('click', function () {
             var btn = $('#startBtn');
             btn.disabled = true;

@@ -623,6 +623,65 @@ function knk_darts_undo_throw(int $game_id, int $by_player_id): array {
     }
 }
 
+/**
+ * Swap the game type on a lobby game. Only allowed before the
+ * game starts (status='lobby') and only by the host.
+ *
+ * Resets state_json and config_json to defaults for the new type
+ * since the previous values were tied to the old game's rules.
+ *
+ * Returns the new state on success; throws on invalid input.
+ */
+function knk_darts_change_game_type(int $game_id, int $by_player_id, string $new_type): array {
+    $valid = ['501','301','cricket','aroundclock','killer','halveit'];
+    if (!in_array($new_type, $valid, true)) {
+        throw new RuntimeException("Unknown game type.");
+    }
+    $pdo = knk_db();
+    $pdo->beginTransaction();
+    try {
+        $st = $pdo->prepare("SELECT * FROM darts_games WHERE id = ? FOR UPDATE");
+        $st->execute([$game_id]);
+        $game = $st->fetch();
+        if (!$game) throw new RuntimeException("Game not found.");
+        if ($game['status'] !== 'lobby') {
+            throw new RuntimeException("Game has already started.");
+        }
+
+        $by = $pdo->prepare("SELECT * FROM darts_players WHERE id = ? AND game_id = ?");
+        $by->execute([$by_player_id, $game_id]);
+        $by = $by->fetch();
+        if (!$by || empty($by['is_host'])) {
+            throw new RuntimeException("Only the host can change the game.");
+        }
+
+        $players = knk_darts_load_players($game_id);
+        $count   = max(1, count($players));
+        $format  = (string)$game['format'];
+
+        $cfg   = knk_darts_default_config($new_type);
+        $state = knk_darts_default_state($new_type, $count, $format);
+
+        $pdo->prepare(
+            "UPDATE darts_games
+                SET game_type = ?,
+                    config_json = ?,
+                    state_json = ?
+              WHERE id = ?"
+        )->execute([
+            $new_type,
+            json_encode($cfg,   JSON_UNESCAPED_UNICODE),
+            json_encode($state, JSON_UNESCAPED_UNICODE),
+            $game_id,
+        ]);
+        $pdo->commit();
+        return $state;
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+        throw $e;
+    }
+}
+
 function knk_darts_force_finish(int $game_id): void {
     knk_db()->prepare(
         "UPDATE darts_games
