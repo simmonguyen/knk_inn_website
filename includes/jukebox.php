@@ -473,6 +473,75 @@ function knk_jukebox_request_submit(array $in, string $ip): array {
     ];
 }
 
+/**
+ * Enqueue a track we already have full metadata for — used by the
+ * "Play" / "Play all" buttons on the bar's My-playlist card. Skips
+ * the YouTube search step (which costs API quota) since the
+ * playlist row already snapshotted title / channel / duration /
+ * thumb at add-time. Bypasses the IP cooldown for the same reason
+ * — the cooldown protects a guest from spamming the queue with
+ * search-form submits, but a Play-all over a saved list is the
+ * intended use case.
+ *
+ * Still respects max_queue_length and the kill-switch.
+ *
+ * Returns the new row's id, position, and status. Throws on
+ * validation / queue-full failures.
+ */
+function knk_jukebox_enqueue_track(array $track, string $requester_email = '', string $playlist_owner = '', string $ip = ''): array {
+    if (!knk_jukebox_enabled()) {
+        throw new RuntimeException("Jukebox is closed right now.");
+    }
+    $cfg = knk_jukebox_config();
+    if (knk_jukebox_queue_length() >= (int)$cfg["max_queue_length"]) {
+        throw new RuntimeException("The queue is full. Try again in a bit.");
+    }
+
+    $vid = mb_substr(trim((string)($track["video_id"] ?? "")), 0, 20);
+    if ($vid === "") throw new RuntimeException("Missing video_id.");
+
+    $title    = mb_substr((string)($track["title"]     ?? ""), 0, 300);
+    $channel  = mb_substr((string)($track["channel"]   ?? ""), 0, 200);
+    $duration = (int)($track["duration"] ?? 0);
+    $thumb    = mb_substr((string)($track["thumbnail"] ?? ""), 0, 400);
+
+    $email = strtolower(trim($requester_email));
+    if ($email !== "" && !filter_var($email, FILTER_VALIDATE_EMAIL)) $email = "";
+    $owner = strtolower(trim($playlist_owner));
+    if ($owner !== "" && !filter_var($owner, FILTER_VALIDATE_EMAIL)) $owner = "";
+
+    $status = !empty($cfg["auto_approve"]) ? "queued" : "pending";
+
+    $stmt = knk_db()->prepare(
+        "INSERT INTO jukebox_queue
+            (artist_text, title_text, youtube_video_id, youtube_title, youtube_channel,
+             duration_seconds, thumbnail_url, requester_name, table_no, requester_ip,
+             requester_email, playlist_owner_email, status)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    );
+    $stmt->execute([
+        // artist_text + title_text — best-effort split for legacy
+        // logging; the real metadata is in the youtube_* columns.
+        mb_substr($channel !== "" ? $channel : "—", 0, 200),
+        mb_substr($title, 0, 200),
+        $vid, $title, $channel, $duration, $thumb,
+        "", // requester_name — name lives on the guests profile via email
+        "",
+        mb_substr($ip, 0, 45),
+        mb_substr($email, 0, 190),
+        $owner !== "" ? mb_substr($owner, 0, 190) : null,
+        $status,
+    ]);
+    $id = (int)knk_db()->lastInsertId();
+
+    return [
+        "id"       => $id,
+        "video_id" => $vid,
+        "position" => $status === "queued" ? knk_jukebox_queue_position($id) : 0,
+        "status"   => $status,
+    ];
+}
+
 /* ==========================================================
  * PLAYBACK FLOW
  * ======================================================== */

@@ -607,15 +607,20 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
            with the ⊕ button on Recently-played rows. Each row has
            a small × to remove. Future: drag-reorder + Play All. -->
       <div class="card knk-playlist-card" id="knkPlaylistCard">
-        <h2 class="section" style="display:flex; align-items:center; justify-content:space-between;">
-          <span>My playlist</span>
-          <span class="muted" style="font-size:0.85rem; font-weight:400;" id="knkPlaylistCount"><?= count($bar_playlist) ?></span>
+        <h2 class="section" style="display:flex; align-items:center; justify-content:space-between; gap:0.6rem;">
+          <span>My playlist <span class="muted" style="font-size:0.85rem; font-weight:400;" id="knkPlaylistCount">(<?= count($bar_playlist) ?>)</span></span>
+          <button type="button" id="knkPlaylistPlayAll"
+                  title="Add every track to the queue (shuffled)"
+                  aria-label="Play all"
+                  <?= empty($bar_playlist) ? 'disabled' : '' ?>
+                  style="flex:0 0 auto; background:rgba(201,170,113,0.18); border:1px solid rgba(201,170,113,0.5); color:var(--gold,#c9aa71); font-size:0.85rem; font-weight:700; padding:0.35rem 0.85rem; border-radius:999px; cursor:pointer; <?= empty($bar_playlist) ? 'opacity:0.4; cursor:not-allowed;' : '' ?>">▶ Play all</button>
         </h2>
         <?php if (empty($bar_playlist)): ?>
           <div class="muted" id="knkPlaylistEmpty" style="font-size:0.92rem; padding:0.4rem 0;">
             Tap the <strong>⊕</strong> next to any track in <em>Recently played</em> to save it here.
           </div>
         <?php endif; ?>
+        <div class="muted" id="knkPlaylistMsg" style="display:none; font-size:0.88rem; padding:0.4rem 0;"></div>
         <ul class="bar-recent" id="knkPlaylistList">
           <?php foreach ($bar_playlist as $pt): ?>
             <li data-row-id="<?= (int)$pt["id"] ?>">
@@ -628,6 +633,9 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
                   <?= jbh($pt["channel"]) ?>
                 </div>
               </div>
+              <button type="button" class="knk-pl-play" data-row-id="<?= (int)$pt["id"] ?>"
+                      title="Add to the jukebox queue" aria-label="Play this track"
+                      style="flex:0 0 auto; background:rgba(201,170,113,0.15); border:1px solid rgba(201,170,113,0.4); color:var(--gold,#c9aa71); font-size:0.95rem; font-weight:700; padding:0.3rem 0.6rem; border-radius:999px; cursor:pointer; margin-left:0.3rem;">▶</button>
               <button type="button" class="knk-pl-remove" data-row-id="<?= (int)$pt["id"] ?>"
                       title="Remove from playlist" aria-label="Remove from playlist"
                       style="flex:0 0 auto; background:transparent; border:0; color:rgba(245,233,209,0.55); font-size:1.2rem; padding:0.3rem 0.5rem; cursor:pointer;">×</button>
@@ -763,6 +771,99 @@ $echo = ($result && empty($result["ok"]) && isset($result["echo"])) ? $result["e
           });
         }
         document.querySelectorAll('.knk-pl-remove').forEach(wireRemove);
+
+        // Toast helper for Play / Play-all feedback. Reuses
+        // #knkPlaylistMsg slot above the list so we don't pile up
+        // alerts.
+        var msgEl = document.getElementById('knkPlaylistMsg');
+        var msgT  = null;
+        function flash(text, isErr) {
+          if (!msgEl) { window.alert(text); return; }
+          if (msgT) { clearTimeout(msgT); msgT = null; }
+          msgEl.textContent = text;
+          msgEl.style.color = isErr ? '#ff8a8a' : 'var(--gold,#c9aa71)';
+          msgEl.style.display = '';
+          msgT = setTimeout(function () {
+            msgEl.style.display = 'none';
+          }, 5000);
+        }
+
+        // Play (single track) — small ▶ next to each row.
+        function wirePlay(btn) {
+          btn.addEventListener('click', function () {
+            if (btn.disabled) return;
+            var rid = parseInt(btn.getAttribute('data-row-id') || '0', 10);
+            if (!rid) return;
+            btn.disabled = true;
+            var orig = btn.textContent;
+            btn.textContent = '…';
+            var fd = new FormData();
+            fd.append('row_id', String(rid));
+            fetch('/api/playlist_play.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j || !j.ok) throw new Error((j && j.error) || 'Couldn’t add to queue.');
+                btn.textContent = '✓';
+                btn.style.color = '#2fdc7a';
+                btn.style.borderColor = 'rgba(47,220,122,0.5)';
+                flash('Queued — ' + (j.queue_count | 0) + ' track(s) ahead in the queue.');
+                /* Re-arm after a bit so the guest can re-queue the
+                 * same track later in the night if they want. */
+                setTimeout(function () {
+                  btn.disabled = false;
+                  btn.textContent = orig;
+                  btn.style.color = '';
+                  btn.style.borderColor = '';
+                }, 4000);
+              })
+              .catch(function (e) {
+                btn.disabled = false;
+                btn.textContent = orig;
+                flash(e.message || 'Couldn’t add to queue.', true);
+              });
+          });
+        }
+        document.querySelectorAll('.knk-pl-play').forEach(wirePlay);
+
+        // Play all — the big button in the playlist header.
+        var pall = document.getElementById('knkPlaylistPlayAll');
+        if (pall) {
+          pall.addEventListener('click', function () {
+            if (pall.disabled) return;
+            var n = parseInt((countEl && countEl.textContent || '0').replace(/[^0-9]/g, ''), 10) || 0;
+            if (n === 0) { flash('Your playlist is empty.', true); return; }
+            if (n > 5) {
+              if (!window.confirm('Queue all ' + n + ' tracks (shuffled)?')) return;
+            }
+            pall.disabled = true;
+            var orig = pall.innerHTML;
+            pall.innerHTML = 'Queuing…';
+            var fd = new FormData();
+            fd.append('mode', 'all');
+            fd.append('shuffle', '1');
+            fetch('/api/playlist_play.php', { method: 'POST', body: fd, credentials: 'same-origin' })
+              .then(function (r) { return r.json(); })
+              .then(function (j) {
+                if (!j) throw new Error('Couldn’t reach the jukebox.');
+                if (!j.ok && (j.added | 0) === 0) {
+                  throw new Error(j.error || 'Nothing was added.');
+                }
+                var added   = j.added   | 0;
+                var skipped = j.skipped | 0;
+                var msg = 'Queued ' + added + ' track(s)';
+                if (skipped > 0) msg += ' (' + skipped + ' skipped)';
+                msg += ' — ' + (j.queue_count | 0) + ' in queue.';
+                flash(msg);
+              })
+              .catch(function (e) {
+                flash(e.message || 'Couldn’t queue your playlist.', true);
+              })
+              .finally(function () {
+                pall.innerHTML = orig;
+                pall.disabled = false;
+              });
+          });
+        }
       })();
       </script>
       <?php endif; ?>
