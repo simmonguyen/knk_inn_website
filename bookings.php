@@ -222,6 +222,35 @@ if ($tab === "bookings") {
     // limit history to most recent 50 to keep the page light
     $past = array_slice($past, 0, 50);
 
+    /* ---------- Today / tomorrow snapshot for the morning widget.
+     * Only confirmed bookings count — pending hasn't been actioned
+     * so it's not really "expected today". Manual blocks are
+     * filtered out since they aren't real guests arriving.
+     * ------------------------------------------------------------ */
+    $tomorrow_ymd = date("Y-m-d", strtotime("+1 day", $now));
+    $today_arrivals     = [];
+    $today_departures   = [];
+    $tomorrow_arrivals  = [];
+    foreach ($all as $h) {
+        if (($h["status"] ?? "") !== "confirmed") continue;
+        $name = strtolower(trim((string)($h["guest"]["name"] ?? "")));
+        if ($name === "blocked") continue;
+        if (($h["checkin"]  ?? "") === $today_ymd)    $today_arrivals[]    = $h;
+        if (($h["checkout"] ?? "") === $today_ymd)    $today_departures[]  = $h;
+        if (($h["checkin"]  ?? "") === $tomorrow_ymd) $tomorrow_arrivals[] = $h;
+    }
+    /* In-house right now — checkin <= today < checkout. */
+    $in_house = [];
+    foreach ($all as $h) {
+        if (($h["status"] ?? "") !== "confirmed") continue;
+        $name = strtolower(trim((string)($h["guest"]["name"] ?? "")));
+        if ($name === "blocked") continue;
+        $hs = strtotime($h["checkin"]  ?? "");
+        $he = strtotime($h["checkout"] ?? "");
+        if (!$hs || !$he) continue;
+        if ($hs <= $now && $now < $he) $in_house[] = $h;
+    }
+
     /* ---------- Build unified occupancy map: [Y-m-d] = int count across all rooms ---------- */
     foreach ($all as $h) {
         $s = $h["status"] ?? "pending";
@@ -329,6 +358,49 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
       border: 1px solid rgba(201,170,113,0.18);
       border-radius: 6px;
       padding: 1.6rem 1.4rem 1.3rem;
+    }
+    /* Today snapshot — morning glance widget at the top of the bookings tab. */
+    .today-snap .snap-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 0.8rem;
+    }
+    .today-snap .snap-tile {
+      background: rgba(245,233,209,0.04);
+      border: 1px solid rgba(201,170,113,0.18);
+      border-radius: 8px;
+      padding: 0.9rem 1rem;
+      min-height: 110px;
+    }
+    .today-snap .snap-l {
+      font-size: 0.7rem; letter-spacing: 0.16em; text-transform: uppercase;
+      color: rgba(245,233,209,0.55); font-weight: 600;
+    }
+    .today-snap .snap-v {
+      font-family: "Archivo Black", sans-serif;
+      font-size: 2.1rem; color: var(--gold, #c9aa71);
+      line-height: 1.1; margin: 0.1rem 0 0.5rem;
+    }
+    .today-snap .snap-cap { font-size: 1rem; color: rgba(245,233,209,0.45); font-weight: 400; }
+    .today-snap .snap-list {
+      list-style: none; padding: 0; margin: 0;
+      display: flex; flex-direction: column; gap: 0.25rem;
+      font-size: 0.85rem;
+    }
+    .today-snap .snap-list li {
+      display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: baseline;
+    }
+    .today-snap .snap-room {
+      font-size: 0.72rem; color: rgba(245,233,209,0.55);
+    }
+    .today-snap .snap-src {
+      display: inline-block; padding: 1px 6px; border-radius: 999px;
+      font-size: 0.66rem; background: rgba(201,170,113,0.18);
+      color: var(--gold, #c9aa71); font-weight: 600;
+    }
+    .today-snap .snap-empty {
+      margin: 0; font-size: 0.82rem; color: rgba(245,233,209,0.4);
+      font-style: italic;
     }
     section.panel > h2 {
       font-size: 0.78rem; letter-spacing: 0.22em; text-transform: uppercase;
@@ -650,6 +722,89 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
   <?php endif; ?>
 
   <?php if ($tab === "bookings"): ?>
+
+  <!-- ============================================================ -->
+  <!-- TODAY SNAPSHOT — morning glance widget -->
+  <!-- ============================================================ -->
+  <section class="panel today-snap">
+    <h2>Today <span class="sub"><?= h(date("l, j M", $now)) ?></span></h2>
+
+    <div class="snap-grid">
+      <div class="snap-tile">
+        <div class="snap-l">In-house</div>
+        <div class="snap-v"><?= count($in_house) ?>
+          <span class="snap-cap"> / <?= (int)$totalRooms ?></span></div>
+        <?php if (!empty($in_house)): ?>
+          <ul class="snap-list">
+            <?php foreach ($in_house as $h):
+              $g = $h["guest"] ?? [];
+            ?>
+              <li><?= h($g["name"] ?? "(no name)") ?>
+                <span class="snap-room"><?= h(ROOMS[$h["room"]] ?? $h["room"]) ?></span></li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <p class="snap-empty">Empty house tonight.</p>
+        <?php endif; ?>
+      </div>
+
+      <div class="snap-tile">
+        <div class="snap-l">Arriving today</div>
+        <div class="snap-v"><?= count($today_arrivals) ?></div>
+        <?php if (!empty($today_arrivals)): ?>
+          <ul class="snap-list">
+            <?php foreach ($today_arrivals as $h):
+              $g = $h["guest"] ?? [];
+              $sr = (string)($h["source"] ?? "");
+            ?>
+              <li><?= h($g["name"] ?? "(no name)") ?>
+                <span class="snap-room"><?= h(ROOMS[$h["room"]] ?? $h["room"]) ?></span>
+                <?php if ($sr !== "" && $sr !== "website"): ?>
+                  <span class="snap-src"><?= h(ucfirst(str_replace("_", " ", $sr))) ?></span>
+                <?php endif; ?>
+              </li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <p class="snap-empty">No check-ins today.</p>
+        <?php endif; ?>
+      </div>
+
+      <div class="snap-tile">
+        <div class="snap-l">Checking out today</div>
+        <div class="snap-v"><?= count($today_departures) ?></div>
+        <?php if (!empty($today_departures)): ?>
+          <ul class="snap-list">
+            <?php foreach ($today_departures as $h):
+              $g = $h["guest"] ?? [];
+            ?>
+              <li><?= h($g["name"] ?? "(no name)") ?>
+                <span class="snap-room"><?= h(ROOMS[$h["room"]] ?? $h["room"]) ?></span></li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <p class="snap-empty">Nobody leaving.</p>
+        <?php endif; ?>
+      </div>
+
+      <div class="snap-tile">
+        <div class="snap-l">Tomorrow</div>
+        <div class="snap-v"><?= count($tomorrow_arrivals) ?></div>
+        <?php if (!empty($tomorrow_arrivals)): ?>
+          <ul class="snap-list">
+            <?php foreach ($tomorrow_arrivals as $h):
+              $g = $h["guest"] ?? [];
+            ?>
+              <li><?= h($g["name"] ?? "(no name)") ?>
+                <span class="snap-room"><?= h(ROOMS[$h["room"]] ?? $h["room"]) ?></span></li>
+            <?php endforeach; ?>
+          </ul>
+        <?php else: ?>
+          <p class="snap-empty">Nothing booked yet.</p>
+        <?php endif; ?>
+      </div>
+    </div>
+  </section>
 
   <!-- ============================================================ -->
   <!-- PENDING -->
