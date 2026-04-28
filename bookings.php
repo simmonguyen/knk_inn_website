@@ -72,6 +72,70 @@ if (($_POST["action"] ?? "") === "block") {
     exit;
 }
 
+/* ---------- Action: external booking (mirror an OTA reservation) ----
+ * Used when an Airbnb / Booking.com / Tripadvisor guest has booked
+ * via that platform. We mirror it into our store as a confirmed
+ * hold so the date is blocked everywhere (calendar, ICS feed,
+ * availability export). The OTA's confirmation number goes in
+ * external_ref so Simmo can cross-check.
+ * ------------------------------------------------------------------ */
+if (($_POST["action"] ?? "") === "external_booking") {
+    $room     = $_POST["room"]     ?? "";
+    $checkin  = $_POST["checkin"]  ?? "";
+    $checkout = $_POST["checkout"] ?? "";
+    $name     = trim((string)($_POST["name"]  ?? ""));
+    $email    = trim((string)($_POST["email"] ?? ""));
+    $phone    = trim((string)($_POST["phone"] ?? ""));
+    $source   = trim((string)($_POST["source"] ?? ""));
+    $extref   = trim((string)($_POST["external_ref"] ?? ""));
+    $price    = (int)preg_replace('/[^0-9]/', '', (string)($_POST["price"] ?? "0"));
+    $note     = trim((string)($_POST["note"] ?? ""));
+
+    if (!isset(ROOMS[$room])) {
+        $flash = "Pick a room.";
+    } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkin) || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $checkout)) {
+        $flash = "Pick valid dates.";
+    } elseif (strtotime($checkout) <= strtotime($checkin)) {
+        $flash = "Check-out must be after check-in.";
+    } elseif ($name === "") {
+        $flash = "Type a guest name.";
+    } else {
+        try {
+            $hold = bookings_create_hold([
+                "room"                => $room,
+                "checkin"             => $checkin,
+                "checkout"            => $checkout,
+                "price_vnd_per_night" => $price,
+                "source"              => $source !== "" ? $source : "external",
+                "external_ref"        => $extref,
+                "guest"               => [
+                    "name"    => $name,
+                    "email"   => $email,
+                    "phone"   => $phone,
+                    "message" => $note,
+                ],
+            ]);
+            /* Mirror straight to confirmed — we don't want to put
+             * a 24-hour pending TTL on something that's already
+             * been paid for on Airbnb. */
+            $confirmed = bookings_set_status_by_id($hold["id"], "confirm");
+            $flash = $confirmed
+                ? "Recorded {$name} ({$source}) — {$checkin} → {$checkout}."
+                : "Saved, but couldn't auto-confirm. Check the list below.";
+        } catch (RuntimeException $e) {
+            if (strpos($e->getMessage(), "already held") !== false) {
+                $flash = "Those dates are already booked. Check the calendar.";
+            } else {
+                $flash = "Could not save: " . $e->getMessage();
+            }
+        } catch (Throwable $e) {
+            $flash = "Could not save: " . $e->getMessage();
+        }
+    }
+    header("Location: bookings.php?msg=" . urlencode($flash));
+    exit;
+}
+
 /* ---------- Action: delete a hold (used for unblocking manual blocks) ---------- */
 if (($_POST["action"] ?? "") === "delete") {
     $id = preg_replace('/[^a-zA-Z0-9_]/', '', $_POST["id"] ?? "");
@@ -663,11 +727,29 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
           $guest = $h["guest"] ?? [];
           $isBlock = (($guest["name"] ?? "") === "Blocked") || stripos($guest["message"] ?? "", "Manually blocked") !== false;
         ?>
+          <?php
+            $up_src = (string)($h["source"] ?? "");
+            $up_src_lbl = [
+                "airbnb"      => "Airbnb",
+                "booking_com" => "Booking.com",
+                "tripadvisor" => "Tripadvisor",
+                "walk_in"     => "Walk-in",
+                "phone"       => "Phone",
+                "external"    => "External",
+                "other"       => "Other",
+            ];
+          ?>
           <div class="card">
             <div class="row1">
               <span class="name">
                 <?= h($guest["name"] ?? "(no name)") ?>
                 <?php if ($isBlock): ?> <span class="pill expired" style="margin-left:6px;">Manual block</span><?php endif; ?>
+                <?php if (!$isBlock && $up_src !== "" && isset($up_src_lbl[$up_src])): ?>
+                  <span style="display:inline-block; margin-left:6px; padding:2px 8px; border-radius:999px; font-size:0.7rem; background:rgba(201,170,113,0.18); color:var(--gold,#c9aa71); font-weight:600;"><?= h($up_src_lbl[$up_src]) ?></span>
+                  <?php if (!empty($h["external_ref"])): ?>
+                    <span style="display:inline-block; margin-left:4px; padding:2px 6px; border-radius:4px; font-size:0.66rem; background:rgba(245,233,209,0.06); font-family:monospace;"><?= h($h["external_ref"]) ?></span>
+                  <?php endif; ?>
+                <?php endif; ?>
               </span>
               <span class="room"><?= h(ROOMS[$h["room"]] ?? $h["room"]) ?></span>
             </div>
@@ -721,6 +803,73 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
       <span><span class="sw today"></span>Today</span>
       <span style="color:var(--cream-faint);">Hover a day to see which rooms are booked.</span>
     </div>
+  </section>
+
+  <!-- ============================================================ -->
+  <!-- EXTERNAL BOOKING (Airbnb / Booking.com / etc.) -->
+  <!-- ============================================================ -->
+  <section class="panel">
+    <h2>Add an external booking <span class="sub">Airbnb, Booking.com, Tripadvisor, walk-in</span></h2>
+    <p class="footnote" style="margin:0 0 0.7rem;">
+      Mirror an OTA reservation into our system so the dates block out everywhere
+      (calendar, ICS feed, availability export). Auto-confirms — no 24-hour pending hold.
+    </p>
+
+    <form method="post" class="block-form">
+      <input type="hidden" name="action" value="external_booking">
+      <label>
+        Room
+        <select name="room" required>
+          <?php foreach (ROOMS as $rid => $rlabel): ?>
+            <option value="<?= h($rid) ?>"><?= h($rlabel) ?></option>
+          <?php endforeach; ?>
+        </select>
+      </label>
+      <label>
+        Source
+        <select name="source" required>
+          <option value="airbnb">Airbnb</option>
+          <option value="booking_com">Booking.com</option>
+          <option value="tripadvisor">Tripadvisor</option>
+          <option value="walk_in">Walk-in</option>
+          <option value="phone">Phone / WhatsApp</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+      <label>
+        Check-in
+        <input type="date" name="checkin" required>
+      </label>
+      <label>
+        Check-out
+        <input type="date" name="checkout" required>
+      </label>
+      <label>
+        Guest name
+        <input type="text" name="name" required maxlength="120" placeholder="As shown on the OTA">
+      </label>
+      <label>
+        Guest email <span style="opacity:0.6">(optional)</span>
+        <input type="email" name="email" maxlength="190">
+      </label>
+      <label>
+        Phone <span style="opacity:0.6">(optional)</span>
+        <input type="tel" name="phone" maxlength="40">
+      </label>
+      <label>
+        Confirmation # <span style="opacity:0.6">(optional)</span>
+        <input type="text" name="external_ref" maxlength="120" placeholder="e.g. HMABC123">
+      </label>
+      <label>
+        Rate / night (VND) <span style="opacity:0.6">(optional)</span>
+        <input type="text" name="price" inputmode="numeric" placeholder="e.g. 850000">
+      </label>
+      <label class="full-width">
+        Notes <span style="opacity:0.6">(optional)</span>
+        <input type="text" name="note" maxlength="200" placeholder="Late check-in, special requests, etc.">
+      </label>
+      <button type="submit" class="block-btn">Save booking</button>
+    </form>
   </section>
 
   <!-- ============================================================ -->
@@ -783,7 +932,32 @@ function render_month_calendar(int $year, int $month, array $occupancy, array $d
           $guest = $h["guest"] ?? [];
         ?>
           <tr>
-            <td><span class="pill <?= h($s) ?>"><?= h($s) ?></span></td>
+            <td>
+              <span class="pill <?= h($s) ?>"><?= h($s) ?></span>
+              <?php
+                /* Source pill — only render for OTAs / external (not
+                 * for the default 'website' source, since the lack of
+                 * a tag implicitly means "came in through the public
+                 * booking form"). Helps Simmo spot which bookings he
+                 * mirrored from elsewhere. */
+                $src = (string)($h["source"] ?? "");
+                $src_lbl = [
+                    "airbnb"      => "Airbnb",
+                    "booking_com" => "Booking.com",
+                    "tripadvisor" => "Tripadvisor",
+                    "walk_in"     => "Walk-in",
+                    "phone"       => "Phone",
+                    "external"    => "External",
+                    "other"       => "Other",
+                ];
+                if ($src !== "" && isset($src_lbl[$src])):
+              ?>
+                <br><span style="display:inline-block; margin-top:3px; padding:2px 8px; border-radius:999px; font-size:0.66rem; background:rgba(201,170,113,0.18); color:var(--gold,#c9aa71); font-weight:600;"><?= h($src_lbl[$src]) ?></span>
+                <?php if (!empty($h["external_ref"])): ?>
+                  <span style="display:inline-block; margin-top:3px; padding:2px 6px; border-radius:4px; font-size:0.66rem; background:rgba(245,233,209,0.06); font-family:monospace;"><?= h($h["external_ref"]) ?></span>
+                <?php endif; ?>
+              <?php endif; ?>
+            </td>
             <td class="guest">
               <?= h($guest["name"] ?? "(no name)") ?>
               <?php if (!empty($guest["email"])): ?><br><a href="mailto:<?= h($guest["email"]) ?>" style="font-size:0.78rem;"><?= h($guest["email"]) ?></a><?php endif; ?>

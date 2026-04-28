@@ -197,6 +197,18 @@ function bookings_create_hold(array $input): array {
             "created_at"           => $now,
             "price_vnd_per_night"  => (int)($input["price_vnd_per_night"] ?? 0),
         ];
+        /* Optional metadata (mirrors migration 001's bookings table).
+         * Lets staff tag externally-mirrored bookings (Airbnb /
+         * Booking.com / Tripadvisor / walk-in / phone) so the
+         * dashboard can show them differently. Both fields are
+         * free-form strings — we don't validate the values, just
+         * cap their length and pass them through. */
+        if (!empty($input["source"])) {
+            $hold["source"] = mb_substr((string)$input["source"], 0, 40);
+        }
+        if (!empty($input["external_ref"])) {
+            $hold["external_ref"] = mb_substr((string)$input["external_ref"], 0, 120);
+        }
         $data["holds"][] = $hold;
         bookings_save($fp, $data);
         return $hold;
