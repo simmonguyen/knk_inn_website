@@ -126,10 +126,25 @@ $show_lobby       = ($view === 'pick_board') && defined('KNK_BAR_FRAME') && $lob
 $lobby_am_looking = false;
 $lobby_others     = [];
 $lobby_pending    = [];
+$lobby_display    = '';
+$lobby_needs_name = false;
 if ($show_lobby) {
-    $lobby_am_looking = knk_darts_lobby_is_looking($lobby_email);
-    $lobby_others     = knk_darts_lobby_active_lookers($lobby_email, 25);
-    $lobby_pending    = knk_darts_lobby_pending_challenges($lobby_email, 5);
+    /* Resolve the guest's display name. If it's still the auto
+     * "Guest XXXX" placeholder (or empty), prompt them to type a
+     * name before they can use the lobby — otherwise other guests
+     * see a stranger they can't address. */
+    require_once __DIR__ . '/includes/profile_store.php';
+    require_once __DIR__ . '/includes/guests_store.php';
+    $lobby_guest_row = knk_guest_find_by_email($lobby_email);
+    $lobby_display   = trim((string)($lobby_guest_row["display_name"] ?? ""));
+    $lobby_needs_name = ($lobby_display === "")
+        || (bool)preg_match('/^Guest\s+[0-9a-f]{4,}$/i', $lobby_display);
+
+    if (!$lobby_needs_name) {
+        $lobby_am_looking = knk_darts_lobby_is_looking($lobby_email);
+        $lobby_others     = knk_darts_lobby_active_lookers($lobby_email, 25);
+        $lobby_pending    = knk_darts_lobby_pending_challenges($lobby_email, 5);
+    }
 }
 
 ?>
@@ -544,6 +559,24 @@ if ($show_lobby) {
       border-color: rgba(47,220,122,0.45);
       cursor: default;
     }
+    /* Promoted Challenge button — when others are listed, the per-row
+     * Challenge becomes the primary action (Ben's request: "challenge
+     * button replaces the looking button, same light brown colour").
+     * Bigger pill, filled gold, bolder type. */
+    .lobby-challenge.is-primary {
+      padding: 0.7rem 1.25rem;
+      background: var(--gold);
+      color: var(--brown-deep, #1b0f04);
+      border: 1px solid var(--gold);
+      border-radius: 8px;
+      font-family: "Archivo Black", sans-serif;
+      font-size: 0.95rem;
+      letter-spacing: 0.04em;
+    }
+    .lobby-challenge.is-primary:hover { background: #d8c08b; border-color: #d8c08b; }
+    .lobby-list-promoted .lobby-list-row {
+      padding: 0.6rem 0;
+    }
 
     /* Recent-games / stat-list / pie-chart CSS used to live here.
        Those panels now render on /tv.php — see .tv-stats-* in tv.php. */
@@ -593,7 +626,30 @@ if ($show_lobby) {
         <?php endforeach; ?>
       </div>
 
-      <?php if ($show_lobby): ?>
+      <?php if ($show_lobby && $lobby_needs_name): ?>
+        <!-- Name-first gate: until the guest has a real display_name
+             (not the auto "Guest XXXX" placeholder), the lobby is
+             hidden — otherwise other punters see a stranger they
+             can't address. POSTs to /api/profile_set_name.php and
+             reloads on success so the lobby renders properly. -->
+        <div class="card" style="margin-top:1.4rem; border-color:var(--gold);">
+          <h2 style="margin-top:0">First — what should we call you?</h2>
+          <p class="lede" style="margin:0 0 0.7rem">
+            So others can spot you. Just a first name's fine.
+          </p>
+          <form id="nameFirstForm" style="display:flex; gap:0.5rem; flex-wrap:wrap;">
+            <input type="text" id="nameFirstInput" name="name"
+                   placeholder="Your name" maxlength="40"
+                   autocomplete="given-name"
+                   required style="flex:1; min-width:0;">
+            <button type="submit" class="lobby-btn-primary" style="white-space:nowrap;">
+              Save
+            </button>
+          </form>
+          <div id="nameFirstErr" class="err" style="display:none; margin-top:0.5rem;"></div>
+        </div>
+
+      <?php elseif ($show_lobby): ?>
       <!-- ============================================================
            Looking-for-Opponent lobby. Only rendered inside the bar
            shell — needs $_SESSION["order_email"] to identify the guest.
@@ -620,6 +676,16 @@ if ($show_lobby) {
       <div class="card" style="margin-top:1.4rem">
         <h2 style="margin-top:0">Looking for an opponent?</h2>
 
+        <?php
+          /* Promotion rule (Ben's request): when others ARE looking,
+           * the per-row Challenge buttons get promoted to the big
+           * gold style and the "I'm looking" button hides — challenge
+           * is the obvious next action when there's someone to point
+           * it at. When 0 others are looking, fall back to "I'm
+           * looking" so the guest can announce themselves. */
+          $hide_looking_btn = !empty($lobby_others);
+        ?>
+
         <div id="lobbyMeRow" class="lobby-me-row">
           <?php if ($lobby_am_looking): ?>
             <div class="lobby-me-status is-on">
@@ -628,6 +694,10 @@ if ($show_lobby) {
             <button type="button" id="lobbyClearBtn" class="lobby-btn-ghost">
               Stop looking
             </button>
+          <?php elseif ($hide_looking_btn): ?>
+            <p class="lede" style="margin:0">
+              Pick someone below and challenge them — first to accept gets the seat.
+            </p>
           <?php else: ?>
             <p class="lede" style="margin:0 0 0.6rem">
               Tap below and your name shows up to other guests on the darts tab.
@@ -642,14 +712,14 @@ if ($show_lobby) {
         <?php if (!empty($lobby_others)): ?>
           <div class="lobby-list-wrap">
             <h3 class="lobby-list-h">Others looking now</h3>
-            <ul class="lobby-list" id="lobbyList">
+            <ul class="lobby-list lobby-list-promoted" id="lobbyList">
               <?php foreach ($lobby_others as $lo):
                 $oe = (string)$lo["email"];
                 $od = (string)($lo["display_name"] ?: $oe);
               ?>
                 <li class="lobby-list-row" data-target-email="<?= dh($oe) ?>">
                   <span class="lobby-name"><?= dh($od) ?></span>
-                  <button type="button" class="lobby-challenge"
+                  <button type="button" class="lobby-challenge is-primary"
                           data-target="<?= dh($oe) ?>">Challenge</button>
                 </li>
               <?php endforeach; ?>
@@ -781,6 +851,48 @@ if ($show_lobby) {
     if (VIEW === 'pick_board') (function () {
       var SHOW_LOBBY = <?= $show_lobby ? 'true' : 'false' ?>;
       if (!SHOW_LOBBY) return;
+
+      /* Name-first gate. If the guest's display_name is still the
+       * auto "Guest XXXX" placeholder, the lobby card was replaced
+       * by a name-input card. Catch the submit, POST to
+       * /api/profile_set_name.php, then reload so the lobby renders
+       * with the real name. */
+      var nameForm  = document.getElementById('nameFirstForm');
+      var nameInput = document.getElementById('nameFirstInput');
+      var nameErr   = document.getElementById('nameFirstErr');
+      if (nameForm && nameInput) {
+        nameForm.addEventListener('submit', function (ev) {
+          ev.preventDefault();
+          var name = (nameInput.value || '').trim();
+          if (name === '') {
+            nameErr.textContent = 'Type a name first.';
+            nameErr.style.display = 'block';
+            return;
+          }
+          var btn = nameForm.querySelector('button[type=submit]');
+          if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+          var fd = new FormData();
+          fd.append('name', name);
+          fetch('/api/profile_set_name.php', {
+            method: 'POST', body: fd, credentials: 'same-origin'
+          })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (!j || !j.ok) {
+              throw new Error((j && j.error) || 'Could not save your name.');
+            }
+            window.location.reload();
+          })
+          .catch(function (e) {
+            if (btn) { btn.disabled = false; btn.textContent = 'Save'; }
+            nameErr.textContent = e.message;
+            nameErr.style.display = 'block';
+          });
+        });
+        // The name form short-circuits — the rest of the lobby
+        // wiring assumes a real name, so skip it until they save.
+        return;
+      }
 
       var setBtn   = $('#lobbySetBtn');
       var clearBtn = $('#lobbyClearBtn');
