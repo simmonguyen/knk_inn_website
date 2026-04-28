@@ -17,6 +17,7 @@
 return [
     /* Navigation */
     "nav.bookings"     => "Bookings",
+    "nav.rates"        => "Rates",
     "nav.orders"       => "Orders",
     "nav.guests"       => "Guests",
     "nav.sales"        => "Sales",

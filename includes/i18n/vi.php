@@ -14,6 +14,7 @@
 return [
     /* Navigation */
     "nav.bookings"     => "Đặt phòng",
+    "nav.rates"        => "Giá phòng",
     "nav.orders"       => "Đơn hàng",
     "nav.guests"       => "Khách",
     "nav.sales"        => "Doanh thu",

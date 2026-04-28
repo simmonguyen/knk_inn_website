@@ -447,6 +447,23 @@ function knk_user_nav(array $me): array {
     foreach ($items as $perm => $link) {
         if (knk_user_can($me, $perm)) $out[] = $link;
     }
+    /* Room rates piggybacks on the bookings permission — same
+     * person manages reservations and prices. Inserted right
+     * after the Bookings link so it reads as a sub-tool. */
+    if (knk_user_can($me, "bookings")) {
+        $rates = ["href" => "/room-rates.php", "label" => knk_t("nav.rates")];
+        $injected = [];
+        $placed = false;
+        foreach ($out as $l) {
+            $injected[] = $l;
+            if (!$placed && (strpos((string)$l["href"], "/bookings.php") === 0)) {
+                $injected[] = $rates;
+                $placed = true;
+            }
+        }
+        if (!$placed) $injected[] = $rates;
+        $out = $injected;
+    }
     if (($me["role"] ?? "") === "super_admin") {
         $out[] = ["href" => "/settings.php", "label" => knk_t("nav.settings")];
         $out[] = ["href" => "/users.php",    "label" => knk_t("nav.users")];
