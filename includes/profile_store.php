@@ -419,6 +419,31 @@ function knk_profile_apply_claim(string $token): ?string {
         error_log("knk_profile_apply_claim/darts_lobby: " . $e->getMessage());
     }
 
+    // Move any saved playlist rows + the play-all state across.
+    // Same UNIQUE-collision dedupe pattern as the helpers above
+    // (lives inside knk_playlist_rekey_email).
+    if (function_exists("knk_playlist_rekey_email")) {
+        try {
+            knk_playlist_rekey_email($anon_email, $real_email);
+        } catch (Throwable $e) {
+            error_log("knk_profile_apply_claim/playlist: " . $e->getMessage());
+        }
+    } else {
+        // Lazy-load the module on the off-chance it's not in
+        // includes/ yet (older deploy). Best-effort.
+        $store = __DIR__ . "/jukebox_playlists.php";
+        if (is_file($store)) {
+            require_once $store;
+            if (function_exists("knk_playlist_rekey_email")) {
+                try {
+                    knk_playlist_rekey_email($anon_email, $real_email);
+                } catch (Throwable $e) {
+                    error_log("knk_profile_apply_claim/playlist: " . $e->getMessage());
+                }
+            }
+        }
+    }
+
     // Step 3 — merge / rename the guests row.
     try {
         $pdo = knk_db();
