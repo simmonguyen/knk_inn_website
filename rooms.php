@@ -142,22 +142,36 @@ $slots = knk_slots_load();
     <div class="rooms-grid">
       <?php
       // Common-space tiles. Defaults mirror the original hardcoded filenames.
+      // Tiles 2 (Ground Bar), 4 (5th Floor Bar) and 6 (Rooftop) open a
+      // multi-photo lightbox from /assets/img/knk-260428/<slug>/. The
+      // others use the existing single-image lightbox via data-lb.
+      require_once __DIR__ . "/includes/photo_galleries.php";
       $common = [
-          1 => ['default' => 'ex_01.jpg', 'name' => 'Street',        'alt' => 'Street'],
-          2 => ['default' => 'ex_10.jpg', 'name' => 'Ground Bar',    'alt' => 'Ground Bar'],
-          3 => ['default' => 'nw_57.jpg', 'name' => 'Elevator',      'alt' => 'Elevator'],
-          4 => ['default' => 'nw_11.jpg', 'name' => '5th Floor Bar', 'alt' => '5th Floor Bar'],
-          5 => ['default' => 'rm_15.jpg', 'name' => 'Darts Room',    'alt' => 'Darts Room'],
-          6 => ['default' => 'ex_08.jpg', 'name' => 'Rooftop',       'alt' => 'Rooftop'],
+          1 => ['default' => 'ex_01.jpg', 'name' => 'Street',        'alt' => 'Street',        'gallery' => null],
+          2 => ['default' => 'ex_10.jpg', 'name' => 'Ground Bar',    'alt' => 'Ground Bar',    'gallery' => 'sport-pub'],
+          3 => ['default' => 'nw_57.jpg', 'name' => 'Elevator',      'alt' => 'Elevator',      'gallery' => null],
+          4 => ['default' => 'nw_11.jpg', 'name' => '5th Floor Bar', 'alt' => '5th Floor Bar', 'gallery' => 'wine-bar-floor-5'],
+          5 => ['default' => 'rm_15.jpg', 'name' => 'Darts Room',    'alt' => 'Darts Room',    'gallery' => null],
+          6 => ['default' => 'ex_08.jpg', 'name' => 'Rooftop',       'alt' => 'Rooftop',       'gallery' => 'rooftop'],
       ];
       foreach ($common as $idx => $c):
           $src = knk_photo_src($slots, 'rooms_common', $idx, $c['default']);
           $alt = knk_photo_alt($slots, 'rooms_common', $idx, $c['alt']);
+          $gallery_photos = $c['gallery'] ? knk_gallery_photos($c['gallery']) : [];
       ?>
-      <div class="room-card" data-lb data-lb-src="<?= htmlspecialchars($src) ?>">
-        <img src="<?= htmlspecialchars($src) ?>" alt="<?= htmlspecialchars($alt) ?>">
-        <div class="room-card-overlay"><span class="room-card-name"><?= htmlspecialchars($c['name']) ?></span></div>
-      </div>
+        <?php if (!empty($gallery_photos)): ?>
+          <button type="button" class="room-card"
+                  data-knk-gallery="<?= htmlspecialchars(json_encode($gallery_photos), ENT_QUOTES, "UTF-8") ?>"
+                  style="padding:0;border:0;background:transparent;cursor:zoom-in;display:block;">
+            <img src="<?= htmlspecialchars($src) ?>" alt="<?= htmlspecialchars($alt) ?>">
+            <div class="room-card-overlay"><span class="room-card-name"><?= htmlspecialchars($c['name']) ?></span></div>
+          </button>
+        <?php else: ?>
+          <div class="room-card" data-lb data-lb-src="<?= htmlspecialchars($src) ?>">
+            <img src="<?= htmlspecialchars($src) ?>" alt="<?= htmlspecialchars($alt) ?>">
+            <div class="room-card-overlay"><span class="room-card-name"><?= htmlspecialchars($c['name']) ?></span></div>
+          </div>
+        <?php endif; ?>
       <?php endforeach; ?>
     </div>
 
@@ -201,5 +215,14 @@ $slots = knk_slots_load();
 
 <script src="assets/js/i18n.js?v=13"></script>
 <script src="assets/js/main.js?v=13"></script>
+<?php
+  // Multi-photo lightbox markup for the gallery tiles (Ground Bar
+  // → sport-pub, 5th Floor Bar → wine-bar-floor-5, Rooftop →
+  // rooftop). Single-image tiles still use the existing #lightbox
+  // above. Safe to call once per page.
+  if (function_exists('knk_render_lightbox_markup')) {
+      knk_render_lightbox_markup();
+  }
+?>
 </body>
 </html>

@@ -214,7 +214,26 @@ function p_src(array $slots, string $section, int $i, string $default): string {
   <div class="rooftop-wrap">
     <div class="rooftop-images reveal">
       <div class="rooftop-badge"><span data-i18n="rooftop.badge">Signature</span></div>
-      <img class="rooftop-main" src="<?= p_src($slots, 'up_above', 1, 'rm_12.jpg') ?>" alt="Rooftop garden">
+      <?php
+        // Tap the rooftop hero → opens the rooftop gallery lightbox.
+        // If no photos exist in /assets/img/knk-260428/rooftop/, falls
+        // through to a plain <img>.
+        require_once __DIR__ . "/includes/photo_galleries.php";
+        $rooftop_photos = knk_gallery_photos('rooftop');
+        $rooftop_img_html = '<img class="rooftop-main" src="'
+            . htmlspecialchars(p_src($slots, 'up_above', 1, 'rm_12.jpg'), ENT_QUOTES, "UTF-8")
+            . '" alt="Rooftop garden">';
+        if (!empty($rooftop_photos)) {
+          echo '<button type="button" class="rooftop-trigger"'
+             . ' data-knk-gallery="' . htmlspecialchars(json_encode($rooftop_photos), ENT_QUOTES, "UTF-8") . '"'
+             . ' aria-label="Open rooftop garden gallery"'
+             . ' style="padding:0;border:0;background:transparent;display:block;cursor:zoom-in;">'
+             . $rooftop_img_html
+             . '</button>';
+        } else {
+          echo $rooftop_img_html;
+        }
+      ?>
     </div>
     <div class="rooftop-copy reveal">
       <span class="eyebrow" data-i18n="rooftop.eyebrow">Our Rooftop Garden</span>
@@ -594,5 +613,12 @@ function filterFixtures(btn, sport) {
   });
 }
 </script>
+<?php
+  // Lightbox markup — only rendered if at least one trigger is on
+  // the page. Safe to call zero or one times.
+  if (function_exists('knk_render_lightbox_markup')) {
+      knk_render_lightbox_markup();
+  }
+?>
 </body>
 </html>
