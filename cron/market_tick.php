@@ -80,4 +80,23 @@ $unwound = $result["unwound"] ?? [];
 mkt_log("Updated : " . (count($updated) ? implode(", ", $updated) : "(none)"));
 mkt_log("Crashed : " . (count($crashed) ? implode(", ", $crashed) : "(none)"));
 mkt_log("Unwound : " . (count($unwound) ? implode(", ", $unwound) : "(none)"));
+
+/* Drain any social-share pending crashes whose delay has expired.
+ * Migration 028 — the queue lets the crash *appear* to happen
+ * because the guest's post went live, instead of at the moment
+ * they tapped the share button. Cheap no-op when the queue is
+ * empty (single SELECT). */
+require_once __DIR__ . "/../includes/social_share_store.php";
+try {
+    $drained = knk_share_drain_pending_crashes();
+    if (!empty($drained)) {
+        foreach ($drained as $row) {
+            mkt_log("Share drain: " . $row["platform"] . " #" . $row["id"]
+                  . " → " . (count($row["fired"]) ? implode(",", $row["fired"]) : "(no eligible items)"));
+        }
+    }
+} catch (Throwable $e) {
+    mkt_log("Share drain ERROR: " . $e->getMessage());
+}
+
 mkt_log("Done.");

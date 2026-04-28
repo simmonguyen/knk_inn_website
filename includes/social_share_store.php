@@ -65,6 +65,10 @@ function knk_share_platforms(): array {
             "tier"         => 1,
             "drop_pct"     => 10,
             "duration_min" => 2,   // ~90s rounded up to 2 minutes
+            // delay_sec — how long the queue waits before firing
+            // the crash, so it lands just as the guest's post is
+            // realistically going live (typing + tapping post).
+            "delay_sec"    => 45,
             "action"       => "share",
             "deep_link"    => "https://www.facebook.com/sharer/sharer.php?u=" . rawurlencode("https://knkinn.com/"),
         ],
@@ -74,6 +78,7 @@ function knk_share_platforms(): array {
             "tier"         => 2,
             "drop_pct"     => 20,
             "duration_min" => 2,
+            "delay_sec"    => 90,
             "action"       => "review",
             // If a Google Place ID is configured in settings we
             // build the writereview URL; otherwise we fall back to
@@ -93,6 +98,7 @@ function knk_share_platforms(): array {
         //     "tier"         => 3,
         //     "drop_pct"     => 35,
         //     "duration_min" => 5,
+        //     "delay_sec"    => 150,
         //     "action"       => "review",
         //     "deep_link"    => "https://www.tripadvisor.com/Search?q=" . rawurlencode("KnK Inn Saigon"),
         // ],
@@ -302,26 +308,42 @@ function knk_share_record_tap(
         error_log("knk_share_record_tap (cooldown): " . $e->getMessage());
     }
 
-    // Fire the crash on the top-K trending drinks. Same loop the
-    // market-admin "Social crash" button uses, but actor=null and
-    // source kept as "crash_staff" for engine-level compatibility.
+    // ENQUEUE the crash instead of firing it immediately. Drainer
+    // (knk_share_drain_pending_crashes — called from
+    // /cron/market_tick.php every 5 min) walks the table and
+    // applies any rows whose due_at has passed. The delay makes
+    // the crash *appear* to land because of the guest's post
+    // rather than at the moment they tap the share button.
+    //
+    // Override: settings.social_share_delay_sec (int seconds) wins
+    // over the per-platform default if set. 0 = fire immediately
+    // (the legacy behaviour, useful for testing).
+    $delay = (int)($p["delay_sec"] ?? 0);
+    $override = (int)knk_setting_int("social_share_delay_sec", -1);
+    if ($override >= 0) $delay = $override;
+    $due_ts = time() + $delay;
+    try {
+        $stmt = knk_db()->prepare(
+            "INSERT INTO social_share_pending_crashes
+                (guest_email, platform, tier, drop_pct, duration_min, due_at)
+             VALUES (?, ?, ?, ?, ?, FROM_UNIXTIME(?))"
+        );
+        $stmt->execute([
+            $email, $platform,
+            (int)$p["tier"], (int)$p["drop_pct"], (int)$p["duration_min"],
+            $due_ts,
+        ]);
+    } catch (Throwable $e) {
+        error_log("knk_share_record_tap (enqueue): " . $e->getMessage());
+    }
+    // For UX continuity: report the *expected* victim list so the
+    // share-page toast can name the drinks that'll crash. The
+    // crash hasn't actually fired yet — it'll fire when the cron
+    // drains the queue.
     $cfg = knk_market_config();
     $k   = max(1, (int)$cfg["crash_items_max"]);
     $eligible = knk_market_eligible_codes();
-    $victims  = array_slice($eligible, 0, $k);
-    $fired = [];
-    foreach ($victims as $code) {
-        try {
-            if (knk_market_apply_crash(
-                $code, (int)$p["drop_pct"], (int)$p["duration_min"],
-                "crash_staff", null
-            )) {
-                $fired[] = $code;
-            }
-        } catch (Throwable $e) {
-            error_log("knk_share_record_tap (crash {$code}): " . $e->getMessage());
-        }
-    }
+    $fired    = array_slice($eligible, 0, $k);
 
     // Insert the tap row.
     try {
@@ -345,13 +367,15 @@ function knk_share_record_tap(
     }
 
     // Audit-log so the market admin's events trail can show where
-    // the crash came from.
+    // the crash came from. delay_sec exposes whether the crash
+    // is delayed (queued) or fired immediately.
     try {
         knk_audit("market.share_crash", "social_share_taps", null, [
             "platform"    => $platform,
             "tier"        => (int)$p["tier"],
             "drop_pct"    => (int)$p["drop_pct"],
             "duration_min"=> (int)$p["duration_min"],
+            "delay_sec"   => $delay,
             "items"       => $fired,
             "guest_email" => $email,
         ]);
@@ -359,17 +383,129 @@ function knk_share_record_tap(
         // audit failures are non-fatal
     }
 
-    $msg = "Boom! " . $p["label"] . " " . ($p["action"] === "review" ? "review" : "share")
-         . " counted — " . (int)$p["drop_pct"] . "% off the top "
-         . count($fired) . " for " . (int)$p["duration_min"] . " min.";
+    /* Wording reflects the delay — the crash hasn't happened yet
+     * but is about to. If $delay <= 0 (e.g. settings override) we
+     * fall back to the old "Boom!" copy. */
+    if ($delay > 0) {
+        $msg = "Thanks! Post your " . ($p["action"] === "review" ? "review" : "share")
+             . " — drinks are about to crash " . (int)$p["drop_pct"]
+             . "% on the top " . count($fired) . ".";
+    } else {
+        $msg = "Boom! " . $p["label"] . " " . ($p["action"] === "review" ? "review" : "share")
+             . " counted — " . (int)$p["drop_pct"] . "% off the top "
+             . count($fired) . " for " . (int)$p["duration_min"] . " min.";
+    }
 
     return [
         "ok"           => true,
         "tier"         => (int)$p["tier"],
         "drop_pct"     => (int)$p["drop_pct"],
         "duration_min" => (int)$p["duration_min"],
+        "delay_sec"    => $delay,
         "redirect_url" => $redirect,
         "message"      => $msg,
         "items"        => $fired,
     ];
+}
+
+/* ============================================================
+ *   DRAIN — fire any pending crashes whose due_at has passed
+ * ============================================================
+ *
+ * Called from /cron/market_tick.php every 5 min. Walks rows
+ * where fired_at IS NULL AND due_at <= NOW(), applies the crash
+ * to the top-K trending drinks, marks the row fired.
+ *
+ * Returns an array of summary rows the caller can log:
+ *   [ ["id"=>1, "platform"=>"facebook", "fired"=>["BIA","JUL"]], ... ]
+ *
+ * Resilient — if any one row fails to apply, we log and skip it
+ * but keep going so a single broken row doesn't stall the queue.
+ */
+function knk_share_drain_pending_crashes(): array {
+    if (!function_exists("knk_market_eligible_codes")) {
+        require_once __DIR__ . "/market_engine.php";
+    }
+    $log = [];
+
+    /* Stale-row sweep — kill any pending row whose due_at is more
+     * than 30 minutes old. Protects against the scenario where
+     * a tap happens right before bar-close: the cron exits early
+     * (bar closed), the queue builds up, and at 7:30am the next
+     * morning a stack of crashes would otherwise fire on a quiet
+     * coffee bar. We mark them fired with empty items so they
+     * don't keep matching the SELECT below.
+     *
+     * Override: settings.social_share_max_age_min (int). 0 = never
+     * expire (legacy behaviour). */
+    $max_age_min = (int)knk_setting_int("social_share_max_age_min", 30);
+    if ($max_age_min > 0) {
+        try {
+            knk_db()->prepare(
+                "UPDATE social_share_pending_crashes
+                    SET fired_at = NOW(), fired_items = 'expired'
+                  WHERE fired_at IS NULL
+                    AND due_at < NOW() - INTERVAL ? MINUTE"
+            )->execute([$max_age_min]);
+        } catch (Throwable $e) {
+            error_log("knk_share_drain (expire): " . $e->getMessage());
+        }
+    }
+
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT id, guest_email, platform, tier, drop_pct, duration_min
+               FROM social_share_pending_crashes
+              WHERE fired_at IS NULL
+                AND due_at <= NOW()
+           ORDER BY due_at ASC
+              LIMIT 50"
+        );
+        $stmt->execute();
+        $rows = $stmt->fetchAll();
+    } catch (Throwable $e) {
+        error_log("knk_share_drain_pending_crashes (read): " . $e->getMessage());
+        return $log;
+    }
+    if (empty($rows)) return $log;
+
+    $cfg = knk_market_config();
+    $k   = max(1, (int)$cfg["crash_items_max"]);
+
+    foreach ($rows as $r) {
+        $eligible = knk_market_eligible_codes();
+        $victims  = array_slice($eligible, 0, $k);
+        $fired    = [];
+        foreach ($victims as $code) {
+            try {
+                if (knk_market_apply_crash(
+                    $code,
+                    (int)$r["drop_pct"],
+                    (int)$r["duration_min"],
+                    "crash_staff",
+                    null
+                )) {
+                    $fired[] = $code;
+                }
+            } catch (Throwable $e) {
+                error_log("knk_share_drain_pending_crashes (crash {$code}): " . $e->getMessage());
+            }
+        }
+        try {
+            $upd = knk_db()->prepare(
+                "UPDATE social_share_pending_crashes
+                    SET fired_at = NOW(), fired_items = ?
+                  WHERE id = ?"
+            );
+            $upd->execute([implode(",", $fired), (int)$r["id"]]);
+        } catch (Throwable $e) {
+            error_log("knk_share_drain_pending_crashes (mark): " . $e->getMessage());
+        }
+        $log[] = [
+            "id"       => (int)$r["id"],
+            "platform" => (string)$r["platform"],
+            "fired"    => $fired,
+        ];
+    }
+    return $log;
 }
