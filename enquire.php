@@ -28,6 +28,7 @@ require_once __DIR__ . "/includes/smtp_send.php";
 require_once __DIR__ . "/includes/bookings_store.php";
 require_once __DIR__ . "/includes/email_template.php";
 require_once __DIR__ . "/includes/guests_store.php";
+require_once __DIR__ . "/includes/room_rates_store.php";
 
 $TO_EMAIL    = $CFG["to_email"]    ?? "knkinnsaigon@gmail.com";
 $SITE_URL    = "https://knkinn.com";
@@ -133,7 +134,33 @@ if ($type === "booking") {
         "vip"               => "VIP w/ tub",
     ];
     $roomLabel = $roomLabels[$roomId] ?? $roomId;
-    $total = $price * $hold["nights"];
+
+    /* Pull a date-aware quote from the rate engine (migration 026)
+     * if rooms are seeded. The engine works on per-room slugs; the
+     * website's enquire flow only knows the room *type*, so we
+     * quote against the cheapest active room of that type. If
+     * anything goes wrong (no rooms registered, zero-priced nights)
+     * we fall back to the legacy flat $price * nights so the email
+     * still goes out. */
+    $rate_total = 0;
+    $rate_lines = [];
+    try {
+        $candidates = knk_rooms_by_type($roomId);
+        if (!empty($candidates)) {
+            usort($candidates, function ($a, $b) {
+                return ((int)$a["default_vnd_per_night"]) - ((int)$b["default_vnd_per_night"]);
+            });
+            $quote = knk_room_rate_quote((string)$candidates[0]["slug"], $checkin, $checkout);
+            if (!empty($quote) && $quote["nights"] > 0 && empty($quote["any_zero"])) {
+                $rate_total = (int)$quote["total"];
+                $rate_lines = $quote["lines"];
+            }
+        }
+    } catch (Throwable $eq) {
+        /* Don't let a rate-engine hiccup block the booking email. */
+        error_log("KnK rate quote error: " . $eq->getMessage());
+    }
+    $total = $rate_total > 0 ? $rate_total : ($price * $hold["nights"]);
     $subject = "New booking hold · {$roomLabel} · {$checkin} → {$checkout} · {$name}";
 
     $confirmUrl = $SITE_URL . "/confirm-booking.php?token=" . urlencode($hold["token"]) . "&action=confirm";
@@ -147,6 +174,16 @@ if ($type === "booking") {
     $body .= "Check-out:  {$checkout}\n";
     $body .= "Nights:     {$hold["nights"]}\n";
     if ($price > 0) $body .= "Price:      " . vnd($price) . "/night · total " . vnd($total) . "\n";
+    /* Per-night breakdown (only when the rate engine produced one,
+     * i.e. seasonal pricing actually mattered for this stay). */
+    if (!empty($rate_lines) && count($rate_lines) <= 14) {
+        $body .= "Per-night:\n";
+        foreach ($rate_lines as $ln) {
+            $tag = !empty($ln["is_override"]) ? " *" : "";
+            $body .= "   {$ln["date"]}  " . vnd((int)$ln["vnd"]) . $tag . "\n";
+        }
+        $body .= "   (* = season override)\n";
+    }
     $body .= "\n";
     $body .= "Guest:      {$name}\n";
     $body .= "Email:      {$email}\n";
