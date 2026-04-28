@@ -77,6 +77,19 @@ if ($market_enabled) {
             $market_initial["crash_names"][] = (string)$row["name"];
         }
     }
+    /* Biggest-discount-first ordering on the TV. The bar menu
+     * (/order.php) keeps its regular alphabetical/insertion order
+     * — Ben asked for the dynamic sort to be TV-only so guests
+     * scanning their phone don't see the list shuffle on every
+     * tick. Negative pct = discount, so ascending sort puts the
+     * biggest deal on top. Crashed items (-100% or thereabouts)
+     * naturally float to the top, which is the right vibe. */
+    usort($market_initial["items"], function ($a, $b) {
+        $da = (int)$a["pct_vs_base"];
+        $db = (int)$b["pct_vs_base"];
+        if ($da !== $db) return $da - $db;
+        return strcmp((string)$a["name"], (string)$b["name"]);
+    });
 }
 $market_band      = knk_market_band_active();
 $market_band_lbl  = knk_market_band_label($market_band["band"]);
@@ -2026,12 +2039,20 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     } else if (!s.items || !s.items.length) {
       table.innerHTML = '<div class="market-empty">Warming up — drinks need a few orders to start trading.</div>';
     } else {
+      // Biggest-discount-first ordering — same as the server-side
+      // first paint. Negative pct = a deal; ascending sort puts the
+      // best deal on top, crashed items float there naturally.
+      var sortedItems = (s.items || []).slice().sort(function (a, b) {
+        var da = (a.pct_vs_base | 0), db = (b.pct_vs_base | 0);
+        if (da !== db) return da - db;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
       var rows = ['<div class="market-row head">' +
         '<span>Drink</span>' +
         '<span style="text-align:right;">Price</span>' +
         '<span style="text-align:right;">Move</span>' +
         '<span></span></div>'];
-      s.items.forEach(function (it) {
+      sortedItems.forEach(function (it) {
         var cls = it.trend === "up" ? "up" : it.trend === "down" ? "down" : "flat";
         if (it.in_crash) cls += " crash";
         var pct = (it.pct_vs_base >= 0 ? "+" : "") + (it.pct_vs_base | 0) + "%";
