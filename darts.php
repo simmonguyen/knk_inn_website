@@ -905,11 +905,28 @@ if ($show_lobby) {
         lookers:     <?= count($lobby_others) ?>,
         challenges:  <?= count($lobby_pending) ?>
       };
+      /* "Did the user just walk out of game X?" — checked before we
+       * honour a recent_accept redirect. localStorage is set by the
+       * "Leave the lobby" link inside the in_game render. Stops the
+       * pick_board poll from looping a leaver back into the same game. */
+      function recentlyLeftGame(gameId) {
+        try {
+          var arr = JSON.parse(localStorage.getItem('darts_left_games') || '[]');
+          var cutoff = Date.now() - 3600000;
+          for (var i = 0; i < arr.length; i++) {
+            if (arr[i] && arr[i].id === (gameId | 0) && arr[i].ts > cutoff) {
+              return true;
+            }
+          }
+        } catch (_) {}
+        return false;
+      }
       setInterval(function () {
         call('state').then(function (j) {
           if (!j || !j.ok || !j.state) return;
           var s = j.state;
-          if (s.recent_accept && s.recent_accept.game_id) {
+          if (s.recent_accept && s.recent_accept.game_id
+              && !recentlyLeftGame(s.recent_accept.game_id)) {
             setSeatCookie(s.recent_accept.game_id, s.recent_accept.session_token);
             window.location.href = prefix + s.recent_accept.game_id;
             return;
@@ -1144,9 +1161,31 @@ if ($show_lobby) {
           html += '</div>';
         }
 
-        html += '<a class="small-link" href="' + dartsUrl() + '" style="display:block; text-align:center; margin-top:0.9rem">← Leave the lobby</a>';
+        /* Leave the lobby — we mark the game id as "just left" in
+         * localStorage before navigating, so the lobby-state poll on
+         * /bar.php?tab=darts won't auto-redirect us back via its
+         * recent_accept handler. (That was the infinite-loop bug
+         * Ben hit when trying to walk away from a game lobby.) */
+        html += '<a class="small-link" id="leaveLobbyLink" href="' + dartsUrl() + '" style="display:block; text-align:center; margin-top:0.9rem">← Leave the lobby</a>';
 
         root.innerHTML = html;
+
+        var leaveEl = $('#leaveLobbyLink');
+        if (leaveEl) {
+          leaveEl.addEventListener('click', function () {
+            try {
+              var key = 'darts_left_games';
+              var arr = JSON.parse(localStorage.getItem(key) || '[]');
+              arr.push({ id: GAME_ID | 0, ts: Date.now() });
+              // Keep last 5 entries, drop anything older than 1 hour.
+              var cutoff = Date.now() - 3600000;
+              arr = arr.filter(function (e) { return e && e.ts > cutoff; });
+              if (arr.length > 5) arr = arr.slice(-5);
+              localStorage.setItem(key, JSON.stringify(arr));
+            } catch (_) {}
+            // No e.preventDefault() — let the navigation happen.
+          });
+        }
 
         if (amHost) {
           $('#startBtn').addEventListener('click', function () {
