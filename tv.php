@@ -629,6 +629,30 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     margin: 0; color: var(--fg);
   }
   .jbx-radio h3 .accent { color: var(--gold); }
+  /* Now-playing chip under the radio splash — appears when ABC's
+   * feed gives us a current track, hides when the lookup fails. */
+  .jbx-radio .nowplay {
+    margin-top: 0.55rem;
+    display: flex; align-items: baseline; justify-content: center;
+    flex-wrap: wrap; gap: 0.35rem 0.6rem;
+    max-width: 90%;
+    color: var(--fg);
+    font-size: 0.92rem; line-height: 1.3;
+  }
+  .jbx-radio .nowplay-dot {
+    color: var(--gold); font-size: 0.8rem;
+    animation: jbx-pulse 1.6s ease-in-out infinite;
+  }
+  .jbx-radio .nowplay-title {
+    font-weight: 700;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    max-width: 100%;
+  }
+  .jbx-radio .nowplay-artist {
+    color: var(--gold); font-size: 0.8rem; font-weight: 600;
+    letter-spacing: 0.04em;
+  }
+  .jbx-radio .nowplay-artist:empty { display: none; }
   .jbx-radio .station {
     color: var(--gold); font-size: 0.82rem; font-weight: 600;
     letter-spacing: 0.04em;
@@ -1421,6 +1445,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       <div class="pulse">📻</div>
       <h3>ON THE <span class="accent">RADIO</span></h3>
       <div class="station">Triple J · Australia</div>
+      <!-- Now-playing chip — populated by /api/triplej_now.php every
+           60 s. Hidden by default; the JS reveals it once a track
+           comes back. Layout stays stable when the chip is empty. -->
+      <div class="nowplay" id="jbx-radio-now" hidden>
+        <span class="nowplay-dot" aria-hidden="true">♪</span>
+        <span class="nowplay-title" id="jbx-radio-now-title"></span>
+        <span class="nowplay-artist" id="jbx-radio-now-artist"></span>
+      </div>
       <div class="hint">Tap to resume</div>
     </div>
 
@@ -3298,6 +3330,40 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       .catch(function () { /* keep last frame */ });
   }
   loop(pollNewsfeed, function () { return NF_POLL; });
+
+  // ============================================================
+  // Triple J now-playing — under the radio splash card. Hits our
+  // /api/triplej_now.php (which proxies + caches ABC's endpoint)
+  // every 60 s. Falsy responses just hide the chip; the radio
+  // card itself keeps working unchanged.
+  // ============================================================
+  var TJN_POLL = 60000;
+  function pollTripleJNow() {
+    var radioCard = document.getElementById("jbx-radio");
+    var chip      = document.getElementById("jbx-radio-now");
+    var titleEl   = document.getElementById("jbx-radio-now-title");
+    var artistEl  = document.getElementById("jbx-radio-now-artist");
+    if (!chip || !titleEl || !artistEl) return;
+    // Don't bother fetching when the radio card itself isn't on
+    // screen — a song's queued and the radio is paused.
+    if (radioCard && radioCard.hasAttribute("hidden")) {
+      chip.hidden = true;
+      return;
+    }
+    fetch("/api/triplej_now.php", { cache: "no-store" })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok || !j.title) {
+          chip.hidden = true;
+          return;
+        }
+        titleEl.textContent  = j.title || "";
+        artistEl.textContent = j.artist || "";
+        chip.hidden = false;
+      })
+      .catch(function () { chip.hidden = true; });
+  }
+  loop(pollTripleJNow, function () { return TJN_POLL; });
 
 })();
 </script>
