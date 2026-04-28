@@ -148,6 +148,32 @@ elseif ($action === "save_ip_whitelist") {
             : "Staff IP whitelist is OFF.";
     }
 }
+elseif ($action === "save_rates_export_key") {
+    /* Room-rates export key. Lets the OTA channel manager call
+     * /api/room_rates_export.php?key=… to pull the next 90 days
+     * of nightly rates. We accept either a fresh key (value) or a
+     * "regenerate" action that creates one server-side. Treat the
+     * field as opaque text — Booking.com/Airbnb don't care about
+     * format, they just store the URL. */
+    $regen = !empty($_POST["regenerate"]);
+    if ($regen) {
+        $val = bin2hex(random_bytes(16));
+        knk_setting_set("room_rates_export_key", $val, $me_id);
+        knk_audit("settings.update", "settings", "room_rates_export_key", ["regenerated" => true]);
+        $flash = "Generated a new export key. Update the URL in your channel-manager settings.";
+    } else {
+        $val = trim((string)($_POST["rates_export_key"] ?? ""));
+        if ($val === "" || mb_strlen($val) >= 16) {
+            knk_setting_set("room_rates_export_key", $val, $me_id);
+            knk_audit("settings.update", "settings", "room_rates_export_key", ["set" => ($val !== "")]);
+            $flash = $val === ""
+                ? "Export key cleared — channel manager can no longer fetch rates."
+                : "Export key saved.";
+        } else {
+            $error = "Key must be at least 16 characters (or hit Regenerate).";
+        }
+    }
+}
 elseif ($action === "save_hostess_email") {
     $he = trim((string)($_POST["hostess_email"] ?? ""));
     if ($he !== "" && !filter_var($he, FILTER_VALIDATE_EMAIL)) {
@@ -498,6 +524,42 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
       <?php if ($hostess_email !== ""): ?>
         <p class="muted" style="margin-top:0.7rem">
           Currently routing to <strong><?= htmlspecialchars($hostess_email, ENT_QUOTES, "UTF-8") ?></strong>.
+        </p>
+      <?php endif; ?>
+    </section>
+
+    <!-- Room-rates export key (for the OTA channel manager) -->
+    <section class="card">
+      <h2>Room-rates export key</h2>
+      <p class="explain">
+        Channel managers (Airbnb, Booking.com, Tripadvisor) read your
+        nightly rates from <code>/api/room_rates_export.php</code>.
+        That endpoint is locked behind a key — paste a value below and
+        give the channel-manager URL <code>?key=…&amp;room=…</code>.
+        Hit Regenerate to invalidate the old key (e.g. if you suspect
+        it leaked).
+      </p>
+      <?php $rates_key = (string)knk_setting("room_rates_export_key", ""); ?>
+      <form method="post" class="inline-form" style="margin-top:0.6rem;">
+        <input type="hidden" name="action" value="save_rates_export_key">
+        <input type="text" name="rates_export_key"
+               placeholder="paste a key (≥16 chars) or hit Regenerate"
+               value="<?= htmlspecialchars($rates_key, ENT_QUOTES, "UTF-8") ?>"
+               autocomplete="off" spellcheck="false"
+               style="font-family: monospace; min-width: 320px;">
+        <button type="submit">Save key</button>
+      </form>
+      <form method="post" class="inline-form" style="margin-top:0.4rem;">
+        <input type="hidden" name="action"     value="save_rates_export_key">
+        <input type="hidden" name="regenerate" value="1">
+        <button type="submit" style="background:rgba(245,233,209,0.06); color:var(--cream,#f5e9d1); border:1px solid rgba(245,233,209,0.2);">Regenerate</button>
+      </form>
+      <?php if ($rates_key !== ""):
+        $sample = $_SERVER['HTTP_HOST'] ?? 'knkinn.com';
+      ?>
+        <p class="muted" style="margin-top:0.7rem; font-size:0.85rem;">
+          Example URL for the VIP F3 room, next 90 days:<br>
+          <code style="word-break: break-all;">https://<?= htmlspecialchars($sample, ENT_QUOTES, "UTF-8") ?>/api/room_rates_export.php?key=<?= htmlspecialchars($rates_key, ENT_QUOTES, "UTF-8") ?>&amp;room=vip-3&amp;days=90</code>
         </p>
       <?php endif; ?>
     </section>
