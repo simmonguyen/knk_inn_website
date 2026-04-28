@@ -214,7 +214,7 @@ $slots = knk_slots_load();
 </div>
 
 <script src="assets/js/i18n.js?v=13"></script>
-<script src="assets/js/main.js?v=13"></script>
+<script src="assets/js/main.js?v=14"></script>
 <?php
   // Multi-photo lightbox markup for the gallery tiles (Ground Bar
   // → sport-pub, 5th Floor Bar → wine-bar-floor-5, Rooftop →

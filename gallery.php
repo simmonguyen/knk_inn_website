@@ -200,7 +200,7 @@ $chip_i18n = [
 </div>
 
 <script src="assets/js/i18n.js?v=13"></script>
-<script src="assets/js/main.js?v=13"></script>
+<script src="assets/js/main.js?v=14"></script>
 <script>
   // Update visible count on filter
   (function() {

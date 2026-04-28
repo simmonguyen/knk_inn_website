@@ -176,60 +176,87 @@
  * ============================================================ */
 (function () {
   'use strict';
-  const mount = document.getElementById('sports-list');
+  /* Mounts on #fixtures-list — the styled <li class="fixture"> grid
+   * the home page already had hardcoded. Earlier work targeted
+   * #sports-list (which never existed in the DOM), so the JS was a
+   * silent no-op and guests only ever saw the stale hardcoded list.
+   * That's the "3 listings vs many on the TV" Ben spotted. */
+  const mount = document.getElementById('fixtures-list');
   if (!mount) return;
 
   const SAIGON_TZ = 'Asia/Ho_Chi_Minh';
-  const SPORT_ICONS = {
-    Cricket: '\uD83C\uDFCF',
-    'Motorsport': '\uD83C\uDFCE\uFE0F',
-    'Formula 1': '\uD83C\uDFCE\uFE0F',
-    Boxing: '\uD83E\uDD4A',
-    'Australian Football': '\uD83C\uDFC9',
-    AFL: '\uD83C\uDFC9',
-    'Rugby League': '\uD83C\uDFC9',
-    NRL: '\uD83C\uDFC9',
-    Soccer: '\u26BD',
-    Football: '\u26BD',
-    'Rugby Union': '\uD83C\uDFC9',
-    Tennis: '\uD83C\uDFBE',
-    Olympics: '\uD83C\uDFC5',
-    'World Cup': '\uD83C\uDFC6'
-  };
 
-  function fmtKickoff(iso) {
-    if (!iso) return '';
-    const d = new Date(iso);
-    if (isNaN(d.getTime())) return '';
-    const date = new Intl.DateTimeFormat('en-GB', {
-      timeZone: SAIGON_TZ, weekday: 'short', day: '2-digit', month: 'short'
-    }).format(d);
-    const time = new Intl.DateTimeFormat('en-GB', {
-      timeZone: SAIGON_TZ, hour: '2-digit', minute: '2-digit', hour12: false
-    }).format(d);
-    return { date, time };
+  /* Sport name → filter-chip slug. Matches the buttons in the
+   * .sports-filter row of index.php. Unmapped sports get "other"
+   * so they still show under "All" but per-sport filters won't
+   * grab them. */
+  function sportSlug(sport) {
+    const s = String(sport || '').toLowerCase();
+    if (s === 'nrl' || s === 'rugby league')        return 'nrl';
+    if (s === 'afl' || s === 'australian football') return 'afl';
+    if (s === 'soccer' || s === 'football')         return 'soccer';
+    if (s === 'rugby union' || s === 'rugby')       return 'rugby';
+    if (s.indexOf('formula') === 0 || s === 'motogp' || s === 'motorsport') return 'motogp';
+    if (s === 'nfl' || s === 'american football')   return 'nfl';
+    return 'other';
+  }
+  function tagClass(slug) {
+    if (['nrl','afl','soccer','rugby','motogp','nfl'].indexOf(slug) >= 0) return 'fx-' + slug;
+    return 'fx-other';
   }
 
+  function fmtKickoff(iso) {
+    if (!iso) return null;
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return null;
+    const dow = new Intl.DateTimeFormat('en-GB', { timeZone: SAIGON_TZ, weekday: 'short' }).format(d);
+    const dom = new Intl.DateTimeFormat('en-GB', { timeZone: SAIGON_TZ, day: '2-digit' }).format(d);
+    const mon = new Intl.DateTimeFormat('en-GB', { timeZone: SAIGON_TZ, month: 'short' }).format(d);
+    const time = new Intl.DateTimeFormat('en-GB', {
+      timeZone: SAIGON_TZ, hour: 'numeric', minute: '2-digit', hour12: true
+    }).format(d).toLowerCase();
+    return { dow, dom, mon, time };
+  }
+
+  function escapeText(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+
+  /* Emit the same <li class="fixture"> shape the hardcoded HTML used
+   * — preserves the existing CSS and the filterFixtures() chip
+   * logic in index.php (which queries #fixtures-list .fixture +
+   * data-sport). */
   function card(ev) {
     const k = fmtKickoff(ev.kickoff);
-    const icon = SPORT_ICONS[ev.sport] || '\uD83C\uDFC6';
-    const sub = ev.subtitle ? `<div class="sport-card-sub">${ev.subtitle}</div>` : '';
-    const ko = k ? `<div class="sport-card-kickoff"><strong>${k.time}</strong> ${k.date} <span class="tz">SGT</span></div>` : '';
+    const slug = sportSlug(ev.sport);
+    const tagCls = tagClass(slug);
+    const tagLabel = escapeText(ev.sport || 'Sport');
+    const dateBlock = k
+      ? `<div class="fx-date"><span class="dow">${escapeText(k.dow)}</span><span class="dom">${escapeText(k.dom)}</span><span class="mon">${escapeText(k.mon)}</span></div>`
+      : `<div class="fx-date"><span class="dow">TBD</span></div>`;
+    const venue = ev.subtitle
+      ? `<p class="fx-venue">${escapeText(ev.subtitle)}</p>`
+      : '';
+    const timeBlock = k
+      ? `<div class="fx-time">${escapeText(k.time)}<span class="small">ICT kickoff</span></div>`
+      : `<div class="fx-time">TBD<span class="small">time</span></div>`;
     return `
-      <article class="sport-card reveal">
-        <div class="sport-card-icon">${icon}</div>
-        <div class="sport-card-body">
-          <div class="sport-card-tag">${ev.sport}</div>
-          <h3 class="sport-card-title">${ev.title}</h3>
-          ${sub}
-          ${ko}
+      <li class="fixture" data-sport="${escapeText(slug)}">
+        ${dateBlock}
+        <div class="fx-meta">
+          <div class="fx-tags"><span class="fx-tag ${tagCls}">${tagLabel}</span></div>
+          <p class="fx-title">${escapeText(ev.title || '')}</p>
+          ${venue}
         </div>
-      </article>`;
+        ${timeBlock}
+      </li>`;
   }
 
   function render(events) {
     if (!events.length) {
-      mount.innerHTML = '<p class="sports-empty">Fixtures will be posted soon. Pop in and we\u2019ll let you know what\u2019s on.</p>';
+      mount.innerHTML = '<li class="fixture"><div class="fx-meta" style="padding:1rem;color:rgba(245,233,209,0.7);">Fixtures will be posted soon — pop in and ask what’s on.</div></li>';
       return;
     }
     mount.innerHTML = events.map(card).join('');
