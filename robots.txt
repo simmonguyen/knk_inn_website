@@ -1,6 +1,47 @@
 # KnK Inn — robots
 # Public pages: index / rooms / drinks / gallery (see sitemap.xml)
 # Everything else is staff-only or transactional — keep it out of search.
+#
+# Social-media link-preview scrapers (Facebook, Twitter/X, LinkedIn,
+# WhatsApp, Telegram, Slack, Discord, Pinterest) get their own blocks
+# below with no Disallow rules. Without this, Facebook's debugger
+# reports "robots.txt block" when a guest shares a knkinn.com URL —
+# even though the User-agent: * rules above would technically allow
+# the homepage. Most strict scrapers want an explicit allowlist
+# entry naming their bot.
+
+User-agent: facebookexternalhit
+Allow: /
+
+User-agent: facebookcatalog
+Allow: /
+
+User-agent: Facebot
+Allow: /
+
+User-agent: Twitterbot
+Allow: /
+
+User-agent: LinkedInBot
+Allow: /
+
+User-agent: WhatsApp
+Allow: /
+
+User-agent: TelegramBot
+Allow: /
+
+User-agent: Slackbot
+Allow: /
+
+User-agent: Slackbot-LinkExpanding
+Allow: /
+
+User-agent: Discordbot
+Allow: /
+
+User-agent: Pinterestbot
+Allow: /
 
 User-agent: *
 Allow: /
