@@ -26,33 +26,65 @@ require_once __DIR__ . "/orders_store.php";
  *   · no owner account exists and no override is set
  */
 function knk_order_owner_cc(): ?string {
-    // Defensive require — these files only exist after the V2 migration ran.
-    // If the hosting environment hasn't migrated yet, skip the CC silently.
+    /* Backward-compat single-string version — first item from the
+     * full list. Kept so existing callers don't break. New callers
+     * should prefer knk_owner_cc_list() to pick up co_owner_email
+     * (Linh-the-wife's missus@ inbox). */
+    $list = knk_owner_cc_list();
+    return empty($list) ? null : $list[0];
+}
+
+/**
+ * Return every address that should be CC'd on owner notifications.
+ *
+ * Resolution order:
+ *   1. settings.owner_notification_email   — Simmo (gday@)
+ *   2. fallback to first active owner-role user
+ *   3. settings.co_owner_email             — Linh-the-wife (missus@)
+ *
+ * Empty array if owner_order_notifications_enabled is off, the
+ * settings store isn't loadable, or nothing resolves. De-dupes
+ * case-insensitively so a misconfig doesn't double-send.
+ */
+function knk_owner_cc_list(): array {
     $storePath = __DIR__ . "/settings_store.php";
-    if (!file_exists($storePath)) return null;
+    if (!file_exists($storePath)) return [];
+    $out = [];
     try {
         require_once $storePath;
         if (!knk_setting_bool("owner_order_notifications_enabled", true)) {
-            return null;
+            return [];
         }
-        $override = trim((string)knk_setting("owner_notification_email", ""));
-        if ($override !== "" && filter_var($override, FILTER_VALIDATE_EMAIL)) {
-            return $override;
+        $primary = trim((string)knk_setting("owner_notification_email", ""));
+        if ($primary !== "" && filter_var($primary, FILTER_VALIDATE_EMAIL)) {
+            $out[] = $primary;
+        } else {
+            $stmt = knk_db()->prepare(
+                "SELECT email FROM users
+                 WHERE role = 'owner' AND active = 1
+                 ORDER BY id LIMIT 1"
+            );
+            $stmt->execute();
+            $row = $stmt->fetch();
+            if ($row && !empty($row["email"])) $out[] = (string)$row["email"];
         }
-        $stmt = knk_db()->prepare(
-            "SELECT email FROM users
-             WHERE role = 'owner' AND active = 1
-             ORDER BY id LIMIT 1"
-        );
-        $stmt->execute();
-        $row = $stmt->fetch();
-        if ($row && !empty($row["email"])) {
-            return (string)$row["email"];
+        $co = trim((string)knk_setting("co_owner_email", ""));
+        if ($co !== "" && filter_var($co, FILTER_VALIDATE_EMAIL)) {
+            $out[] = $co;
         }
     } catch (Throwable $e) {
-        // DB unavailable or table missing — fall through to null.
+        // DB unavailable or table missing — return whatever we have.
     }
-    return null;
+    /* De-dupe case-insensitively. */
+    $seen = [];
+    $deduped = [];
+    foreach ($out as $addr) {
+        $k = strtolower($addr);
+        if (isset($seen[$k])) continue;
+        $seen[$k] = true;
+        $deduped[] = $addr;
+    }
+    return $deduped;
 }
 
 function knk_order_smtp_config(): ?array {
@@ -189,14 +221,13 @@ function knk_email_bar_new_order(array $order, string $siteUrl = "https://knkinn
     if (!empty($order["notes"])) $plain .= "Notes: " . $order["notes"] . "\n\n";
     $plain .= "Mark received: " . $receivedUrl . "\n";
 
-    // If the Owner has order alerts turned on, CC Simmo (or whatever
-    // address was configured on /settings.php) so he gets a copy too.
-    // Suppress the CC if it would duplicate the primary To address —
-    // e.g. same Gmail inbox used for both the bar and the owner.
+    // If the Owner has order alerts turned on, CC every address on
+    // the owner CC list — Simmo (gday@) plus Linh-the-wife (missus@)
+    // when configured. Suppress any address that duplicates the
+    // primary To so we don't double-send.
     $ccList = [];
-    $ownerCc = knk_order_owner_cc();
-    if ($ownerCc !== null && strcasecmp($ownerCc, $to) !== 0) {
-        $ccList[] = $ownerCc;
+    foreach (knk_owner_cc_list() as $addr) {
+        if (strcasecmp($addr, $to) !== 0) $ccList[] = $addr;
     }
 
     $err = null;

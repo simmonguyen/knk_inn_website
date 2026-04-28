@@ -237,6 +237,26 @@ if ($type === "booking") {
     $preheader = "New booking: {$name} · {$roomLabel} · {$checkin} → {$checkout}";
     $html_email = knk_email_html($subject, $preheader, $html_body, "This is an automated notice from the KnK Inn booking system.");
 
+    /* CC the co-owner (Linh-the-wife / missus@) on booking holds —
+     * she helps with bookings per the role description. Reuses the
+     * same helper the order email uses so adding a third address
+     * later only touches one place. Falls back to no CC if the
+     * settings store isn't loaded or the address isn't configured.
+     * Strips any address that matches $TO_EMAIL to avoid duplicates. */
+    $bk_cc = [];
+    if (function_exists("knk_owner_cc_list")) {
+        foreach (knk_owner_cc_list() as $addr) {
+            if (strcasecmp($addr, $TO_EMAIL) !== 0) $bk_cc[] = $addr;
+        }
+    } else {
+        require_once __DIR__ . "/includes/order_email.php";
+        if (function_exists("knk_owner_cc_list")) {
+            foreach (knk_owner_cc_list() as $addr) {
+                if (strcasecmp($addr, $TO_EMAIL) !== 0) $bk_cc[] = $addr;
+            }
+        }
+    }
+
     $smtpErr = null;
     $ok = smtp_send([
         "host"           => $CFG["smtp"]["host"]     ?? "smtp.gmail.com",
@@ -247,6 +267,7 @@ if ($type === "booking") {
         "from_email"     => $CFG["smtp"]["username"] ?? "",
         "from_name"      => $CFG["smtp"]["from_name"] ?? "KnK Inn Website",
         "to"             => $TO_EMAIL,
+        "cc"             => $bk_cc,
         "reply_to_email" => $email,
         "reply_to_name"  => $name,
         "subject"        => $subject,

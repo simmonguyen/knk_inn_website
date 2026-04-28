@@ -171,6 +171,17 @@ try {
     }
     $plain .= "GRAND TOTAL: " . knk_vnd($grand_total) . "\n";
 
+    /* Linh-the-wife (missus@) handles money / checks bills per her
+     * role — CC her on every bill request so the hostess (sheila@)
+     * isn't the only person seeing them. Suppress duplicates. */
+    $bill_cc = [];
+    require_once __DIR__ . "/../includes/order_email.php";
+    if (function_exists("knk_owner_cc_list")) {
+        foreach (knk_owner_cc_list() as $addr) {
+            if (strcasecmp($addr, $hostess) !== 0) $bill_cc[] = $addr;
+        }
+    }
+
     $err = null;
     $ok = smtp_send([
         "host"       => $smtp["host"],
@@ -181,6 +192,7 @@ try {
         "from_email" => $smtp["username"],
         "from_name"  => $smtp["from_name"] ?? "KnK Inn",
         "to"         => $hostess,
+        "cc"         => $bill_cc,
         "subject"    => "🧾 Bill request — " . $disp . " · " . knk_vnd($grand_total),
         "body"       => $plain,
         "html"       => $html,

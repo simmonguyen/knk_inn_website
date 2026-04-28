@@ -88,6 +88,18 @@ elseif ($action === "save_notification_email") {
             : "Notification email saved: {$email}";
     }
 }
+elseif ($action === "save_co_owner_email") {
+    $email = strtolower(trim((string)($_POST["email"] ?? "")));
+    if ($email !== "" && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $error = "That doesn't look like a valid email address.";
+    } else {
+        knk_setting_set("co_owner_email", $email, $me_id);
+        knk_audit("settings.update", "settings", "co_owner_email", ["value" => $email]);
+        $flash = $email === ""
+            ? "Co-owner email cleared."
+            : "Co-owner email saved: {$email}";
+    }
+}
 elseif ($action === "save_bar_force_open") {
     $on = !empty($_POST["enabled"]) ? "1" : "0";
     knk_setting_set("bar_force_open", $on, $me_id);
@@ -337,6 +349,34 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
       <p class="muted" style="margin-top:0.7rem">
         Emails are currently going to <strong class="email-current"><?= htmlspecialchars($effective) ?></strong>.
       </p>
+
+      <!-- Co-owner CC. Linh-the-wife (missus@) handles money, checks
+           bills, helps with bookings — so she gets CC'd on every
+           owner-level email plus on Check Bill alerts. Empty turns
+           the CC off entirely. -->
+      <h2 style="margin-top:1.5rem;">Co-owner CC <span style="opacity:0.6; font-weight:400; font-size:0.85em;">(optional)</span></h2>
+      <p class="explain">
+        A second address that gets CC'd on every owner-level email —
+        booking-hold notifications, drink-order alerts, Check Bill
+        requests. Use this for whoever else helps run things day-to-day
+        (e.g. <code>missus@knkinn.com</code>). Leave blank if it's just one inbox.
+      </p>
+      <?php $co_owner_email = (string)knk_setting("co_owner_email", ""); ?>
+      <form method="post" class="inline-form">
+        <input type="hidden" name="action" value="save_co_owner_email">
+        <input type="email" name="email" placeholder="e.g. missus@knkinn.com"
+               value="<?= htmlspecialchars($co_owner_email) ?>"
+               autocomplete="off">
+        <button type="submit">Save email</button>
+        <?php if ($co_owner_email !== ""): ?>
+          <button type="submit" class="ghost" onclick="this.form.email.value='';" title="Clear and save">Clear</button>
+        <?php endif; ?>
+      </form>
+      <?php if ($co_owner_email !== ""): ?>
+        <p class="muted" style="margin-top:0.7rem">
+          CC'ing <strong class="email-current"><?= htmlspecialchars($co_owner_email) ?></strong>.
+        </p>
+      <?php endif; ?>
     </section>
 
     <!-- Marketing reminders -->
