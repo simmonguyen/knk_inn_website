@@ -628,6 +628,63 @@ function knk_darts_recent_games_compact(int $limit = 10): array {
 }
 
 /* =========================================================
+   HOSTESS ALERT — "lonely looker" cron
+   ========================================================= */
+
+/**
+ * Find lookers who've been waiting alone for >= $threshold_min
+ * minutes with no incoming challenges and no hostess alert yet.
+ * Returns rows: [email, display_name, created_at, mins_waiting].
+ */
+function knk_darts_lobby_lonely_lookers(int $threshold_min = 10): array {
+    $threshold_min = max(1, min(120, $threshold_min));
+    try {
+        $stmt = knk_db()->prepare(
+            "SELECT l.looker_email AS email,
+                    l.display_name,
+                    l.created_at,
+                    TIMESTAMPDIFF(MINUTE, l.created_at, NOW()) AS mins_waiting
+               FROM darts_lobby l
+          LEFT JOIN darts_challenges c
+                 ON c.looker_email = l.looker_email
+                AND c.created_at  >= l.created_at
+              WHERE l.expires_at > NOW()
+                AND l.hostess_alerted_at IS NULL
+                AND TIMESTAMPDIFF(MINUTE, l.created_at, NOW()) >= ?
+                AND c.id IS NULL
+           GROUP BY l.id
+           ORDER BY l.created_at ASC"
+        );
+        $stmt->execute([$threshold_min]);
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        error_log("knk_darts_lobby_lonely_lookers: " . $e->getMessage());
+        return [];
+    }
+}
+
+/**
+ * Stamp a looker's row as "hostess alerted" so the cron doesn't
+ * spam the bar inbox if she hasn't acted yet.
+ */
+function knk_darts_lobby_mark_alerted(string $email): bool {
+    $email = strtolower(trim($email));
+    if ($email === "") return false;
+    try {
+        $st = knk_db()->prepare(
+            "UPDATE darts_lobby
+                SET hostess_alerted_at = NOW()
+              WHERE looker_email = ?"
+        );
+        $st->execute([$email]);
+        return $st->rowCount() > 0;
+    } catch (Throwable $e) {
+        error_log("knk_darts_lobby_mark_alerted: " . $e->getMessage());
+        return false;
+    }
+}
+
+/* =========================================================
    CLAIM-FLOW HOOK — re-key emails
    ========================================================= */
 
