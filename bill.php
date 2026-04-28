@@ -200,7 +200,7 @@ $guest = $booking["guest"] ?? [];
       <div class="addr">
         266 Bùi Viện, Phường Phạm Ngũ Lão<br>
         District 1, Hồ Chí Minh City<br>
-        knkinnsaigon@gmail.com
+        gday@knkinn.com
       </div>
     </div>
     <div class="doc">

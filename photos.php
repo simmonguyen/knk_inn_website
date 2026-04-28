@@ -25,6 +25,7 @@
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/photo_slots_store.php";
 require_once __DIR__ . "/includes/photo_library_store.php";
+require_once __DIR__ . "/includes/settings_store.php";
 
 $me = knk_require_permission("photos");
 
@@ -215,6 +216,28 @@ if ($action === "library_reorder") {
     }
     if (!is_array($filenames)) $filenames = [];
     echo json_encode(knk_photo_library_reorder($filenames));
+    exit;
+}
+
+/* Gallery arrangement mode — controls how /gallery.php displays
+ * photos publicly. Three values:
+ *   - 'order'   (default): use the sort_order Simmo dragged
+ *   - 'reverse': newest-first (latest uploads / highest sort first)
+ *   - 'random':  shuffle on every page load (different visit, different look)
+ *
+ * AJAX endpoint that just stores the value and echoes JSON, so the
+ * gallery tab UI can toggle it without a full page refresh. */
+if ($action === "gallery_arrangement") {
+    header("Content-Type: application/json; charset=utf-8");
+    $mode = (string)($_POST["mode"] ?? "");
+    $valid = ["order", "reverse", "random"];
+    if (!in_array($mode, $valid, true)) {
+        echo json_encode(["ok" => false, "error" => "Unknown mode."]);
+        exit;
+    }
+    knk_setting_set("gallery_arrangement", $mode, (int)($me["id"] ?? 0));
+    knk_audit("settings.update", "settings", "gallery_arrangement", ["value" => $mode]);
+    echo json_encode(["ok" => true, "mode" => $mode]);
     exit;
 }
 
@@ -636,6 +659,29 @@ $all_tags    = knk_photo_tags();
     </label>
 
     <div id="gallery-status"></div>
+
+    <!-- Public-page arrangement mode. Three options control how
+         /gallery.php orders the photos for visitors. The sort
+         order Simmo drags below is preserved either way — it's
+         only the *display* on the public page that changes. -->
+    <?php $gal_mode = (string)knk_setting("gallery_arrangement", "order");
+          if (!in_array($gal_mode, ["order","reverse","random"], true)) $gal_mode = "order"; ?>
+    <div class="gallery-arrangement" style="margin:1rem 0; padding:0.7rem 1rem; background:rgba(245,233,209,0.05); border:1px solid rgba(201,170,113,0.18); border-radius:8px; display:flex; flex-wrap:wrap; gap:0.5rem; align-items:center;">
+      <strong style="font-size:0.78rem; letter-spacing:0.18em; text-transform:uppercase; color:rgba(245,233,209,0.55); margin-right:0.4rem;">Public order</strong>
+      <label style="display:inline-flex; align-items:center; gap:0.35rem; cursor:pointer;">
+        <input type="radio" name="gallery_arrangement" value="order"   <?= $gal_mode === 'order'   ? 'checked' : '' ?>>
+        <span>In order</span>
+      </label>
+      <label style="display:inline-flex; align-items:center; gap:0.35rem; cursor:pointer;">
+        <input type="radio" name="gallery_arrangement" value="reverse" <?= $gal_mode === 'reverse' ? 'checked' : '' ?>>
+        <span>Reverse</span>
+      </label>
+      <label style="display:inline-flex; align-items:center; gap:0.35rem; cursor:pointer;">
+        <input type="radio" name="gallery_arrangement" value="random"  <?= $gal_mode === 'random'  ? 'checked' : '' ?>>
+        <span>Random</span>
+      </label>
+      <span id="gallery-arrangement-status" style="font-size:0.78rem; color:rgba(245,233,209,0.55); margin-left:auto;"></span>
+    </div>
 
     <div class="chips" id="library-chips">
       <button type="button" class="chip active" data-tag="__all">All <span class="n"><?= (int)$tag_counts["__all"] ?></span></button>
@@ -1275,6 +1321,47 @@ function postForm(obj) {
   }
   function markDone(row)     { row.classList.add('done'); row.querySelector('.bar-inner').style.width = '100%'; row.querySelector('.msg').textContent = 'Done'; }
   function markError(row, e) { row.classList.add('err');  row.querySelector('.msg').textContent = 'Error: ' + e; }
+})();
+
+/* ============================================================
+   Gallery arrangement — radio buttons that POST to the
+   gallery_arrangement action. No page reload; the public
+   /gallery.php picks up the new mode on its next render.
+   ============================================================ */
+(function () {
+  var radios = document.querySelectorAll('input[name="gallery_arrangement"]');
+  var status = document.getElementById('gallery-arrangement-status');
+  if (!radios.length) return;
+
+  var statusTimer = null;
+  function flash(text, isErr) {
+    if (!status) return;
+    if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+    status.textContent = text;
+    status.style.color = isErr ? '#ff8a8a' : 'rgba(245,233,209,0.7)';
+    statusTimer = setTimeout(function () { status.textContent = ''; }, 4000);
+  }
+
+  radios.forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (!this.checked) return;
+      var mode = this.value;
+      var fd = new FormData();
+      fd.append('action', 'gallery_arrangement');
+      fd.append('mode', mode);
+      flash('Saving…');
+      fetch(window.location.pathname, { method: 'POST', body: fd, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          if (!j || !j.ok) throw new Error((j && j.error) || 'Save failed.');
+          var label = mode === 'reverse' ? 'Reverse order'
+                    : mode === 'random'  ? 'Random shuffle'
+                    : 'In drag order';
+          flash('Public gallery now: ' + label);
+        })
+        .catch(function (e) { flash(e.message || 'Save failed.', true); });
+    });
+  });
 })();
 </script>
 </body>

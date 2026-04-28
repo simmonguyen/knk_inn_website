@@ -95,7 +95,7 @@ function knk_order_smtp_config(): ?array {
     if (!$smtp || empty($smtp["password"]) || strpos($smtp["password"], "xxxx") !== false) return null;
     return [
         "smtp" => $smtp,
-        "to_email" => $CFG["to_email"] ?? "knkinnsaigon@gmail.com",
+        "to_email" => $CFG["to_email"] ?? "gday@knkinn.com",
     ];
 }
 

@@ -52,7 +52,7 @@ if (!$hold) {
 $configPath = __DIR__ . "/config.php";
 if (file_exists($configPath)) {
     $CFG = require $configPath;
-    $TO  = $CFG["to_email"] ?? "knkinnsaigon@gmail.com";
+    $TO  = $CFG["to_email"] ?? "gday@knkinn.com";
 
     $guest       = $hold["guest"] ?? [];
     $guestName   = $guest["name"] ?? "(no name)";

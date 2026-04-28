@@ -481,7 +481,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
         </div>
         <div class="info-block">
           <span class="info-block-label">Email</span>
-          <div class="info-block-value"><a href="mailto:KnKinnSaigon@gmail.com">KnKinnSaigon@gmail.com</a></div>
+          <div class="info-block-value"><a href="mailto:gday@knkinn.com">gday@knkinn.com</a></div>
         </div>
         <div class="info-block">
           <span class="info-block-label">Facebook</span>

@@ -14,12 +14,25 @@
  */
 
 require_once __DIR__ . '/includes/photo_library_store.php';
+require_once __DIR__ . '/includes/settings_store.php';
 
 // Refresh the library from disk on every page load — cheap, idempotent.
 // Means new files Ben drops via FTP show up without an admin visit.
 @knk_photo_library_scan();
 
 $lib_photos = knk_photo_library_list(['include_hidden' => false]);
+
+/* Public arrangement mode — set on /photos.php (Gallery wall tab).
+ *   order   (default): leave as-is, Simmo's drag order
+ *   reverse: newest-saved first
+ *   random:  shuffle on every page load
+ * Other values silently fall through to "order". */
+$_gallery_mode = (string)knk_setting('gallery_arrangement', 'order');
+if ($_gallery_mode === 'reverse') {
+    $lib_photos = array_reverse($lib_photos);
+} elseif ($_gallery_mode === 'random') {
+    shuffle($lib_photos);
+}
 
 // Disk fallback if DB returned nothing (pre-migration or DB blip).
 if (empty($lib_photos)) {
