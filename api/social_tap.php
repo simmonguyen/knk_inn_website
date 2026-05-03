@@ -33,6 +33,7 @@ session_start();
 
 require_once __DIR__ . "/../includes/social_share_store.php";
 require_once __DIR__ . "/../includes/hours.php";
+require_once __DIR__ . "/../includes/client_ip.php";
 
 header("Content-Type: application/json; charset=utf-8");
 header("Cache-Control: no-store");
@@ -55,7 +56,7 @@ try {
         throw new RuntimeException("Pick a platform.");
     }
 
-    $ip = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+    $ip = knk_real_client_ip();
     $ua = (string)($_SERVER["HTTP_USER_AGENT"] ?? "");
 
     // Outside service hours we still record the tap (so the rally

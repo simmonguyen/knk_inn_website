@@ -55,7 +55,7 @@ try {
         throw new RuntimeException("Jukebox is closed right now.");
     }
 
-    $ip   = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+    $ip   = knk_real_client_ip();
     $mode = strtolower(trim((string)($_POST["mode"] ?? "")));
     $tracks = knk_playlist_list($email);
     if (empty($tracks)) throw new RuntimeException("Your playlist is empty.");

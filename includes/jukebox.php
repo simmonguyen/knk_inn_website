@@ -24,6 +24,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
+require_once __DIR__ . "/client_ip.php";
 
 /* ==========================================================
  * CONFIG
@@ -825,18 +826,9 @@ function knk_jukebox_fmt_duration(int $seconds): string {
     return $m . ":" . str_pad((string)$s, 2, "0", STR_PAD_LEFT);
 }
 
-/** Best-effort client IP (proxy-aware). Used for cooldown only. */
+/** Best-effort client IP (Cloudflare-aware). Used for cooldown only. */
 function knk_jukebox_client_ip(): string {
-    $candidates = [
-        $_SERVER["HTTP_CF_CONNECTING_IP"] ?? "",
-        $_SERVER["HTTP_X_FORWARDED_FOR"] ?? "",
-        $_SERVER["REMOTE_ADDR"] ?? "",
-    ];
-    foreach ($candidates as $c) {
-        $c = trim(explode(",", (string)$c)[0]);
-        if ($c !== "" && filter_var($c, FILTER_VALIDATE_IP)) return $c;
-    }
-    return "";
+    return knk_real_client_ip();
 }
 
 /**

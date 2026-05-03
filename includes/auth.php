@@ -36,6 +36,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/db.php";
 require_once __DIR__ . "/i18n.php";
+require_once __DIR__ . "/client_ip.php";
 
 /* --------------------------------------------------------------------
  * Session bootstrap — long-lived cookie so Simmo isn't forced to
@@ -189,7 +190,8 @@ function knk_require_login(): array {
  * IP whitelist gate.
  *
  * Reads the boolean setting `staff_ip_whitelist_enabled` and, if on,
- * checks REMOTE_ADDR against the comma-separated `staff_ip_whitelist`
+ * checks the real client IP (via knk_real_client_ip — Cloudflare-aware)
+ * against the comma-separated `staff_ip_whitelist`
  * setting. Each entry can be a single IPv4 (27.74.115.220) or a CIDR
  * range (192.168.1.0/24). Any match passes; anything else gets a 403.
  *
@@ -208,7 +210,7 @@ function knk_enforce_staff_ip_whitelist(): void {
     if (!function_exists("knk_setting_bool")) return; // still missing → skip
     if (!knk_setting_bool("staff_ip_whitelist_enabled", false)) return;
 
-    $ip = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+    $ip = knk_real_client_ip();
     if ($ip === "") {
         // Loopback / CLI — let it through so cron and migrate.php
         // don't lock themselves out.
@@ -552,7 +554,7 @@ function knk_audit(string $action, ?string $entity = null, ?string $entity_id = 
     try {
         knk_session_start();
         $actor = $_SESSION["knk_user_id"] ?? null;
-        $ip    = $_SERVER["REMOTE_ADDR"] ?? null;
+        $ip    = knk_real_client_ip() ?: null;
         $stmt  = knk_db()->prepare(
             "INSERT INTO audit_log (user_id, action, entity, entity_id, details, ip_address, created_at)
              VALUES (?, ?, ?, ?, ?, ?, NOW())"

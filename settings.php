@@ -144,7 +144,7 @@ elseif ($action === "save_ip_whitelist") {
      * next request would 403 us out of /settings.php. */
     $on   = !empty($_POST["enabled"]) ? "1" : "0";
     $list = trim((string)($_POST["staff_ip_whitelist"] ?? ""));
-    $caller_ip = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+    $caller_ip = knk_real_client_ip();
     if ($on === "1" && $caller_ip !== "" && !knk_ip_in_whitelist($caller_ip, $list)) {
         $error = "Refusing to lock you out. Add your current IP ("
                . htmlspecialchars($caller_ip, ENT_QUOTES, "UTF-8")
@@ -674,7 +674,7 @@ $darts_loud_on  = knk_setting_bool("darts_loud_mode", true);
       <?php
         $ipw_on   = knk_setting_bool("staff_ip_whitelist_enabled", false);
         $ipw_list = (string)knk_setting("staff_ip_whitelist", "");
-        $caller   = (string)($_SERVER["REMOTE_ADDR"] ?? "");
+        $caller   = knk_real_client_ip();
       ?>
       <p class="explain" style="margin-top:0.4rem;">
         Comma- or newline-separated. Each entry can be a single IPv4

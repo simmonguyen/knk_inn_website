@@ -24,6 +24,7 @@ if (!file_exists($configPath)) {
 }
 $CFG = require $configPath;
 
+require_once __DIR__ . "/includes/client_ip.php";
 require_once __DIR__ . "/includes/smtp_send.php";
 require_once __DIR__ . "/includes/bookings_store.php";
 require_once __DIR__ . "/includes/email_template.php";
@@ -318,7 +319,7 @@ if ($checkout) $body .= "Check-out:$checkout\n";
 if ($guests)   $body .= "Guests:   $guests\n";
 $body .= "\nMessage:\n$message\n\n";
 $body .= str_repeat("─", 48) . "\n";
-$body .= "Submitted " . date("Y-m-d H:i:s") . " ICT · IP " . ($_SERVER["REMOTE_ADDR"] ?? "?") . "\n";
+$body .= "Submitted " . date("Y-m-d H:i:s") . " ICT · IP " . (knk_real_client_ip() ?: "?") . "\n";
 $body .= "$SITE_URL\n";
 
 // HTML version
@@ -348,7 +349,7 @@ $eq_html_body .= $eq_msg;
 $eq_html_body .= knk_email_divider();
 $eq_html_body .= $btn_reply;
 
-$eq_footer = "Submitted " . htmlspecialchars(date("Y-m-d H:i:s"), ENT_QUOTES, "UTF-8") . " ICT · IP " . htmlspecialchars($_SERVER["REMOTE_ADDR"] ?? "?", ENT_QUOTES, "UTF-8");
+$eq_footer = "Submitted " . htmlspecialchars(date("Y-m-d H:i:s"), ENT_QUOTES, "UTF-8") . " ICT · IP " . htmlspecialchars(knk_real_client_ip() ?: "?", ENT_QUOTES, "UTF-8");
 $eq_preheader = "From {$name}" . ($room ? " about {$room}" : "");
 $eq_html = knk_email_html($subject, $eq_preheader, $eq_html_body, $eq_footer);
 
