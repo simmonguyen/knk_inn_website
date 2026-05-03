@@ -343,6 +343,20 @@
       { tsdb: 'Soccer',           label: 'Soccer' },
       { tsdb: 'Tennis',           label: 'Tennis' }
     ];
+
+    // TheSportsDB returns strTimestamp as UTC but WITHOUT a 'Z' suffix
+    // (e.g. "2026-05-03T05:15:00"). Modern JS parses naive ISO strings
+    // as LOCAL time, which means a Saigon browser would see 5:15 AM ICT
+    // when the actual kickoff is 5:15 UTC = 12:15 PM ICT. Force UTC
+    // interpretation by appending 'Z' if no timezone designator is
+    // already present.
+    function toUtcIso(s) {
+      if (!s) return s;
+      if (/Z$/i.test(s)) return s;
+      if (/[+\-]\d{2}:?\d{2}$/.test(s)) return s;
+      return s + 'Z';
+    }
+
     const events = [];
     for (const s of sports) {
       try {
@@ -352,7 +366,8 @@
         const data = await r.json();
         if (!data.events) continue;
         data.events.slice(0, 2).forEach(ev => {
-          const iso = (ev.strTimestamp || (ev.dateEvent + 'T' + (ev.strTime || '00:00:00') + 'Z'));
+          const raw = ev.strTimestamp || (ev.dateEvent + 'T' + (ev.strTime || '00:00:00'));
+          const iso = toUtcIso(raw);
           events.push({
             sport: s.label,
             title: ev.strEvent,

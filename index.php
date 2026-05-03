@@ -608,7 +608,7 @@ function p_src(array $slots, string $section, int $i, string $default): string {
 </div>
 
 <script src="assets/js/i18n.js?v=12"></script>
-<script src="assets/js/main.js?v=14"></script>
+<script src="assets/js/main.js?v=15"></script>
 <style>
   .fx-tag.fx-motogp { background: #e85d04; color: #fff; }
   .fx-tag.fx-rugby  { background: #2d6a4f; color: #fff; }

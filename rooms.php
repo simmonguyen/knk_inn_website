@@ -238,7 +238,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
 </div>
 
 <script src="assets/js/i18n.js?v=13"></script>
-<script src="assets/js/main.js?v=14"></script>
+<script src="assets/js/main.js?v=15"></script>
 <?php
   // Multi-photo lightbox markup for the gallery tiles (Ground Bar
   // → sport-pub, 5th Floor Bar → wine-bar-floor-5, Rooftop →

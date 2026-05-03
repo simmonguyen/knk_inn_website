@@ -148,6 +148,6 @@ function d_cat_key(string $slug): string { return "drinks.cat." . $slug; }
 </div>
 
 <script src="assets/js/i18n.js?v=12"></script>
-<script src="assets/js/main.js?v=14"></script>
+<script src="assets/js/main.js?v=15"></script>
 </body>
 </html>
