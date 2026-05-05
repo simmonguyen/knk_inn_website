@@ -22,19 +22,30 @@
 if (!defined("KNK_HOLD_TTL"))         define("KNK_HOLD_TTL", 86400);    // 24h
 if (!defined("KNK_BOOKINGS_PATH"))    define("KNK_BOOKINGS_PATH", __DIR__ . "/../bookings.json");
 
+/* Beds24 outbound sync — included lazily inside the confirm helpers
+ * so the rest of the file works fine even if the file is missing
+ * (e.g. on a deploy that hasn't updated this folder yet). */
+require_once __DIR__ . "/beds24_api.php";
+
 /*
  * Physical room inventory — keyed by room slug.
  *
- *   1st floor:            1 × Standard (no window)
+ *   Ground floor:         1 × Basic (Room 9, Queen, skylight not window)
+ *   1st floor:            1 × Standard (no window) — legacy slug
  *   2nd / 3rd / 4th:      each has 1 × Standard-balcony + 1 × VIP w/ tub
  *   --------------------------------------------------------------
- *                          1 + 3 + 3 = 7 rooms total
+ *                          1 + 1 + 3 + 3 = 8 rooms exposed via website
+ *
+ * (Beds24 has 9 actual physical rooms — the "standard-nowindow" slug
+ * historically only tracked 1 of the 2 Standard units. Site qty kept
+ * at 1 to stay conservative until that slug is split out properly.)
  *
  * Availability is measured against these counts, so a slug only blocks
  * dates once every physical unit of that type is taken.
  */
 if (!isset($GLOBALS["KNK_ROOM_INVENTORY"])) {
     $GLOBALS["KNK_ROOM_INVENTORY"] = [
+        "basic"             => 1,
         "standard-nowindow" => 1,
         "standard-balcony"  => 3,
         "vip"               => 3,
@@ -357,7 +368,9 @@ function bookings_set_status_by_id(string $id, string $action): ?array {
             $data["holds"][$i]["status"] = $newStatus;
             $data["holds"][$i]["actioned_at"] = time();
             bookings_save($fp, $data);
-            return $data["holds"][$i];
+            $hold = $data["holds"][$i];
+            knk_bookings_after_status_change($hold, $action);
+            return $hold;
         }
         bookings_close($fp);
         return null;
@@ -377,12 +390,57 @@ function bookings_set_status_by_token(string $token, string $action): ?array {
             $data["holds"][$i]["status"] = $newStatus;
             $data["holds"][$i]["actioned_at"] = time();
             bookings_save($fp, $data);
-            return $data["holds"][$i];
+            $hold = $data["holds"][$i];
+            knk_bookings_after_status_change($hold, $action);
+            return $hold;
         }
         bookings_close($fp);
         return null;
     } catch (Throwable $e) {
         bookings_close($fp);
         throw $e;
+    }
+}
+
+/**
+ * Side-effect hook called AFTER a hold's status changes.
+ * Currently: pushes confirmed bookings to Beds24 so it can
+ * propagate the room-night occupancy to Booking.com / Airbnb.
+ * Stores the returned beds24_booking_id back on the hold so
+ * a future cancel can identify the right Beds24 booking.
+ *
+ * Defensive — never throws. Beds24 outage is an error_log
+ * entry, not a user-facing failure.
+ */
+function knk_bookings_after_status_change(array $hold, string $action): void {
+    if ($action !== "confirm") {
+        /* Decline path: if we already pushed this hold, cancel it. */
+        $existing = (int)($hold["beds24_booking_id"] ?? 0);
+        if ($existing > 0 && function_exists("knk_beds24_cancel")) {
+            knk_beds24_cancel($existing);
+        }
+        return;
+    }
+
+    if (!function_exists("knk_beds24_push_confirmed")) return;
+    $bookingId = knk_beds24_push_confirmed($hold);
+    if ($bookingId <= 0) return;
+
+    /* Persist the Beds24 bookingId back onto the hold so we
+     * can match it for future cancellations and avoid
+     * double-pushing on retry. */
+    [$fp, $data] = bookings_open();
+    try {
+        foreach ($data["holds"] as $i => $h) {
+            if (($h["id"] ?? "") !== ($hold["id"] ?? "")) continue;
+            $data["holds"][$i]["beds24_booking_id"] = $bookingId;
+            $data["holds"][$i]["beds24_pushed_at"]  = time();
+            bookings_save($fp, $data);
+            return;
+        }
+        bookings_close($fp);
+    } catch (Throwable $e) {
+        bookings_close($fp);
+        error_log("KnK bookings: failed to persist beds24_booking_id: " . $e->getMessage());
     }
 }

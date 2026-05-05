@@ -12,7 +12,7 @@ require_once __DIR__ . "/includes/bookings_store.php";
 header("Content-Type: application/json; charset=UTF-8");
 header("Cache-Control: public, max-age=60");
 
-$validRooms = ["standard-nowindow","standard-balcony","vip"];
+$validRooms = ["basic","standard-nowindow","standard-balcony","vip"];
 $room = $_GET["room"] ?? "";
 if (!in_array($room, $validRooms, true)) {
     http_response_code(400);

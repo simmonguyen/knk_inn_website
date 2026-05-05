@@ -20,6 +20,7 @@ $me = knk_require_permission("bookings");
 $can_see_guests = knk_user_can($me, "guests");
 
 const ROOMS = [
+    "basic"             => "Basic Queen Room",
     "standard-nowindow" => "Standard (no window)",
     "standard-balcony"  => "Standard with balcony",
     "vip"               => "VIP w/ tub",

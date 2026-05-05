@@ -83,6 +83,7 @@ function knk_booking_linked_orders(array $booking): array {
  */
 function knk_booking_bill(array $booking): array {
     $rooms = [
+        "basic"             => "Basic Queen Room",
         "standard-nowindow" => "Standard (no window)",
         "standard-balcony"  => "Standard with balcony",
         "vip"               => "VIP w/ tub",

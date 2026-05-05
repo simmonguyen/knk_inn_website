@@ -15,6 +15,7 @@ $slots = knk_slots_load();
 
 /* Live "From XXX VND / night" copy from the rate engine. Falls back
  * to the previous hardcoded copy if the rooms registry isn't seeded. */
+$rate_basic    = knk_room_type_lowest_default('basic');             if ($rate_basic    <= 0) $rate_basic    = 800000;
 $rate_nowindow = knk_room_type_lowest_default('standard-nowindow'); if ($rate_nowindow <= 0) $rate_nowindow = 600000;
 $rate_balcony  = knk_room_type_lowest_default('standard-balcony');  if ($rate_balcony  <= 0) $rate_balcony  = 700000;
 $rate_vip      = knk_room_type_lowest_default('vip');               if ($rate_vip      <= 0) $rate_vip      = 900000;
@@ -87,7 +88,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
   <div class="container">
     <span class="eyebrow" data-i18n="rooms.eyebrow">Accommodation</span>
     <h1 class="display-lg" data-i18n="rooms.pageTitle">Our <em>Rooms.</em></h1>
-    <p data-i18n="rooms.pageSub">Three room types across four floors. Quiet, cool, comfortable — the basics done properly.</p>
+    <p data-i18n="rooms.pageSub">Four room types across five floors. Quiet, cool, comfortable — the basics done properly.</p>
   </div>
 </header>
 
@@ -126,8 +127,17 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
       </div>
     </div>
 
-    <!-- Three room types. Each links to a per-type page with photos, calendar & booking flow. -->
+    <!-- Four room types. Each links to a per-type page with photos, calendar & booking flow. -->
     <div class="rooms-grid rooms-grid-booking" style="margin-top:4rem;">
+
+      <a class="room-card room-card-link" href="rooms/basic.php">
+        <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 4, 'rm_00.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 4, 'Basic room with skylight')) ?>">
+        <div class="room-card-overlay">
+          <span class="room-card-floor">From <?= $fmt_vnd($rate_basic) ?> / night</span>
+          <span class="room-card-name">Basic · Queen</span>
+          <span class="room-card-cta">View &amp; Book →</span>
+        </div>
+      </a>
 
       <a class="room-card room-card-link" href="rooms/standard-nowindow.php">
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 1, 'rm_00.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 1, 'Standard room, no window')) ?>">

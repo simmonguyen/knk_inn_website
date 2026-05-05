@@ -85,7 +85,7 @@ if ($type === "booking") {
     $message  = clean_long($_POST["message"] ?? "");
     $price    = (int)($_POST["price"] ?? 0);
 
-    $validRooms = ["standard-nowindow","standard-balcony","vip"];
+    $validRooms = ["basic","standard-nowindow","standard-balcony","vip"];
     $err = [];
     if (!in_array($roomId, $validRooms, true)) $err[] = "Invalid room.";
     if ($name === "")          $err[] = "Please enter your name.";
@@ -130,6 +130,7 @@ if ($type === "booking") {
 
     // Build Simmo's email
     $roomLabels = [
+        "basic"             => "Basic Queen Room",
         "standard-nowindow" => "Standard (no window)",
         "standard-balcony"  => "Standard with balcony",
         "vip"               => "VIP w/ tub",

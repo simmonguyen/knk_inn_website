@@ -62,7 +62,7 @@ try {
         throw new RuntimeException("Bad key.");
     }
 
-    $valid_types = ["standard-nowindow", "standard-balcony", "vip"];
+    $valid_types = ["basic", "standard-nowindow", "standard-balcony", "vip"];
     $type = trim((string)($_GET["type"] ?? ""));
     if (!in_array($type, $valid_types, true)) {
         throw new RuntimeException("Missing or unknown type. Use one of: " . implode(", ", $valid_types));

@@ -34,6 +34,7 @@ if ($expected === "" || !hash_equals($expected, $got)) {
 }
 
 $ROOM_LABELS = [
+    "basic"             => "Basic Queen Room",
     "standard-nowindow" => "Standard (no window)",
     "standard-balcony"  => "Standard with balcony",
     "vip"               => "VIP w/ tub",

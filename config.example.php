@@ -41,4 +41,32 @@ return [
     // enable "YouTube Data API v3", create an API key, paste it here.
     // Leave empty to disable the jukebox.
     "youtube_api_key" => "",
+
+    // Beds24 v2 channel-manager push (outbound sync).
+    // When a direct booking gets confirmed on knkinn.com, we push it
+    // to Beds24 so it propagates as a blocked night to Booking.com
+    // and Airbnb. Without this, two guests can book the same physical
+    // room from two different OTAs at the same time.
+    //
+    // Setup:
+    //   1. In Beds24 admin go to Settings → Account → API → Long-life Tokens
+    //   2. Generate a new token. Copy the refreshToken (long string).
+    //   3. Paste below.
+    //   4. Verify property_id matches Beds24's "propid" (325504 for KnK Inn).
+    //   5. The room_map maps internal room slugs → Beds24 numeric roomIds.
+    //      Find roomIds in Beds24 admin → Properties → Rooms.
+    //
+    // Leave refresh_token empty to cleanly disable — confirms still
+    // work locally, they just won't propagate to OTAs.
+    "beds24" => [
+        "refresh_token" => "",         // long string from Beds24 admin
+        "property_id"   => 325504,     // KnK Inn & Sports Pub w/Rooftop Garden
+        "room_map"      => [
+            // slug                 => beds24 room id
+            "vip"               => 675740, // Premium (3 units, King + bath)
+            "standard-balcony"  => 676694, // Superior (3 units, Queen + balcony)
+            "standard-nowindow" => 676693, // Standard (2 units, mixed bed)
+            "basic"             => 675750, // Basic (1 unit, Room 9, Queen + skylight)
+        ],
+    ],
 ];
