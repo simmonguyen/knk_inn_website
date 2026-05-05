@@ -36,10 +36,10 @@ $gallery_defaults = [
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Basic Queen Room — KnK Inn</title>
-<meta name="description" content="Book the Basic Queen Room at KnK Inn — ground-floor Queen bed, glass shower, overhead skylight, strong AC, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
+<title>Basic — KnK Inn</title>
+<meta name="description" content="Book a Basic room at KnK Inn — ground-floor Queen bed, glass shower, overhead skylight, strong AC, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
 <?php $og_img = "https://knkinn.com/" . ltrim($rp('room_basic', 1, 'rm_00.jpg'), './'); ?>
-<meta property="og:title"        content="Basic Queen Room — KnK Inn, Saigon">
+<meta property="og:title"        content="Basic — KnK Inn, Saigon">
 <meta property="og:description"  content="Ground-floor Queen room with skylight, strong AC, glass shower, fast Wi-Fi. District 1.">
 <meta property="og:image"        content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <meta property="og:url"          content="https://knkinn.com/rooms/basic.php">
@@ -47,7 +47,7 @@ $gallery_defaults = [
 <meta property="og:site_name"    content="KnK Inn">
 <meta property="og:locale"       content="en_US">
 <meta name="twitter:card"        content="summary_large_image">
-<meta name="twitter:title"       content="Basic Queen Room — KnK Inn">
+<meta name="twitter:title"       content="Basic — KnK Inn">
 <meta name="twitter:description" content="Ground-floor Queen room — skylight, strong AC, glass shower, fast Wi-Fi. District 1, Saigon.">
 <meta name="twitter:image"       content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -98,7 +98,7 @@ $gallery_defaults = [
 
       <div class="room-top-desc">
         <span class="eyebrow">Accommodation · Ground floor</span>
-        <h1 class="display-lg">Basic · <em>Queen Room.</em></h1>
+        <h1 class="display-lg"><em>Basic.</em></h1>
         <p class="room-hero-lede">Our smallest, most affordable room — ground floor, Queen bed, glass shower. An overhead skylight in place of a street-facing window keeps the room blackout-quiet for sleep-ins, with morning light filtering through when you want it.</p>
         <div class="room-hero-meta">
           <span><strong>1 Queen bed</strong></span>
@@ -119,7 +119,7 @@ $gallery_defaults = [
 
         <div id="booking-widget"
              data-room-id="basic"
-             data-room-name="Basic Queen Room"
+             data-room-name="Basic"
              data-room-type="basic"
              data-price="<?= (int)$live_price_vnd ?>">
         </div>
@@ -159,7 +159,7 @@ $gallery_defaults = [
     } else {
         foreach ($gallery_defaults as $idx => $default):
             $src = $rp('room_basic', $idx, $default);
-            $alt = $ra('room_basic', $idx, 'Basic Queen Room photo ' . ($idx - 1));
+            $alt = $ra('room_basic', $idx, 'Basic photo ' . ($idx - 1));
 ?>
       <div class="room-card" data-lb data-lb-src="<?= htmlspecialchars($src) ?>">
         <img src="<?= htmlspecialchars($src) ?>" alt="<?= htmlspecialchars($alt) ?>" loading="lazy">

@@ -13,7 +13,7 @@ require_once __DIR__ . '/../includes/photo_slots_store.php';
 require_once __DIR__ . '/../includes/room_rates_store.php';
 $slots = knk_slots_load();
 $live_price_vnd = knk_room_type_lowest_default('vip');
-if ($live_price_vnd <= 0) $live_price_vnd = 900000;
+if ($live_price_vnd <= 0) $live_price_vnd = 1300000;
 
 $rp = function (string $section, int $idx, string $default) use ($slots): string {
     return '../' . knk_photo_src($slots, $section, $idx, $default);
@@ -36,19 +36,19 @@ $gallery_defaults = [
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>VIP — Private Bathtub — KnK Inn</title>
-<meta name="description" content="Book the VIP — Private Bathtub at KnK Inn — private bathtub, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
+<title>Premium — KnK Inn</title>
+<meta name="description" content="Book a Premium room at KnK Inn — King bed, private bathtub, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
 <?php $og_img = "https://knkinn.com/" . ltrim($rp('room_vip', 1, 'rm_04.jpg'), './'); ?>
-<meta property="og:title"        content="VIP with Private Bathtub — KnK Inn, Saigon">
-<meta property="og:description"  content="VIP room at KnK Inn with private bathtub. Strong AC, rain shower, fast Wi-Fi. District 1.">
+<meta property="og:title"        content="Premium — KnK Inn, Saigon">
+<meta property="og:description"  content="Premium room at KnK Inn with King bed and private bathtub. Strong AC, rain shower, fast Wi-Fi. District 1.">
 <meta property="og:image"        content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <meta property="og:url"          content="https://knkinn.com/rooms/vip.php">
 <meta property="og:type"         content="website">
 <meta property="og:site_name"    content="KnK Inn">
 <meta property="og:locale"       content="en_US">
 <meta name="twitter:card"        content="summary_large_image">
-<meta name="twitter:title"       content="VIP with Private Bathtub — KnK Inn">
-<meta name="twitter:description" content="Private bathtub · strong AC · rain shower · fast Wi-Fi. District 1, Saigon.">
+<meta name="twitter:title"       content="Premium — KnK Inn">
+<meta name="twitter:description" content="King bed · private bathtub · strong AC · rain shower · fast Wi-Fi. District 1, Saigon.">
 <meta name="twitter:image"       content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -98,13 +98,13 @@ $gallery_defaults = [
 
       <div class="room-top-desc">
         <span class="eyebrow">Accommodation · Floors 2, 3 and 4</span>
-        <h1 class="display-lg">VIP · Private <em>bathtub.</em></h1>
-        <p class="room-hero-lede">Our flagship rooms — a deep private bathtub, a little more elbow room than the Standards, and premium toiletries for a proper treat. Available on floors 2, 3 and 4; the floor 4 VIP is closest to the Sky Garden and is our most popular. Let us know your preferred floor at booking.</p>
+        <h1 class="display-lg"><em>Premium.</em></h1>
+        <p class="room-hero-lede">Our flagship rooms — King bed, deep private bathtub, more elbow room, and premium toiletries for a proper treat. Available on floors 2, 3 and 4; the floor 4 Premium is closest to the Sky Garden and is our most popular. Let us know your preferred floor at booking.</p>
         <div class="room-hero-meta">
-          <span><strong>1 Queen bed</strong></span>
+          <span><strong>1 King bed</strong></span>
           <span><strong>Up to 2 guests</strong></span>
-          <span><strong>~20–22 m²</strong></span>
-          <span><strong>From 900,000 ₫ / night</strong></span>
+          <span><strong>~32 m²</strong></span>
+          <span><strong>From 1,300,000 ₫ / night</strong></span>
         </div>
       </div>
 
@@ -119,7 +119,7 @@ $gallery_defaults = [
 
         <div id="booking-widget"
              data-room-id="vip"
-             data-room-name="VIP — Private Bathtub"
+             data-room-name="Premium"
              data-room-type="vip"
              data-price="<?= (int)$live_price_vnd ?>">
         </div>

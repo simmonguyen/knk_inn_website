@@ -34,10 +34,10 @@ if ($expected === "" || !hash_equals($expected, $got)) {
 }
 
 $ROOM_LABELS = [
-    "basic"             => "Basic Queen Room",
-    "standard-nowindow" => "Standard (no window)",
-    "standard-balcony"  => "Standard with balcony",
-    "vip"               => "VIP w/ tub",
+    "basic"             => "Basic",
+    "standard-nowindow" => "Standard",
+    "standard-balcony"  => "Superior",
+    "vip"               => "Premium",
 ];
 
 $holds = bookings_list_all(true);

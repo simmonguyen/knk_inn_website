@@ -97,10 +97,10 @@ dd_log("Recipient: $to");
 $today_ymd    = date("Y-m-d");
 $tomorrow_ymd = date("Y-m-d", strtotime("+1 day"));
 $ROOM_LBL = [
-    "basic"             => "Basic Queen Room",
-    "standard-nowindow" => "Standard (no window)",
-    "standard-balcony"  => "Standard with balcony",
-    "vip"               => "VIP w/ tub",
+    "basic"             => "Basic",
+    "standard-nowindow" => "Standard",
+    "standard-balcony"  => "Superior",
+    "vip"               => "Premium",
 ];
 
 [$fp, $bdata] = bookings_open();

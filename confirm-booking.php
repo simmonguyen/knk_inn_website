@@ -20,10 +20,10 @@ require_once __DIR__ . "/includes/email_template.php";
 require_once __DIR__ . "/includes/smtp_send.php";
 
 $ROOM_LABELS = [
-    "basic"             => "Basic Queen Room",
-    "standard-nowindow" => "Standard (no window)",
-    "standard-balcony"  => "Standard with balcony",
-    "vip"               => "VIP w/ tub",
+    "basic"             => "Basic",
+    "standard-nowindow" => "Standard",
+    "standard-balcony"  => "Superior",
+    "vip"               => "Premium",
 ];
 
 $token  = $_GET["token"]  ?? "";

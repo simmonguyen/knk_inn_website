@@ -16,7 +16,7 @@ $slots = knk_slots_load();
  * back to the previous hardcoded number if the rooms table hasn't
  * been seeded yet — defensive against deploy-before-migrate. */
 $live_price_vnd = knk_room_type_lowest_default('standard-balcony');
-if ($live_price_vnd <= 0) $live_price_vnd = 700000;
+if ($live_price_vnd <= 0) $live_price_vnd = 1100000;
 
 $rp = function (string $section, int $idx, string $default) use ($slots): string {
     return '../' . knk_photo_src($slots, $section, $idx, $default);
@@ -44,24 +44,24 @@ $gallery_defaults = [
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Standard — Balcony — KnK Inn</title>
-<meta name="description" content="Book the Standard — Balcony at KnK Inn — balcony, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
+<title>Superior — KnK Inn</title>
+<meta name="description" content="Book a Superior room at KnK Inn — private balcony, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
 <?php
   /* OG / Twitter cards — driven by the same hero photo the page uses,
    * so what shows up on Facebook / WhatsApp / Tripadvisor previews
    * matches what guests see when they tap through. */
   $og_img = "https://knkinn.com/" . ltrim($rp('room_balcony', 1, 'rm_02.jpg'), './');
 ?>
-<meta property="og:title"        content="Standard with Balcony — KnK Inn, Saigon">
-<meta property="og:description"  content="Balcony room at KnK Inn — quiet, clean, fast Wi-Fi. Heart of District 1's backpacker scene.">
+<meta property="og:title"        content="Superior — KnK Inn, Saigon">
+<meta property="og:description"  content="Superior room with private balcony at KnK Inn — quiet, clean, fast Wi-Fi. Heart of District 1's backpacker scene.">
 <meta property="og:image"        content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <meta property="og:url"          content="https://knkinn.com/rooms/standard-balcony.php">
 <meta property="og:type"         content="website">
 <meta property="og:site_name"    content="KnK Inn">
 <meta property="og:locale"       content="en_US">
 <meta name="twitter:card"        content="summary_large_image">
-<meta name="twitter:title"       content="Standard with Balcony — KnK Inn">
-<meta name="twitter:description" content="Balcony · strong AC · rain shower · fast Wi-Fi. District 1, Saigon.">
+<meta name="twitter:title"       content="Superior — KnK Inn">
+<meta name="twitter:description" content="Superior with balcony · strong AC · rain shower · fast Wi-Fi. District 1, Saigon.">
 <meta name="twitter:image"       content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -111,13 +111,13 @@ $gallery_defaults = [
 
       <div class="room-top-desc">
         <span class="eyebrow">Accommodation · Floors 2, 3 and 4</span>
-        <h1 class="display-lg">Standard · <em>Balcony.</em></h1>
-        <p class="room-hero-lede">A bright Standard with a private balcony over De Tham — step out for a morning coffee or an evening beer while the street wakes up below. Available on floors 2, 3 and 4; the higher the floor, the quieter the night and the better the view. Let us know your preferred floor at booking.</p>
+        <h1 class="display-lg"><em>Superior.</em></h1>
+        <p class="room-hero-lede">A bright Queen room with a private balcony over De Tham — step out for a morning coffee or an evening beer while the street wakes up below. Available on floors 2, 3 and 4; the higher the floor, the quieter the night and the better the view. Let us know your preferred floor at booking.</p>
         <div class="room-hero-meta">
           <span><strong>1 Queen bed</strong></span>
           <span><strong>Up to 2 guests</strong></span>
-          <span><strong>~16 m²</strong></span>
-          <span><strong>From 700,000 ₫ / night</strong></span>
+          <span><strong>~25 m²</strong></span>
+          <span><strong>From 1,100,000 ₫ / night</strong></span>
         </div>
       </div>
 
@@ -132,7 +132,7 @@ $gallery_defaults = [
 
         <div id="booking-widget"
              data-room-id="standard-balcony"
-             data-room-name="Standard — Balcony"
+             data-room-name="Superior"
              data-room-type="standard"
              data-price="<?= (int)$live_price_vnd ?>">
         </div>

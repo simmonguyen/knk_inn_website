@@ -130,10 +130,10 @@ if ($type === "booking") {
 
     // Build Simmo's email
     $roomLabels = [
-        "basic"             => "Basic Queen Room",
-        "standard-nowindow" => "Standard (no window)",
-        "standard-balcony"  => "Standard with balcony",
-        "vip"               => "VIP w/ tub",
+        "basic"             => "Basic",
+        "standard-nowindow" => "Standard",
+        "standard-balcony"  => "Superior",
+        "vip"               => "Premium",
     ];
     $roomLabel = $roomLabels[$roomId] ?? $roomId;
 

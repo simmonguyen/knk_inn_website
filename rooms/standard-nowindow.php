@@ -13,7 +13,7 @@ require_once __DIR__ . '/../includes/photo_slots_store.php';
 require_once __DIR__ . '/../includes/room_rates_store.php';
 $slots = knk_slots_load();
 $live_price_vnd = knk_room_type_lowest_default('standard-nowindow');
-if ($live_price_vnd <= 0) $live_price_vnd = 600000;
+if ($live_price_vnd <= 0) $live_price_vnd = 850000;
 
 // We're one folder deep, so all asset URLs need a "../" prefix.
 $rp = function (string $section, int $idx, string $default) use ($slots): string {
@@ -35,19 +35,19 @@ $gallery_defaults = [
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Standard — No Window — KnK Inn</title>
-<meta name="description" content="Book the Standard — No Window at KnK Inn — no window, strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
+<title>Standard — KnK Inn</title>
+<meta name="description" content="Book a Standard room at KnK Inn — strong AC, rain shower, fast Wi-Fi. 96 De Tham, District 1, Saigon.">
 <?php $og_img = "https://knkinn.com/" . ltrim($rp('room_nowindow', 1, 'rm_00.jpg'), './'); ?>
-<meta property="og:title"        content="Standard No Window — KnK Inn, Saigon">
-<meta property="og:description"  content="Quiet ground-floor room at KnK Inn — strong AC, rain shower, fast Wi-Fi. District 1.">
+<meta property="og:title"        content="Standard — KnK Inn, Saigon">
+<meta property="og:description"  content="Standard room at KnK Inn — strong AC, rain shower, fast Wi-Fi. District 1.">
 <meta property="og:image"        content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <meta property="og:url"          content="https://knkinn.com/rooms/standard-nowindow.php">
 <meta property="og:type"         content="website">
 <meta property="og:site_name"    content="KnK Inn">
 <meta property="og:locale"       content="en_US">
 <meta name="twitter:card"        content="summary_large_image">
-<meta name="twitter:title"       content="Standard No Window — KnK Inn">
-<meta name="twitter:description" content="Quiet ground-floor room — strong AC, rain shower, fast Wi-Fi. District 1, Saigon.">
+<meta name="twitter:title"       content="Standard — KnK Inn">
+<meta name="twitter:description" content="Standard room — strong AC, rain shower, fast Wi-Fi. District 1, Saigon.">
 <meta name="twitter:image"       content="<?= htmlspecialchars($og_img, ENT_QUOTES, "UTF-8") ?>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -96,14 +96,14 @@ $gallery_defaults = [
     <div class="room-top-grid">
 
       <div class="room-top-desc">
-        <span class="eyebrow">Accommodation · Ground floor</span>
-        <h1 class="display-lg">Standard · <em>No window.</em></h1>
-        <p class="room-hero-lede">The ground-floor Standard — steps from reception and a solid choice when you want a cool, dark, quiet room to crash in. No window, which keeps it pitch-black for night shifts and serious sleep-ins.</p>
+        <span class="eyebrow">Accommodation · Floor 1</span>
+        <h1 class="display-lg"><em>Standard.</em></h1>
+        <p class="room-hero-lede">A solid, comfortable Standard — King or Queen bed, strong AC, rain shower, and a window letting Saigon's morning light in. Two units on Floor 1; let us know your bed preference at booking.</p>
         <div class="room-hero-meta">
-          <span><strong>1 Queen bed</strong></span>
+          <span><strong>King or Queen bed</strong></span>
           <span><strong>Up to 2 guests</strong></span>
-          <span><strong>~14 m²</strong></span>
-          <span><strong>From 600,000 ₫ / night</strong></span>
+          <span><strong>~25 m²</strong></span>
+          <span><strong>From 850,000 ₫ / night</strong></span>
         </div>
       </div>
 
@@ -118,7 +118,7 @@ $gallery_defaults = [
 
         <div id="booking-widget"
              data-room-id="standard-nowindow"
-             data-room-name="Standard — No Window"
+             data-room-name="Standard"
              data-room-type="standard"
              data-price="<?= (int)$live_price_vnd ?>">
         </div>

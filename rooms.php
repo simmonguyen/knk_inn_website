@@ -16,9 +16,9 @@ $slots = knk_slots_load();
 /* Live "From XXX VND / night" copy from the rate engine. Falls back
  * to the previous hardcoded copy if the rooms registry isn't seeded. */
 $rate_basic    = knk_room_type_lowest_default('basic');             if ($rate_basic    <= 0) $rate_basic    = 800000;
-$rate_nowindow = knk_room_type_lowest_default('standard-nowindow'); if ($rate_nowindow <= 0) $rate_nowindow = 600000;
-$rate_balcony  = knk_room_type_lowest_default('standard-balcony');  if ($rate_balcony  <= 0) $rate_balcony  = 700000;
-$rate_vip      = knk_room_type_lowest_default('vip');               if ($rate_vip      <= 0) $rate_vip      = 900000;
+$rate_nowindow = knk_room_type_lowest_default('standard-nowindow'); if ($rate_nowindow <= 0) $rate_nowindow = 850000;
+$rate_balcony  = knk_room_type_lowest_default('standard-balcony');  if ($rate_balcony  <= 0) $rate_balcony  = 1100000;
+$rate_vip      = knk_room_type_lowest_default('vip');               if ($rate_vip      <= 0) $rate_vip      = 1300000;
 $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',') . ' ₫'; };
 ?>
 <!DOCTYPE html>
@@ -94,7 +94,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
 
 <section class="section" style="padding-top:2rem;">
   <div class="container">
-    <p class="rooms-intro" data-i18n="rooms.intro">Every KnK Inn room has blackout curtains, strong AC, a rain shower, in-room safe, fast Wi-Fi and a proper mattress. Choose between Standard rooms (with balcony) and VIP rooms (with private bathtub). Ask about long-stay rates.</p>
+    <p class="rooms-intro" data-i18n="rooms.intro">Every KnK Inn room has blackout curtains, strong AC, a rain shower, in-room safe, fast Wi-Fi and a proper mattress. Four tiers — Basic, Standard, Superior (with balcony) and Premium (with private bathtub). Ask about long-stay rates.</p>
 
     <div class="rooms-features">
       <div class="room-feat reveal">
@@ -134,7 +134,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 4, 'rm_00.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 4, 'Basic room with skylight')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From <?= $fmt_vnd($rate_basic) ?> / night</span>
-          <span class="room-card-name">Basic · Queen</span>
+          <span class="room-card-name">Basic</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
       </a>
@@ -143,7 +143,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 1, 'rm_00.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 1, 'Standard room, no window')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From <?= $fmt_vnd($rate_nowindow) ?> / night</span>
-          <span class="room-card-name">Standard · No Window</span>
+          <span class="room-card-name">Standard</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
       </a>
@@ -152,7 +152,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 2, 'rm_02.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 2, 'Standard room with balcony')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From <?= $fmt_vnd($rate_balcony) ?> / night</span>
-          <span class="room-card-name">Standard · Balcony</span>
+          <span class="room-card-name">Superior</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
       </a>
@@ -161,7 +161,7 @@ $fmt_vnd = function (int $vnd): string { return number_format($vnd, 0, '.', ',')
         <img src="<?= htmlspecialchars(knk_photo_src($slots, 'rooms_types', 3, 'rm_04.jpg')) ?>" alt="<?= htmlspecialchars(knk_photo_alt($slots, 'rooms_types', 3, 'VIP room with private bathtub')) ?>">
         <div class="room-card-overlay">
           <span class="room-card-floor">From <?= $fmt_vnd($rate_vip) ?> / night</span>
-          <span class="room-card-name">VIP · Private Bathtub</span>
+          <span class="room-card-name">Premium</span>
           <span class="room-card-cta">View &amp; Book →</span>
         </div>
       </a>
