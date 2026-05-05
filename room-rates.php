@@ -7,7 +7,8 @@
  * be the one tuning prices.
  *
  * What you can do here:
- *   - Pick a room (one of 7 physical rooms)
+ *   - Pick a room (one of 9 physical rooms — Basic, two
+ *     Standard, three Superior, three Premium)
  *   - Edit its default ("rack") rate
  *   - Paint a season + nightly rate across a date range
  *   - See the next ~90 days as a calendar grid, colour-coded by
@@ -233,7 +234,7 @@ function rr_vnd(int $n): string  { return number_format($n) . " ₫"; }
 <main class="rr-page">
   <h1 style="margin:0.2rem 0 0.4rem;">Room rates</h1>
   <p class="rr-help" style="margin:0 0 0.8rem;">
-    Per-room nightly pricing for the next 90 days. The OTAs (Airbnb / Booking.com / Tripadvisor) read these rates when guests look at your listings.
+    Per-room nightly pricing for direct bookings on knkinn.com. Booking.com and Airbnb read prices from Beds24, not from this page — set those up there. This page is what the website's enquiry form quotes when guests book direct.
   </p>
 
   <?php if ($flash !== ""): ?><div class="rr-flash ok"><?= rr_h($flash) ?></div><?php endif; ?>

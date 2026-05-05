@@ -88,9 +88,10 @@ function knk_room_get(string $slug): ?array {
 }
 
 /**
- * All rooms of a given type (standard-nowindow / standard-balcony
- * / vip). Used when a guest picks a room *type* on the website
- * and we need to map them to the cheapest available physical room.
+ * All rooms of a given type (basic / standard-nowindow /
+ * standard-balcony / vip). Used when a guest picks a room *type*
+ * on the website and we need to map them to the cheapest available
+ * physical room.
  */
 function knk_rooms_by_type(string $type): array {
     $type = trim($type);
@@ -120,8 +121,10 @@ function knk_rooms_by_type(string $type): array {
 }
 
 /**
- * Display rate for a room *type* (the website uses 'standard-nowindow',
- * 'standard-balcony', 'vip'; the rate engine works on per-room slugs).
+ * Display rate for a room *type* (the website uses 'basic',
+ * 'standard-nowindow', 'standard-balcony', 'vip' as the legacy
+ * type slugs; Beds24-facing copy is Basic / Standard / Superior /
+ * Premium. The rate engine works on per-room slugs).
  * Returns the lowest default among the active rooms of that type so
  * the public page can show "From XXX VND / night".
  *
