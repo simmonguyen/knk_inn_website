@@ -230,6 +230,90 @@ function knk_render_lightbox_markup(): void {
 }
 
 /**
+ * Nested-gallery awareness for the Photo Manager.
+ *
+ * Several photo-slot sections aren't actually the source of truth on
+ * the public site — folder-backed nested galleries either override the
+ * slot photos (fallback pattern: per-room subpages) or sit "behind"
+ * them (cover pattern: rooms_common slots #2/#4/#6 open a multi-photo
+ * lightbox on click). Without surfacing this, the slot tiles in the
+ * admin UI look misleading: Simmo updates a slot, doesn't see the
+ * change live, and assumes the upload broke.
+ *
+ * Returns metadata for a given (section, slot_index), or null if that
+ * slot has no nested gallery wired up. Shape:
+ *   [
+ *     "kind"     => "cover" | "fallback",
+ *     "slugs"    => [folder slugs under /assets/img/knk-260428/],
+ *     "totals"   => [slug => photo count],
+ *     "friendly" => [slug => friendly display name],
+ *   ]
+ *
+ * "friendly" maps a slug to a name Simmo recognises ("Room 9",
+ * "Sport Pub") so the Photo Manager UI can talk in plain English
+ * without leaking server paths into the admin.
+ *
+ * "cover"    — slot's photo IS the cover; clicking it on the public
+ *              site opens an N-photo gallery from the folder.
+ * "fallback" — slot photos only render when the folder is empty.
+ *              Currently populated folders take precedence.
+ *
+ * If $slot_index is 0, returns section-wide metadata (used for the
+ * banner on per-room sections that applies to all slots).
+ */
+function knk_slot_nested_gallery(string $section, int $slot_index = 0): ?array {
+    // Slug → friendly name. Used by the admin so Simmo sees "Room 9"
+    // instead of "/assets/img/knk-260428/room-9/".
+    static $friendly_names = [
+        "sport-pub"        => "Sport Pub",
+        "wine-bar-floor-5" => "Level 5 Bar",
+        "rooftop"          => "Rooftop",
+        "room-1"           => "Room 1",
+        "room-2"           => "Room 2",
+        "room-3"           => "Room 3",
+        "room-4"           => "Room 4",
+        "room-5"           => "Room 5",
+        "room-6"           => "Room 6",
+        "room-7"           => "Room 7",
+        "room-8"           => "Room 8",
+        "room-9"           => "Room 9",
+    ];
+    $build = function (string $kind, array $slugs) use ($friendly_names): array {
+        $totals = [];
+        $friendly = [];
+        foreach ($slugs as $s) {
+            $totals[$s]   = count(knk_gallery_photos($s));
+            $friendly[$s] = $friendly_names[$s] ?? $s;
+        }
+        return ["kind" => $kind, "slugs" => $slugs, "totals" => $totals, "friendly" => $friendly];
+    };
+
+    // rooms_common: only slots #2 / #4 / #6 are gallery covers.
+    if ($section === "rooms_common") {
+        $covers = [2 => "sport-pub", 4 => "wine-bar-floor-5", 6 => "rooftop"];
+        if ($slot_index === 0) {
+            return $build("cover", array_values($covers));
+        }
+        if (!isset($covers[$slot_index])) return null;
+        return $build("cover", [$covers[$slot_index]]);
+    }
+
+    // Per-room sections: every slot is a fallback for the folder set.
+    // The mapping mirrors the consumers in /rooms/*.php.
+    static $section_to_slugs = [
+        "room_basic"    => ["room-9"],
+        "room_nowindow" => ["room-1", "room-2"],
+        "room_balcony"  => ["room-4", "room-6", "room-8"],
+        "room_vip"      => ["room-3", "room-5", "room-7"],
+    ];
+    if (isset($section_to_slugs[$section])) {
+        return $build("fallback", $section_to_slugs[$section]);
+    }
+
+    return null;
+}
+
+/**
  * Convenience: render a single trigger element wrapping arbitrary
  * markup, so a caller can do
  *   <?php echo knk_gallery_trigger('rooftop', '<img src="…">'); ?>

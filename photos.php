@@ -325,6 +325,52 @@ $all_tags    = knk_photo_tags();
     .slot-card .meta .lbl { color: var(--cream); font-weight: 600; }
     .slot-card .meta .lbl-small { font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; color: var(--cream-faint); }
 
+    /* "+N photos" badge — surfaces folder-backed nested galleries that
+       open from rooms_common cover slots (#2 Sport Pub, #4 Level 5 Bar,
+       #6 Rooftop). The slot photo is just the cover; the badge tells
+       Simmo the live page actually opens an N-photo gallery from a
+       folder he can't see in this UI. */
+    .slot-card .gallery-badge {
+      position: absolute; top: 6px; left: 6px;
+      background: rgba(0,0,0,0.78); color: var(--gold);
+      font-size: 0.68rem; font-weight: 700; letter-spacing: 0.08em;
+      padding: 3px 7px; border-radius: 12px;
+      border: 1px solid rgba(201,170,113,0.4);
+      display: inline-flex; align-items: center;
+      cursor: help; pointer-events: auto; z-index: 2;
+    }
+    .slot-card .thumb { position: relative; }
+
+    /* Section-level banner — sits between the section heading and the
+       slot grid for per-room sections, where the live page reads from
+       /assets/img/knk-260428/<room-slug>/ folders and the slots here
+       are just the fallback. Two states: live (folders populated, slots
+       below are dead-letter) and fallback-active (folders empty, slots
+       are what visitors see). */
+    .nested-banner {
+      margin: 0.5rem 0 1.4rem;
+      padding: 0.75rem 1rem;
+      border-radius: 5px;
+      font-size: 0.84rem; line-height: 1.5;
+      color: var(--cream-dim);
+    }
+    .nested-banner strong { color: var(--cream); display: block; margin-bottom: 0.25rem; font-size: 0.88rem; }
+    .nested-banner code {
+      background: rgba(0,0,0,0.4); color: var(--gold);
+      font-size: 0.78rem; padding: 1px 6px; border-radius: 3px;
+      font-family: ui-monospace, "SF Mono", "Fira Code", monospace;
+      word-break: break-all;
+    }
+    .nested-banner.live {
+      background: rgba(127,208,138,0.06);
+      border: 1px solid rgba(127,208,138,0.3);
+    }
+    .nested-banner.live strong { color: #a4dba9; }
+    .nested-banner.fallback-active {
+      background: rgba(201,170,113,0.06);
+      border: 1px solid rgba(201,170,113,0.3);
+    }
+
     .slot-actions { display: flex; gap: 0.35rem; padding: 0 0.7rem 0.7rem; flex-wrap: wrap; }
     .slot-actions .btn {
       flex: 1; min-width: 0; padding: 0.5rem 0.55rem; font-size: 0.72rem;
@@ -337,6 +383,15 @@ $all_tags    = knk_photo_tags();
       background: transparent; color: var(--cream-dim); border: 1px solid rgba(201,170,113,0.3);
     }
     .slot-actions .btn.ghost:hover { color: var(--gold); border-color: var(--gold); }
+    .slot-actions .btn[disabled] {
+      cursor: not-allowed; opacity: 0.4;
+    }
+    .slot-actions .btn[disabled]:hover {
+      background: var(--gold); color: var(--brown-deep); border-color: rgba(201,170,113,0.3);
+    }
+    .slot-actions .btn.ghost[disabled]:hover {
+      background: transparent; color: var(--cream-dim);
+    }
     .slot-card input[type="file"] { display: none; }
 
     .slot-card .custom-pill {
@@ -354,8 +409,12 @@ $all_tags    = knk_photo_tags();
     .slot-card.err .status  { display: block; color: #ff9a8a; }
     .slot-card.ok .status   { display: block; color: #7fd08a; }
 
-    /* Drop zone (gallery tab) */
+    /* Drop zone (gallery tab) — must be display:block, otherwise the
+       <label> defaults to inline and the dashed border fractures around
+       each block child (strong + p), which ends up looking like two
+       broken `[` shapes stacked on the left. */
     .drop {
+      display: block;
       border: 2px dashed rgba(201,170,113,0.4); border-radius: 6px; padding: 1.6rem 1.4rem;
       text-align: center; background: rgba(24,12,3,0.4); cursor: pointer;
       transition: all 0.3s var(--ease-out); margin-bottom: 1rem;
@@ -427,6 +486,38 @@ $all_tags    = knk_photo_tags();
       padding: 2px 6px; border-radius: 3px; letter-spacing: 0.08em;
       text-transform: uppercase;
     }
+
+    /* Inline action buttons — top-right of each tile.
+       Visible always on touch / when tile is hidden, and on hover for desktop. */
+    .tile .tile-actions {
+      position: absolute; top: 4px; right: 4px;
+      display: flex; flex-direction: column; gap: 4px;
+      opacity: 0; transform: translateY(-2px);
+      transition: opacity 0.15s var(--ease-out), transform 0.15s var(--ease-out);
+      z-index: 5;
+    }
+    .tile:hover .tile-actions,
+    .tile.hidden-photo .tile-actions { opacity: 1; transform: translateY(0); }
+    @media (hover: none) {
+      /* Touch devices: always show so Simmo can tap on his phone. */
+      .tile .tile-actions { opacity: 1; transform: translateY(0); }
+    }
+    .tile .tile-act {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 26px; height: 26px; padding: 0; border: 0; cursor: pointer;
+      background: rgba(0,0,0,0.78); color: var(--cream); border-radius: 4px;
+      font-size: 0.78rem; line-height: 1; font-weight: 700;
+      transition: background 0.15s, color 0.15s;
+    }
+    .tile .tile-act:hover { background: var(--gold); color: var(--brown-deep); }
+    .tile .tile-act[disabled] {
+      cursor: not-allowed; opacity: 0.45; background: rgba(0,0,0,0.6);
+    }
+    .tile .tile-act[disabled]:hover { background: rgba(0,0,0,0.6); color: var(--cream); }
+    .tile .tile-act.danger:hover { background: #ff7a6c; color: #2a0a05; }
+    .tile .tile-act svg { width: 14px; height: 14px; }
+    /* Stop the Sortable drag from grabbing when interacting with action buttons */
+    .tile .tile-actions, .tile .tile-act { touch-action: manipulation; }
 
     .empty { color: var(--cream-faint); text-align: center; padding: 2rem; font-size: 0.9rem; }
     .count { color: var(--cream-dim); font-size: 0.82rem; margin-bottom: 0.4rem; }
@@ -588,13 +679,61 @@ $all_tags    = knk_photo_tags();
   <!-- ===================== TAB: HOMEPAGE SLOTS ===================== -->
   <div id="tab-slots" class="tab-panel <?= $tab === 'slots' ? 'active' : '' ?>">
 
+    <?php
+      // Pull in the photo_galleries lib so we can flag slots that have
+      // a folder-backed nested gallery wired to them on the public side.
+      require_once __DIR__ . "/includes/photo_galleries.php";
+    ?>
     <?php foreach ($sections as $s): ?>
+      <?php
+        // Section-level nested-gallery summary. Drives the "fallback"
+        // banner on per-room sections.
+        $section_nested = knk_slot_nested_gallery($s["key"], 0);
+      ?>
       <section class="section-card">
         <div class="sc-head">
           <span class="where"><?= htmlspecialchars($s["where"]) ?></span>
           <h2><?= htmlspecialchars($s["display"]) ?></h2>
           <p><?= htmlspecialchars($s["blurb"]) ?></p>
         </div>
+
+        <?php
+          // Per-room sections — surface a banner only when at least
+          // one room's gallery has photos (in which case the slots
+          // below are dead-letter for that room). If every gallery is
+          // empty, the slots ARE live and there's nothing to warn
+          // about, so we hide the banner entirely.
+          $live_rooms = [];
+          $empty_rooms = [];
+          if ($section_nested && $section_nested["kind"] === "fallback") {
+              foreach ($section_nested["totals"] as $slug => $n) {
+                  $name = $section_nested["friendly"][$slug] ?? $slug;
+                  if ($n > 0) $live_rooms[]  = ["name" => $name, "n" => $n];
+                  else        $empty_rooms[] = ["name" => $name];
+              }
+          }
+        ?>
+        <?php if (!empty($live_rooms)): ?>
+          <div class="nested-banner live">
+            <strong>Heads up — these slots aren't what's on the live page for some rooms.</strong>
+            The public site is showing the photo set for
+            <?php
+              $bits = array_map(function ($r) {
+                  return '<b>' . htmlspecialchars($r["name"]) . '</b> (' . (int)$r["n"]
+                       . ' photo' . ($r["n"] === 1 ? '' : 's') . ')';
+              }, $live_rooms);
+              echo implode(", ", $bits);
+            ?>.
+            The slots below only kick in for rooms whose photo set is empty<?php if (!empty($empty_rooms)): ?>
+              — currently
+              <?php
+                $bits = array_map(function ($r) {
+                    return '<b>' . htmlspecialchars($r["name"]) . '</b>';
+                }, $empty_rooms);
+                echo implode(", ", $bits);
+              ?> (so those slots are live)<?php endif; ?>.
+          </div>
+        <?php endif; ?>
 
         <div class="slot-grid">
           <?php for ($i = 1; $i <= $s["slots"]; $i++):
@@ -605,6 +744,10 @@ $all_tags    = knk_photo_tags();
             $src         = $filename !== "" ? ("assets/img/" . $filename) : "";
             $is_custom   = knk_slot_is_custom($slots, $section_key, $i);
             $slot_id     = "slot-" . $section_key . "-" . $i;
+            // Per-slot nested gallery (cover pattern: rooms_common #2/#4/#6)
+            $slot_nested = knk_slot_nested_gallery($section_key, $i);
+            $cover_count = ($slot_nested && $slot_nested["kind"] === "cover")
+                ? array_sum($slot_nested["totals"]) : 0;
           ?>
             <div class="slot-card" id="<?= htmlspecialchars($slot_id) ?>"
                  data-section="<?= htmlspecialchars($section_key) ?>"
@@ -620,6 +763,15 @@ $all_tags    = knk_photo_tags();
                 <?php else: ?>
                   <span class="missing">No photo</span>
                 <?php endif; ?>
+
+                <?php if ($cover_count > 0): ?>
+                  <?php $cover_name = $slot_nested["friendly"][$slot_nested["slugs"][0]] ?? "this space"; ?>
+                  <span class="gallery-badge"
+                        title="Tapping this tile on the public site opens a <?= (int)$cover_count ?>-photo gallery for <?= htmlspecialchars($cover_name) ?>. The cover photo is the one you set here. The other <?= (int)$cover_count - 1 ?> are managed separately for now — talk to Ben to swap them.">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px;margin-right:3px;vertical-align:-1px;"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                    +<?= (int)$cover_count ?>
+                  </span>
+                <?php endif; ?>
               </div>
 
               <div class="meta">
@@ -634,9 +786,11 @@ $all_tags    = knk_photo_tags();
               <div class="slot-actions">
                 <button class="btn slot-replace" type="button">Replace</button>
                 <input type="file" accept="image/*" class="slot-file">
-                <?php if ($is_custom): ?>
-                  <button class="btn ghost slot-reset" type="button">Reset</button>
-                <?php endif; ?>
+                <button class="btn ghost slot-reset" type="button"
+                        <?= $is_custom ? "" : "disabled" ?>
+                        title="<?= $is_custom ? "Reset this slot to its built-in default photo" : "Already at the built-in default" ?>">
+                  Reset
+                </button>
               </div>
 
               <div class="status">Ready</div>
@@ -703,6 +857,16 @@ $all_tags    = knk_photo_tags();
           $src_label = $row["source"] === "seed" ? "Built-in" : ($row["source"] === "gallery_live" ? "Live" : "Slot");
           $tags_csv  = implode(",", $row["tags"]);
         ?>
+          <?php
+            $is_seed       = $row["source"] === "seed";
+            $remove_disabled = $is_seed;
+            $remove_title  = $is_seed
+                ? "Built-in photo — can only be hidden, not removed."
+                : "Remove this photo from the library";
+            $hide_title    = $row["hidden"]
+                ? "Currently hidden — click to show on the public site"
+                : "Hide this photo from the public site (it stays in the library)";
+          ?>
           <div class="tile<?= $row["hidden"] ? " hidden-photo" : "" ?>"
                data-filename="<?= htmlspecialchars($row["filename"]) ?>"
                data-source="<?= htmlspecialchars($row["source"]) ?>"
@@ -713,6 +877,31 @@ $all_tags    = knk_photo_tags();
             <?php if ($row["hidden"]): ?>
               <span class="hidden-flag">Hidden</span>
             <?php endif; ?>
+
+            <!-- Inline tile actions (Hide / Remove) — saves Simmo from
+                 having to open the detail modal for the common cases. -->
+            <div class="tile-actions">
+              <button type="button"
+                      class="tile-act js-tile-hide"
+                      title="<?= htmlspecialchars($hide_title) ?>"
+                      aria-label="<?= htmlspecialchars($hide_title) ?>">
+                <?php if ($row["hidden"]): ?>
+                  <!-- eye / show -->
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>
+                <?php else: ?>
+                  <!-- eye-off / hide -->
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.77 19.77 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-3.16 4.19M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                <?php endif; ?>
+              </button>
+              <button type="button"
+                      class="tile-act danger js-tile-remove"
+                      title="<?= htmlspecialchars($remove_title) ?>"
+                      aria-label="<?= htmlspecialchars($remove_title) ?>"
+                      <?= $remove_disabled ? "disabled" : "" ?>>
+                <!-- trash -->
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+              </button>
+            </div>
           </div>
         <?php endforeach; ?>
       </div>
@@ -1098,10 +1287,89 @@ function postForm(obj) {
   var justDragged = false;
   if (grid) {
     grid.querySelectorAll('.tile').forEach(function (t) {
-      t.addEventListener('click', function () {
+      t.addEventListener('click', function (e) {
+        // Inline action buttons handle their own click — don't open modal.
+        if (e.target.closest('.tile-act')) return;
         if (justDragged) { justDragged = false; return; }
         openDetail(t);
       });
+
+      // Wire the inline Hide button.
+      var hideBtn = t.querySelector('.js-tile-hide');
+      if (hideBtn) {
+        hideBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          var newHidden = t.getAttribute('data-hidden') !== '1';
+          hideBtn.disabled = true;
+          postForm({
+            action: 'library_set_hidden',
+            filename: t.getAttribute('data-filename'),
+            hidden: newHidden ? '1' : '0'
+          }).then(function (res) {
+            if (!res || !res.ok) {
+              flash('Failed: ' + ((res && res.error) || 'unknown'), 'err');
+              hideBtn.disabled = false;
+              return;
+            }
+            // Optimistic UI update — no full reload, keeps Simmo's scroll.
+            t.setAttribute('data-hidden', newHidden ? '1' : '0');
+            t.classList.toggle('hidden-photo', newHidden);
+            // Update flag pill
+            var flag = t.querySelector('.hidden-flag');
+            if (newHidden && !flag) {
+              flag = document.createElement('span');
+              flag.className = 'hidden-flag';
+              flag.textContent = 'Hidden';
+              t.appendChild(flag);
+            } else if (!newHidden && flag) {
+              flag.remove();
+            }
+            // Swap the eye icon
+            hideBtn.innerHTML = newHidden
+              ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8S1 12 1 12z"/><circle cx="12" cy="12" r="3"/></svg>'
+              : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.77 19.77 0 0 1 5.06-5.94M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-3.16 4.19M14.12 14.12A3 3 0 1 1 9.88 9.88"/><line x1="1" y1="1" x2="23" y2="23"/></svg>';
+            var newTitle = newHidden
+              ? 'Currently hidden — click to show on the public site'
+              : 'Hide this photo from the public site (it stays in the library)';
+            hideBtn.setAttribute('title', newTitle);
+            hideBtn.setAttribute('aria-label', newTitle);
+            hideBtn.disabled = false;
+            flash(newHidden ? 'Hidden.' : 'Visible.', 'ok');
+          }).catch(function (err) {
+            flash('Failed: ' + (err.message || err), 'err');
+            hideBtn.disabled = false;
+          });
+        });
+      }
+
+      // Wire the inline Remove button.
+      var rmBtn = t.querySelector('.js-tile-remove');
+      if (rmBtn && !rmBtn.disabled) {
+        rmBtn.addEventListener('click', function (e) {
+          e.stopPropagation();
+          if (!confirm("Remove this photo from the library? This can't be undone.")) return;
+          rmBtn.disabled = true;
+          postForm({
+            action: 'library_delete',
+            filename: t.getAttribute('data-filename')
+          }).then(function (res) {
+            if (!res || !res.ok) {
+              flash('Delete failed: ' + ((res && res.error) || 'unknown'), 'err');
+              rmBtn.disabled = false;
+              return;
+            }
+            // Fade-and-remove the tile
+            t.style.transition = 'opacity 0.25s, transform 0.25s';
+            t.style.opacity = '0';
+            t.style.transform = 'scale(0.85)';
+            setTimeout(function () { t.remove(); }, 250);
+            flash('Removed.', 'ok');
+          }).catch(function (err) {
+            flash('Delete failed: ' + (err.message || err), 'err');
+            rmBtn.disabled = false;
+          });
+        });
+      }
     });
 
     // Drag-to-reorder via Sortable.js
@@ -1115,6 +1383,10 @@ function postForm(obj) {
         delay: 180,
         delayOnTouchOnly: true,
         touchStartThreshold: 4,
+        // Don't initiate a drag from the inline action buttons —
+        // tapping Hide/Remove must NOT pick the tile up for reorder.
+        filter: '.tile-act, .tile-actions',
+        preventOnFilter: false,
         onStart: function () { justDragged = false; },
         onEnd:   function (evt) {
           if (evt.oldIndex === evt.newIndex) return;

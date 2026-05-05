@@ -103,13 +103,14 @@ function knk_photo_sections(): array {
         [
             "key"     => "rooms_types",
             "display" => "Rooms page — room cards",
-            "where"   => "rooms.php — the three big room-type cards near the top",
-            "blurb"   => "One hero photo per room type. Shown on the Rooms page and as the link image guests click to open each room.",
-            "slots"   => 3,
+            "where"   => "rooms.php — the four big room-category cards near the top",
+            "blurb"   => "One hero photo per Beds24 room category. Shown on the Rooms page and as the link image guests click to open each room.",
+            "slots"   => 4,
             "labels"  => [
-                1 => "Standard · No Window",
-                2 => "Standard · Balcony",
-                3 => "VIP · Private Bathtub",
+                1 => "Standard",
+                2 => "Superior",
+                3 => "Premium",
+                4 => "Basic",
             ],
         ],
         [
@@ -128,8 +129,21 @@ function knk_photo_sections(): array {
             ],
         ],
         [
+            "key"     => "room_basic",
+            "display" => "Room page — Basic",
+            "where"   => "rooms/basic.php — hero banner and the in-room gallery",
+            "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–4 are the in-room gallery tiles below.",
+            "slots"   => 4,
+            "labels"  => [
+                1 => "Hero banner",
+                2 => "Gallery 1",
+                3 => "Gallery 2",
+                4 => "Gallery 3",
+            ],
+        ],
+        [
             "key"     => "room_nowindow",
-            "display" => "Room page — Standard · No Window",
+            "display" => "Room page — Standard",
             "where"   => "rooms/standard-nowindow.php — hero banner and the in-room gallery",
             "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–4 are the in-room gallery tiles below.",
             "slots"   => 4,
@@ -142,7 +156,7 @@ function knk_photo_sections(): array {
         ],
         [
             "key"     => "room_balcony",
-            "display" => "Room page — Standard · Balcony",
+            "display" => "Room page — Superior",
             "where"   => "rooms/standard-balcony.php — hero banner and the in-room gallery",
             "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–11 are the ten in-room gallery tiles below.",
             "slots"   => 11,
@@ -162,7 +176,7 @@ function knk_photo_sections(): array {
         ],
         [
             "key"     => "room_vip",
-            "display" => "Room page — VIP · Private Bathtub",
+            "display" => "Room page — Premium",
             "where"   => "rooms/vip.php — hero banner and the in-room gallery",
             "blurb"   => "Slot 1 is the wide hero banner at the top. Slots 2–6 are the five in-room gallery tiles below.",
             "slots"   => 6,
@@ -207,9 +221,10 @@ function knk_slot_defaults(): array {
         "sports_look_around#8" => "nw_69.jpg",
         "find_us#1"            => "nw_05.jpg",
         "find_us#2"            => "nw_33.jpg",
-        "rooms_types#1"        => "rm_00.jpg",
-        "rooms_types#2"        => "rm_02.jpg",
-        "rooms_types#3"        => "rm_04.jpg",
+        "rooms_types#1"        => "rm_00.jpg",  // Standard
+        "rooms_types#2"        => "rm_02.jpg",  // Superior
+        "rooms_types#3"        => "rm_04.jpg",  // Premium
+        "rooms_types#4"        => "rm_00.jpg",  // Basic — placeholder, swap to Room 9
         "rooms_common#1"       => "ex_01.jpg",
         "rooms_common#2"       => "ex_10.jpg",
         "rooms_common#3"       => "nw_57.jpg",
@@ -219,6 +234,11 @@ function knk_slot_defaults(): array {
 
         // Per-room subpages — slot 1 is the hero banner; remaining slots
         // are the gallery tiles in display order.
+        "room_basic#1"         => "rm_00.jpg",
+        "room_basic#2"         => "rm_00.jpg",
+        "room_basic#3"         => "nw_01.jpg",
+        "room_basic#4"         => "nw_41.jpg",
+
         "room_nowindow#1"      => "rm_00.jpg",
         "room_nowindow#2"      => "rm_00.jpg",
         "room_nowindow#3"      => "nw_01.jpg",

@@ -31,14 +31,10 @@ require_once __DIR__ . "/beds24_api.php";
  * Physical room inventory — keyed by room slug.
  *
  *   Ground floor:         1 × Basic (Room 9, Queen, skylight not window)
- *   1st floor:            1 × Standard (no window) — legacy slug
- *   2nd / 3rd / 4th:      each has 1 × Standard-balcony + 1 × VIP w/ tub
+ *   1st floor:            2 × Standard (Room 1 King + Room 2 Queen)
+ *   2nd / 3rd / 4th:      each has 1 × Superior + 1 × Premium
  *   --------------------------------------------------------------
- *                          1 + 1 + 3 + 3 = 8 rooms exposed via website
- *
- * (Beds24 has 9 actual physical rooms — the "standard-nowindow" slug
- * historically only tracked 1 of the 2 Standard units. Site qty kept
- * at 1 to stay conservative until that slug is split out properly.)
+ *                          1 + 2 + 3 + 3 = 9 rooms (matches Beds24)
  *
  * Availability is measured against these counts, so a slug only blocks
  * dates once every physical unit of that type is taken.
@@ -46,7 +42,7 @@ require_once __DIR__ . "/beds24_api.php";
 if (!isset($GLOBALS["KNK_ROOM_INVENTORY"])) {
     $GLOBALS["KNK_ROOM_INVENTORY"] = [
         "basic"             => 1,
-        "standard-nowindow" => 1,
+        "standard-nowindow" => 2,
         "standard-balcony"  => 3,
         "vip"               => 3,
     ];
