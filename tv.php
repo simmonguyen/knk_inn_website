@@ -2434,8 +2434,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     enabled: !!(JBX_INITIAL.spotify && JBX_INITIAL.spotify.enabled),
     playing: false,                  // we believe Spotify is currently the active sound
     starting: false,                 // a start attempt is in flight (prevents concurrent re-entry from poll ticks)
-    healthCheckTimer: null,          // setInterval handle for periodic re-check while in radio fallback
-    HEALTH_INTERVAL_MS: 60000        // re-probe every 60s; cheap on Spotify rate limits
+    healthCheckTimer:    null,       // setInterval — runs while in radio fallback, watches for Spotify resumption
+    playbackMonitor:     null,       // setInterval — runs while in Spotify mode, watches for external pause
+    HEALTH_INTERVAL_MS:   60000,     // probe device health every 60s while in radio fallback
+    PLAYBACK_INTERVAL_MS: 15000      // probe is_playing every 15s while Spotify is the active source
   };
   var ytPlayer    = null;
   var ytReady     = false;
@@ -2529,11 +2531,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   }
   function spotifyHealthRecheckLoop() {
     /* Called when we've fallen through to radio because Spotify
-     * was unhealthy. We re-probe every minute and, if Spotify
-     * recovers AND we're still in idle (no YouTube playing, user
-     * hasn't muted), seamlessly switch from radio to Spotify on
-     * the next tick. Avoids the "one wifi blip means radio for
-     * the rest of the night" scenario. */
+     * was unavailable or got externally paused. We re-probe every
+     * minute and, if Spotify is *playing again* (the user pressed
+     * resume on their phone, or the desktop app came back online),
+     * seamlessly hand off from radio. We deliberately do NOT call
+     * Spotify "play" here — that would restart the playlist from
+     * track 1, which feels wrong if the user just resumed mid-song.
+     * We just observe their action and switch off radio. */
     if (!SPOTIFY.enabled) return;
     if (SPOTIFY.healthCheckTimer) return;   // already running
     SPOTIFY.healthCheckTimer = setInterval(function () {
@@ -2544,19 +2548,48 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         SPOTIFY.healthCheckTimer = null;
         return;
       }
-      spotifyCall("health").then(function (j) {
-        if (!j || !j.ok || !j.healthy) return;          // still down
-        if (currentRow || radioMuted) return;            // state changed mid-fetch
-        spotifyCall("play").then(function (p) {
-          if (p && p.ok) {
-            SPOTIFY.playing = true;
-            stopRadioRaw();                              // hand off from radio
-            clearInterval(SPOTIFY.healthCheckTimer);
-            SPOTIFY.healthCheckTimer = null;
-          }
-        });
+      spotifyCall("now_playing").then(function (j) {
+        if (!j || !j.ok) return;
+        if (!j.is_playing) return;                       // still paused/down
+        if (currentRow || radioMuted) return;             // state changed mid-fetch
+        // User has resumed Spotify externally — hand back the floor.
+        SPOTIFY.playing = true;
+        stopRadioRaw();
+        clearInterval(SPOTIFY.healthCheckTimer);
+        SPOTIFY.healthCheckTimer = null;
+        spotifyStartPlaybackMonitor();
       });
     }, SPOTIFY.HEALTH_INTERVAL_MS);
+  }
+
+  function spotifyStartPlaybackMonitor() {
+    /* Runs while SPOTIFY.playing is true. Polls the actual is_playing
+     * state on Spotify every 15 seconds; if it goes false (user paused
+     * on their phone, Spotify app crashed, network drop), we fall
+     * through to radio and start the health re-check loop so the
+     * radio→Spotify hand-off works when they resume. */
+    if (!SPOTIFY.enabled) return;
+    if (SPOTIFY.playbackMonitor) return;
+    SPOTIFY.playbackMonitor = setInterval(function () {
+      if (!SPOTIFY.playing || currentRow || radioMuted || !audioStarted) {
+        clearInterval(SPOTIFY.playbackMonitor);
+        SPOTIFY.playbackMonitor = null;
+        return;
+      }
+      spotifyCall("now_playing").then(function (j) {
+        if (!j || !j.ok) return;             // transient API hiccup — keep believing
+        if (j.is_playing) return;             // still playing
+        // External pause detected — drop to radio and start watching
+        // for resumption.
+        console.warn("[spotify] not playing — falling to radio");
+        SPOTIFY.playing = false;
+        clearInterval(SPOTIFY.playbackMonitor);
+        SPOTIFY.playbackMonitor = null;
+        if (currentRow || radioMuted) return;
+        startRadioRaw();
+        spotifyHealthRecheckLoop();
+      });
+    }, SPOTIFY.PLAYBACK_INTERVAL_MS);
   }
 
   /* ---- Radio raw start/stop (unchanged behaviour) ----
@@ -2618,6 +2651,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
             if (p && p.ok) {
               SPOTIFY.playing = true;
               stopRadioRaw();                              // make sure radio isn't double-blasting
+              spotifyStartPlaybackMonitor();               // watch for external pause
               return;
             }
             // play failed (rare) — fall to radio + start health re-check loop
@@ -2651,6 +2685,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (SPOTIFY.healthCheckTimer) {
       clearInterval(SPOTIFY.healthCheckTimer);
       SPOTIFY.healthCheckTimer = null;
+    }
+    if (SPOTIFY.playbackMonitor) {
+      clearInterval(SPOTIFY.playbackMonitor);
+      SPOTIFY.playbackMonitor = null;
     }
   }
 
@@ -2908,6 +2946,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (SPOTIFY.healthCheckTimer) {
       clearInterval(SPOTIFY.healthCheckTimer);
       SPOTIFY.healthCheckTimer = null;
+    }
+    if (SPOTIFY.playbackMonitor) {
+      clearInterval(SPOTIFY.playbackMonitor);
+      SPOTIFY.playbackMonitor = null;
     }
   }
   function resumeAllAudio() {
