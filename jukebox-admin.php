@@ -12,6 +12,7 @@
  *   4. Pending approvals (only when auto_approve = 0)
  *   5. Settings (caps + cooldown + polling)
  *   6. Radio fallback (MP3 stream when queue is empty)
+ *   6b. Spotify ambient layer (opt-in tier 2 — F5 only)
  *   7. Blocklist (videos + keywords)
  *   8. Recent activity (last 30 played/skipped/rejected)
  */
@@ -20,6 +21,7 @@ declare(strict_types=1);
 
 require_once __DIR__ . "/includes/auth.php";
 require_once __DIR__ . "/includes/jukebox.php";
+require_once __DIR__ . "/includes/spotify.php";
 
 $me    = knk_require_permission("jukebox");
 $me_id = (int)$me["id"];
@@ -27,6 +29,14 @@ $me_id = (int)$me["id"];
 $flash = "";
 $error = "";
 $action = (string)($_POST["action"] ?? "");
+
+// Pick up flash messages from the OAuth callback redirect.
+if (!empty($_GET["spotify_ok"])) {
+    $flash = (string)$_GET["spotify_ok"];
+}
+if (!empty($_GET["spotify_error"])) {
+    $error = (string)$_GET["spotify_error"];
+}
 
 try {
     if ($action === "toggle_enabled") {
@@ -83,6 +93,83 @@ try {
         knk_jukebox_config_update($updates, $me_id);
         knk_audit("jukebox.radio", "jukebox_config", "1", ["fields" => array_keys($updates)]);
         $flash = "Radio fallback saved.";
+    }
+    elseif ($action === "save_spotify") {
+        // Spotify ambient layer — credentials + playlist + volume.
+        // Refresh token / device_id are NOT writable here; they
+        // get filled in by the OAuth callback and Detect device.
+        $updates = [];
+        $cid    = trim((string)($_POST["spotify_client_id"] ?? ""));
+        $secret = trim((string)($_POST["spotify_client_secret"] ?? ""));
+        $list   = trim((string)($_POST["spotify_default_playlist_uri"] ?? ""));
+        $volRaw = (string)($_POST["spotify_volume_pct"] ?? "");
+
+        if ($cid !== "")    $updates["spotify_client_id"]     = $cid;
+        if ($secret !== "") $updates["spotify_client_secret"] = $secret;
+
+        if ($list !== "") {
+            // Accept either spotify:playlist:XXX URI or open.spotify.com/playlist/XXX URL.
+            if (preg_match('~^spotify:playlist:[A-Za-z0-9]+$~', $list)) {
+                $updates["spotify_default_playlist_uri"] = $list;
+            } elseif (preg_match('~open\.spotify\.com/playlist/([A-Za-z0-9]+)~', $list, $m)) {
+                $updates["spotify_default_playlist_uri"] = "spotify:playlist:" . $m[1];
+            } else {
+                throw new RuntimeException("Playlist must be a spotify:playlist:... URI or an open.spotify.com/playlist/... URL.");
+            }
+        } else {
+            // Empty input clears the playlist (= disables Spotify even on F5).
+            $updates["spotify_default_playlist_uri"] = "";
+        }
+
+        if ($volRaw !== "") {
+            $vol = (int)$volRaw;
+            if ($vol < 0 || $vol > 100) {
+                throw new RuntimeException("Volume must be 0-100.");
+            }
+            $updates["spotify_volume_pct"] = $vol;
+        }
+
+        knk_spotify_config_update($updates);
+        knk_audit("jukebox.spotify_save", "jukebox_config", "1", ["fields" => array_keys($updates)]);
+        $flash = "Spotify settings saved.";
+    }
+    elseif ($action === "spotify_detect_device") {
+        // Hit /me/player/devices and grab whichever device looks most
+        // like the venue machine. If the Spotify app on F5 isn't open
+        // right now, this returns nothing and we tell the admin to
+        // open it and retry.
+        if (!knk_spotify_is_connected()) {
+            throw new RuntimeException("Connect Spotify first.");
+        }
+        $devs = knk_spotify_devices();
+        if (empty($devs)) {
+            throw new RuntimeException("No Spotify devices found. Open the Spotify app on the F5 Windows machine and try again.");
+        }
+        $pick = null;
+        foreach ($devs as $d) {
+            if (!empty($d["is_active"])) { $pick = $d; break; }
+        }
+        if ($pick === null) $pick = $devs[0];
+        knk_spotify_config_update([
+            "spotify_device_id"   => isset($pick["id"]) ? (string)$pick["id"] : "",
+            "spotify_device_name" => isset($pick["name"]) ? (string)$pick["name"] : "",
+        ]);
+        knk_audit("jukebox.spotify_detect", "jukebox_config", "1", ["device" => isset($pick["name"]) ? $pick["name"] : ""]);
+        $flash = "Spotify device set to: " . (isset($pick["name"]) ? $pick["name"] : "(unnamed)");
+    }
+    elseif ($action === "spotify_clear") {
+        // Disconnect: wipe refresh token + device. Client_id/secret
+        // stay (admin keeps the dev app credentials).
+        knk_spotify_config_update([
+            "spotify_refresh_token" => "",
+            "spotify_device_id"     => "",
+            "spotify_device_name"   => "",
+            "spotify_last_ok_at"    => null,
+        ]);
+        // Drop the local token cache too.
+        @unlink(knk_spotify_token_cache_path());
+        knk_audit("jukebox.spotify_clear", "jukebox_config", "1", []);
+        $flash = "Spotify disconnected. Credentials kept; click Connect to re-link.";
     }
     elseif ($action === "skip") {
         $id = (int)($_POST["id"] ?? 0);
@@ -498,6 +585,87 @@ function ja_when($s): string {
         </div>
         <button type="submit">Save radio fallback</button>
       </form>
+    </section>
+
+    <!-- SPOTIFY AMBIENT LAYER -->
+    <section class="card" id="spotify">
+      <h2>Spotify ambient layer <small style="font-weight:400;color:#888;font-size:0.8rem">(F5 only — opt-in)</small></h2>
+      <p class="explain">
+        Optional tier-2 between guest YouTube requests and the radio. When enabled and reachable, the F5 TV plays a Spotify playlist while the YouTube queue is empty; falls through to radio if Spotify is unavailable. Only the F5 TV launches with <code>tv.php?spotify=1</code>; ground floor stays on the radio path.
+      </p>
+
+      <?php
+        $spotify_connected = knk_spotify_is_connected();
+        $spotify_ready     = knk_spotify_is_ready();
+        $spotify_status_label = $spotify_ready
+            ? '<span style="color:#3aa55c">&#10003; Ready (connected, device + playlist set)</span>'
+            : ($spotify_connected
+                ? '<span style="color:#e0a800">&#9888; Connected, but device or playlist missing</span>'
+                : '<span style="color:#aaa">&middot; Not connected</span>');
+      ?>
+      <p style="margin:0 0 1rem 0">Status: <?= $spotify_status_label ?></p>
+
+      <!-- Step 1: app credentials + playlist -->
+      <form method="post" style="margin-bottom:1.2rem">
+        <input type="hidden" name="action" value="save_spotify">
+        <div class="grid">
+          <div>
+            <label>Client ID</label>
+            <input type="text" name="spotify_client_id" value="<?= htmlspecialchars((string)($cfg["spotify_client_id"] ?? ""), ENT_QUOTES, "UTF-8") ?>" placeholder="32-char hex from developer.spotify.com" style="font-family:monospace;font-size:0.85rem">
+          </div>
+          <div>
+            <label>Client secret</label>
+            <input type="password" name="spotify_client_secret" value="<?= htmlspecialchars((string)($cfg["spotify_client_secret"] ?? ""), ENT_QUOTES, "UTF-8") ?>" placeholder="32-char hex; kept server-side" style="font-family:monospace;font-size:0.85rem" autocomplete="new-password">
+          </div>
+          <div style="grid-column: 1 / -1">
+            <label>Default playlist (Spotify URI or open.spotify.com URL)</label>
+            <input type="text" name="spotify_default_playlist_uri" value="<?= htmlspecialchars((string)($cfg["spotify_default_playlist_uri"] ?? ""), ENT_QUOTES, "UTF-8") ?>" placeholder="spotify:playlist:37i9dQZF1DXcBWIGoYBM5M" style="font-family:monospace;font-size:0.85rem">
+            <p class="explain" style="margin-top:0.4rem">Leave blank to disable Spotify (F5 will fall back to radio even with <code>?spotify=1</code>). The playlist loops continuously in ambient mode.</p>
+          </div>
+          <div>
+            <label>Ambient volume (0&ndash;100)</label>
+            <input type="number" name="spotify_volume_pct" min="0" max="100" value="<?= (int)($cfg["spotify_volume_pct"] ?? 50) ?>" style="width:6rem">
+          </div>
+        </div>
+        <button type="submit">Save Spotify settings</button>
+      </form>
+
+      <!-- Step 2: connect / disconnect -->
+      <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:0.8rem">
+        <?php if (!$spotify_connected): ?>
+          <a class="btn-link" href="/api/spotify_oauth_start.php" style="background:var(--gold);color:#111;padding:0.55rem 1rem;border-radius:6px;text-decoration:none;font-weight:600">Connect Spotify &rarr;</a>
+          <span class="explain" style="margin:0">Opens accounts.spotify.com to authorise the venue's account.</span>
+        <?php else: ?>
+          <form method="post" style="display:inline">
+            <input type="hidden" name="action" value="spotify_detect_device">
+            <button type="submit">Detect device</button>
+          </form>
+          <a class="btn-link" href="/api/spotify_oauth_start.php" style="text-decoration:underline;color:var(--gold)">Re-authorise</a>
+          <form method="post" style="display:inline" onsubmit="return confirm('Disconnect Spotify? Re-linking only takes 30 seconds.')">
+            <input type="hidden" name="action" value="spotify_clear">
+            <button type="submit" style="background:#aa3a3a">Disconnect</button>
+          </form>
+        <?php endif; ?>
+      </div>
+
+      <?php if ($spotify_connected): ?>
+        <p class="explain" style="margin-top:0.2rem">
+          Device: <code><?= htmlspecialchars((string)($cfg["spotify_device_name"] ?? "(none)"), ENT_QUOTES, "UTF-8") ?></code>
+          <?php if (!empty($cfg["spotify_device_id"])): ?>
+            <span style="color:#666"> &middot; id <?= htmlspecialchars(substr((string)$cfg["spotify_device_id"], 0, 12), ENT_QUOTES, "UTF-8") ?>&hellip;</span>
+          <?php endif; ?>
+          <?php if (!empty($cfg["spotify_last_ok_at"])): ?>
+            <span style="color:#666"> &middot; last ok <?= htmlspecialchars((string)$cfg["spotify_last_ok_at"], ENT_QUOTES, "UTF-8") ?></span>
+          <?php endif; ?>
+        </p>
+        <p class="explain" style="margin:0.4rem 0 0">
+          If Detect device returns "no Spotify devices found", make sure the Spotify desktop app is open on F5 and signed into the venue account, then click again.
+        </p>
+      <?php else: ?>
+        <p class="explain" style="margin-top:0.2rem">
+          One-time setup: at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener" style="color:var(--gold)">developer.spotify.com/dashboard</a> create an app, paste its Client ID + Client Secret above, set the redirect URI to <code><?= htmlspecialchars(knk_spotify_redirect_uri(), ENT_QUOTES, "UTF-8") ?></code>, save, then click Connect.
+        </p>
+      <?php endif; ?>
     </section>
 
     <!-- BLOCKLIST -->

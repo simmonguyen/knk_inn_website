@@ -40,6 +40,7 @@ require_once __DIR__ . "/includes/db.php";
 require_once __DIR__ . "/includes/market_engine.php";
 require_once __DIR__ . "/includes/orders_store.php";   // knk_vnd()
 require_once __DIR__ . "/includes/jukebox.php";
+require_once __DIR__ . "/includes/spotify.php";
 require_once __DIR__ . "/includes/darts.php";
 require_once __DIR__ . "/includes/darts_lobby.php";   // recent_games_compact (right-col stats)
 require_once __DIR__ . "/includes/darts_stats.php";   // knk_tv_darts_build_stats()
@@ -117,6 +118,16 @@ $radio_url_effective = knk_radio_alt_stream_active()
     ? "https://streaming.abc-cdn.net.au/audio/hls/triplejhottest.m3u8"
     : $radio_url;
 
+/* Spotify ambient layer (migration 030). Opt-in per device:
+ *   tv.php           → no Spotify (ground floor TV)
+ *   tv.php?spotify=1 → Spotify becomes tier 2, radio drops to tier 3
+ *
+ * `ready` means the venue has done OAuth, picked a device, AND set a
+ * playlist. If any of those is missing the URL flag is silently
+ * ignored and the page behaves as today (radio fallback only). */
+$tv_spotify_flag  = !empty($_GET["spotify"]) && $_GET["spotify"] !== "0";
+$tv_spotify_ready = knk_spotify_is_ready();
+
 /* The "Request a song at..." pointer on the splash card. Points
  * at /bar.php (the unified bar shell) rather than /jukebox.php so
  * one URL covers music + drinks + darts. Display without the
@@ -133,6 +144,12 @@ $jbx_initial = [
     "radio"        => [
         "enabled" => $radio_enabled,
         "url"     => $radio_url_effective,
+    ],
+    "spotify"      => [
+        // `enabled` = the URL flag is on AND server has full config
+        // ready. tv.php on ground floor (no flag) gets `enabled:false`
+        // and the JS audio loop is unchanged from the radio-only era.
+        "enabled" => $tv_spotify_flag && $tv_spotify_ready,
     ],
     "now_playing"  => $jbx_now ? [
         "id"       => (int)$jbx_now["id"],
@@ -2409,6 +2426,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   // ---- Audio engine state ----
   var JBX_INITIAL = <?= json_encode($jbx_initial, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>;
   var RADIO       = JBX_INITIAL.radio || { enabled: false, url: "" };
+  /* Spotify ambient layer. enabled === true means tv.php was loaded
+   * with `?spotify=1` AND the server has refresh token + device id +
+   * default playlist all set. When false the original two-tier
+   * (YouTube → Radio) behaviour is unchanged. */
+  var SPOTIFY     = {
+    enabled: !!(JBX_INITIAL.spotify && JBX_INITIAL.spotify.enabled),
+    playing: false,                  // we believe Spotify is currently the active sound
+    healthCheckTimer: null,          // setInterval handle for periodic re-check while in radio fallback
+    HEALTH_INTERVAL_MS: 60000        // re-probe every 60s; cheap on Spotify rate limits
+  };
   var ytPlayer    = null;
   var ytReady     = false;
   var currentRow  = JBX_INITIAL.now_playing; // row currently loaded (or null)
@@ -2451,13 +2478,78 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   // playing (state has moved on) or when the user taps to resume.
   var radioMuted = false;
 
-  function startRadioIfIdle() {
+  /* ---- Spotify proxy helpers ---------------------------------
+   * All Spotify API calls go through /api/spotify_proxy.php on our
+   * own backend so the access token never reaches the browser. The
+   * helpers are no-ops when SPOTIFY.enabled is false, which keeps
+   * ground-floor tv.php unchanged. */
+  function spotifyCall(action, extras) {
+    var body = "action=" + encodeURIComponent(action);
+    if (extras) {
+      for (var k in extras) {
+        if (Object.prototype.hasOwnProperty.call(extras, k)) {
+          body += "&" + encodeURIComponent(k) + "=" + encodeURIComponent(extras[k]);
+        }
+      }
+    }
+    return fetch("/api/spotify_proxy.php", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body,
+      credentials: "same-origin"
+    })
+    .then(function (r) { return r.json(); })
+    .catch(function (e) {
+      console.warn("[spotify] " + action + " failed", e);
+      return { ok: false, error: "network" };
+    });
+  }
+  function spotifyPause() {
+    if (!SPOTIFY.enabled) return Promise.resolve(false);
+    if (!SPOTIFY.playing) return Promise.resolve(true);
+    SPOTIFY.playing = false;
+    return spotifyCall("pause").then(function () { return true; });
+  }
+  function spotifyHealthRecheckLoop() {
+    /* Called when we've fallen through to radio because Spotify
+     * was unhealthy. We re-probe every minute and, if Spotify
+     * recovers AND we're still in idle (no YouTube playing, user
+     * hasn't muted), seamlessly switch from radio to Spotify on
+     * the next tick. Avoids the "one wifi blip means radio for
+     * the rest of the night" scenario. */
+    if (!SPOTIFY.enabled) return;
+    if (SPOTIFY.healthCheckTimer) return;   // already running
+    SPOTIFY.healthCheckTimer = setInterval(function () {
+      if (currentRow || radioMuted || !audioStarted) return;
+      if (SPOTIFY.playing) {
+        // Already promoted; loop is no longer useful.
+        clearInterval(SPOTIFY.healthCheckTimer);
+        SPOTIFY.healthCheckTimer = null;
+        return;
+      }
+      spotifyCall("health").then(function (j) {
+        if (!j || !j.ok || !j.healthy) return;          // still down
+        if (currentRow || radioMuted) return;            // state changed mid-fetch
+        spotifyCall("play").then(function (p) {
+          if (p && p.ok) {
+            SPOTIFY.playing = true;
+            stopRadioRaw();                              // hand off from radio
+            clearInterval(SPOTIFY.healthCheckTimer);
+            SPOTIFY.healthCheckTimer = null;
+          }
+        });
+      });
+    }, SPOTIFY.HEALTH_INTERVAL_MS);
+  }
+
+  /* ---- Radio raw start/stop (unchanged behaviour) ----
+   * These are the "tier 3" primitives. startRadioIfIdle() picks
+   * tier 2 (Spotify) first when enabled, falling through to these. */
+  function startRadioRaw() {
     if (!audioStarted) return;
     if (!RADIO.enabled || !RADIO.url) return;
-    if (currentRow) return;             // YouTube has the floor
-    if (radioMuted) return;             // user said stop
-    // No-op if already streaming. Repeated play() on some streams
-    // restarts the buffered chunk, which sounds like a short loop.
+    if (currentRow) return;
+    if (radioMuted) return;
     if (radioPlaying && !radioEl.paused && !radioEl.ended && !radioEl.error) {
       return;
     }
@@ -2473,10 +2565,62 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     } catch (e) { console.warn(e); }
     radioPlaying = true;
   }
-  function stopRadio() {
+  function stopRadioRaw() {
     if (!radioPlaying && radioEl.paused) return;
     try { radioEl.pause(); } catch (_) {}
     radioPlaying = false;
+  }
+
+  /* ---- Public "ambient layer" entry points ----
+   * startRadioIfIdle / stopRadio names kept for backward compatibility
+   * with the rest of the file (visibilitychange handler, splash,
+   * playRow, etc.). Internally they now drive Spotify-first when
+   * the URL flag is on. */
+  function startRadioIfIdle() {
+    if (!audioStarted) return;
+    if (currentRow) return;             // YouTube has the floor
+    if (radioMuted) return;             // user said stop
+
+    if (SPOTIFY.enabled) {
+      // Try Spotify first; fall through to radio on any failure.
+      spotifyCall("health").then(function (j) {
+        if (currentRow || radioMuted) return;             // re-check after async
+        if (j && j.ok && j.healthy) {
+          spotifyCall("play").then(function (p) {
+            if (currentRow || radioMuted) return;
+            if (p && p.ok) {
+              SPOTIFY.playing = true;
+              stopRadioRaw();                              // make sure radio isn't double-blasting
+              return;
+            }
+            // play failed (rare) — fall to radio + start health re-check loop
+            startRadioRaw();
+            spotifyHealthRecheckLoop();
+          });
+        } else {
+          // Spotify unhealthy — fall to radio + start re-check loop
+          startRadioRaw();
+          spotifyHealthRecheckLoop();
+        }
+      });
+      return;
+    }
+
+    // Plain radio path — unchanged behaviour for ground floor.
+    startRadioRaw();
+  }
+
+  function stopRadio() {
+    /* Called when YouTube takes over (a song is about to play) or
+     * when the page goes hidden. Stop both ambient sources. */
+    stopRadioRaw();
+    if (SPOTIFY.enabled && SPOTIFY.playing) {
+      spotifyPause();
+    }
+    if (SPOTIFY.healthCheckTimer) {
+      clearInterval(SPOTIFY.healthCheckTimer);
+      SPOTIFY.healthCheckTimer = null;
+    }
   }
 
   // ----- click-to-toggle on the radio card -----
@@ -2687,19 +2831,21 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       if (radioCard) radioCard.hidden = !!currentRow;
 
       // Prime audio inside the user gesture so later .play() calls
-      // aren't blocked. If nothing is queued, fire up the radio
-      // overlay directly — don't wait for the first poll tick.
-      if (RADIO.enabled && RADIO.url) {
-        if (currentRow) {
-          // A song will take over — just prime then pause.
-          try {
-            radioEl.play().then(function () {
-              try { radioEl.pause(); } catch (_) {}
-            }).catch(function (e) { console.warn("[radio] prime failed", e); });
-          } catch (_) {}
-        } else {
-          startRadioIfIdle();
-        }
+      // aren't blocked. If nothing is queued, fire up the ambient
+      // layer directly — don't wait for the first poll tick.
+      // Note: Spotify has no client-side audio element to prime; the
+      // Spotify desktop app handles its own audio. We only prime the
+      // <audio id="tv-radio"> element so the radio fallback works on
+      // browsers with strict autoplay policies (Chrome / Edge).
+      if (RADIO.enabled && RADIO.url && currentRow) {
+        // A song will take over — prime the radio audio then pause.
+        try {
+          radioEl.play().then(function () {
+            try { radioEl.pause(); } catch (_) {}
+          }).catch(function (e) { console.warn("[radio] prime failed", e); });
+        } catch (_) {}
+      } else if (!currentRow) {
+        startRadioIfIdle();
       }
       loadYouTubeAPI();
     });
@@ -2721,6 +2867,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     radioPlaying = false;
     if (ytPlayer && ytPlayer.pauseVideo) {
       try { ytPlayer.pauseVideo(); } catch (_) {}
+    }
+    /* Pause Spotify too — otherwise the desktop Spotify app
+     * keeps streaming even when our tv.php tab is hidden, which
+     * defeats the purpose of muting on Home-button. */
+    if (SPOTIFY.enabled && SPOTIFY.playing) {
+      spotifyPause();
+    }
+    if (SPOTIFY.healthCheckTimer) {
+      clearInterval(SPOTIFY.healthCheckTimer);
+      SPOTIFY.healthCheckTimer = null;
     }
   }
   function resumeAllAudio() {
