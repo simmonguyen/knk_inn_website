@@ -2433,6 +2433,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   var SPOTIFY     = {
     enabled: !!(JBX_INITIAL.spotify && JBX_INITIAL.spotify.enabled),
     playing: false,                  // we believe Spotify is currently the active sound
+    starting: false,                 // a start attempt is in flight (prevents concurrent re-entry from poll ticks)
     healthCheckTimer: null,          // setInterval handle for periodic re-check while in radio fallback
     HEALTH_INTERVAL_MS: 60000        // re-probe every 60s; cheap on Spotify rate limits
   };
@@ -2582,11 +2583,21 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (radioMuted) return;             // user said stop
 
     if (SPOTIFY.enabled) {
+      /* Idempotency guards — without these, the 5s poll re-fires
+       * health+play every cycle. The second play call races with
+       * the first and Spotify often returns a "Restriction violated"
+       * style error on the redundant call, sending us to radio
+       * fallback even though we're already happily playing. */
+      if (SPOTIFY.playing) return;       // already streaming — nothing to do
+      if (SPOTIFY.starting) return;      // a previous attempt is mid-flight
+      SPOTIFY.starting = true;
+
       // Try Spotify first; fall through to radio on any failure.
       spotifyCall("health").then(function (j) {
-        if (currentRow || radioMuted) return;             // re-check after async
+        if (currentRow || radioMuted) { SPOTIFY.starting = false; return; }
         if (j && j.ok && j.healthy) {
           spotifyCall("play").then(function (p) {
+            SPOTIFY.starting = false;
             if (currentRow || radioMuted) return;
             if (p && p.ok) {
               SPOTIFY.playing = true;
@@ -2599,6 +2610,7 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
           });
         } else {
           // Spotify unhealthy — fall to radio + start re-check loop
+          SPOTIFY.starting = false;
           startRadioRaw();
           spotifyHealthRecheckLoop();
         }
@@ -2612,11 +2624,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
 
   function stopRadio() {
     /* Called when YouTube takes over (a song is about to play) or
-     * when the page goes hidden. Stop both ambient sources. */
+     * when the page goes hidden. Stop both ambient sources and
+     * cancel any in-flight Spotify start attempt so a half-finished
+     * health/play promise can't auto-resume after we wanted silence. */
     stopRadioRaw();
     if (SPOTIFY.enabled && SPOTIFY.playing) {
       spotifyPause();
     }
+    SPOTIFY.starting = false;
     if (SPOTIFY.healthCheckTimer) {
       clearInterval(SPOTIFY.healthCheckTimer);
       SPOTIFY.healthCheckTimer = null;
