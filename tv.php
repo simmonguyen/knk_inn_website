@@ -2445,8 +2445,17 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   var radioPlaying = false;
   var radioEl      = document.getElementById("tv-radio");
 
-  if (RADIO.enabled && RADIO.url) {
+  /* When SPOTIFY.enabled, leave the radio element dormant on page
+   * load — don't pre-set src. On a single-device Android TV setup
+   * where Spotify and the browser share audio, pre-loading the
+   * radio stream made the audio element fire spurious `ended` /
+   * `error` events whenever Spotify took focus, which then kicked
+   * the radio fallback awake on top of Spotify. Defer src until
+   * we genuinely fall through to radio. */
+  if (RADIO.enabled && RADIO.url && !SPOTIFY.enabled) {
     radioEl.src = RADIO.url;
+    radioEl.volume = 0.7;
+  } else {
     radioEl.volume = 0.7;
   }
   // Surface stream errors so it's obvious in DevTools when a stream URL
@@ -2464,6 +2473,13 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   radioEl.addEventListener("ended", function () {
     if (!RADIO.enabled || !RADIO.url) return;
     if (currentRow) return; // a song just took over
+    /* Don't auto-resurrect the radio if Spotify is the active layer.
+     * On Android TV the browser's audio element can fire spurious
+     * `ended` events when Spotify takes audio focus; without this
+     * guard, the radio reconnects on top of Spotify and you get
+     * the "Spotify plays for a few seconds then radio kicks in"
+     * symptom. */
+    if (SPOTIFY.enabled && (SPOTIFY.playing || SPOTIFY.starting)) return;
     console.warn("[radio] stream ended — reconnecting");
     var sep = RADIO.url.indexOf("?") >= 0 ? "&" : "?";
     radioEl.src = RADIO.url + sep + "_=" + Date.now();
