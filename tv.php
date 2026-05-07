@@ -2527,7 +2527,14 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (!SPOTIFY.enabled) return Promise.resolve(false);
     if (!SPOTIFY.playing) return Promise.resolve(true);
     SPOTIFY.playing = false;
-    return spotifyCall("pause").then(function () { return true; });
+    /* Wait for the Spotify API to confirm pause, then add a 600ms
+     * settle delay so Android TV releases audio focus back to the
+     * browser. Without this the YT iframe tries to grab focus
+     * while Spotify still has it; Android freezes both and you get
+     * silence. */
+    return spotifyCall("pause").then(function () {
+      return new Promise(function (resolve) { setTimeout(resolve, 600); });
+    }).then(function () { return true; });
   }
   function spotifyHealthRecheckLoop() {
     /* Called when we've fallen through to radio because Spotify
@@ -2676,11 +2683,12 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     /* Called when YouTube takes over (a song is about to play) or
      * when the page goes hidden. Stop both ambient sources and
      * cancel any in-flight Spotify start attempt so a half-finished
-     * health/play promise can't auto-resume after we wanted silence. */
+     * health/play promise can't auto-resume after we wanted silence.
+     *
+     * Returns a Promise that resolves once Spotify has confirmed
+     * pause AND the audio-focus settle delay has elapsed — so
+     * callers can safely sequence YouTube playback after this. */
     stopRadioRaw();
-    if (SPOTIFY.enabled && SPOTIFY.playing) {
-      spotifyPause();
-    }
     SPOTIFY.starting = false;
     if (SPOTIFY.healthCheckTimer) {
       clearInterval(SPOTIFY.healthCheckTimer);
@@ -2690,6 +2698,10 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       clearInterval(SPOTIFY.playbackMonitor);
       SPOTIFY.playbackMonitor = null;
     }
+    if (SPOTIFY.enabled && SPOTIFY.playing) {
+      return spotifyPause();
+    }
+    return Promise.resolve(true);
   }
 
   // ----- click-to-toggle on the radio card -----
@@ -2870,16 +2882,23 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       var lyricsKnown = (lyricsState === "ready" || lyricsState === "none");
       if (!lyricsKnown && elapsed < PREROLL_MAX_MS) return;
       clearInterval(prerollPoll); prerollPoll = null;
-      stopRadio();
       // A real song's about to play — reset the user's mute flag so
       // when this song ends, the radio auto-resume isn't blocked by
       // a stale "tap to stop" from before.
       radioMuted = false;
       var rcard = document.getElementById("jbx-radio");
       if (rcard) rcard.classList.remove("is-muted");
-      if (ytPlayer && ytPlayer.loadVideoById) {
-        try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
-      }
+      /* Wait for stopRadio's Promise — it includes the audio-focus
+       * settle delay after Spotify pause — before asking YouTube to
+       * load. On Android TV with both Spotify app and browser on
+       * the same device, calling loadVideoById immediately after
+       * pause causes the focus race that freezes both. */
+      stopRadio().then(function () {
+        if (currentRow !== row) return;  // newer row took over mid-wait
+        if (ytPlayer && ytPlayer.loadVideoById) {
+          try { ytPlayer.loadVideoById(row.video_id); } catch (_) {}
+        }
+      });
     }, 100);
   }
 
