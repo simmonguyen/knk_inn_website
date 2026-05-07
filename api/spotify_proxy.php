@@ -62,6 +62,56 @@ try {
     $device_id = (string)($cfg["spotify_device_id"] ?? "");
     $playlist  = (string)($cfg["spotify_default_playlist_uri"] ?? "");
 
+    if ($action === "token") {
+        /* Web Playback SDK needs the access token client-side
+         * (its getOAuthToken callback). Tokens are short-lived
+         * (1 hour) so this is acceptable trust posture for an
+         * internal venue kiosk. The refresh token still never
+         * leaves the server. */
+        try {
+            $tok = knk_spotify_access_token();
+            echo json_encode([
+                "ok"           => true,
+                "access_token" => $tok,
+            ]);
+        } catch (Throwable $e) {
+            echo json_encode(["ok" => false, "error" => "token_unavailable", "detail" => $e->getMessage()]);
+        }
+        exit;
+    }
+
+    if ($action === "play_on") {
+        /* Used by the SDK flow: start the configured ambient playlist
+         * on a specific device_id (the SDK's in-browser device).
+         * Differs from the legacy "play" action in that the device_id
+         * comes from the request, not from jukebox_config. */
+        $target = (string)($_POST["device_id"] ?? "");
+        if ($target === "" || $playlist === "") {
+            echo json_encode(["ok" => false, "error" => "not_ready"]);
+            exit;
+        }
+        $vol = (int)($cfg["spotify_volume_pct"] ?? 50);
+        try {
+            knk_spotify_api("PUT", "me/player/volume", null, [
+                "volume_percent" => max(0, min(100, $vol)),
+                "device_id"      => $target,
+            ]);
+        } catch (Throwable $e) { /* swallow */ }
+        try {
+            knk_spotify_api("PUT", "me/player/repeat", null, [
+                "state"     => "context",
+                "device_id" => $target,
+            ]);
+        } catch (Throwable $e) { /* swallow */ }
+        knk_spotify_api("PUT", "me/player/play", [
+            "context_uri" => $playlist,
+        ], [
+            "device_id" => $target,
+        ]);
+        echo json_encode(["ok" => true]);
+        exit;
+    }
+
     if ($action === "health") {
         if ($device_id === "") {
             echo json_encode(["ok" => true, "healthy" => false, "reason" => "no_device"]);

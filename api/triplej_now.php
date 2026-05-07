@@ -97,12 +97,25 @@ try {
 
     if ($title === "") throw new RuntimeException("no title in response");
 
+    /* played_time = ABC's ISO8601 timestamp for when the track started
+     * its rotation. We convert to unix-seconds so the TV can compute a
+     * "song clock" (now - started_unix) for lyric line lookup. Falls
+     * back to 0 if absent — TV will then just show the track name
+     * without synced lyrics. */
+    $started_unix = 0;
+    $played_time  = (string)($first["played_time"] ?? "");
+    if ($played_time !== "") {
+        $ts = strtotime($played_time);
+        if ($ts !== false) $started_unix = $ts;
+    }
+
     $out = [
-        "ok"     => true,
-        "artist" => mb_substr($artist, 0, 120),
-        "title"  => mb_substr($title, 0, 200),
-        "ts"     => time(),
-        "error"  => null,
+        "ok"           => true,
+        "artist"       => mb_substr($artist, 0, 120),
+        "title"        => mb_substr($title, 0, 200),
+        "ts"           => time(),
+        "started_unix" => $started_unix,
+        "error"        => null,
     ];
 } catch (Throwable $e) {
     // Don't 500 the TV — return a clean falsy payload so the chip hides.
