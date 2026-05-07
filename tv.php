@@ -1376,7 +1376,20 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
   .tv-splash .request-url { margin-top: 2rem; color: var(--muted); font-size: 0.95rem; }
   .tv-splash .request-url strong { color: var(--gold); font-weight: 700; }
   body.tv:not(.splash-on) .tv-splash { display: none; }
+  /* Spotify-mode tweaks to the radio card. Reuses the same DOM as
+   * the radio splash but with greener accents so it's obvious which
+   * source is currently active. */
+  .jbx-radio.is-spotify h3 { color: #1ed760; }
+  .jbx-radio.is-spotify h3 .accent { color: #fff; }
+  .jbx-radio.is-spotify .station { color: #1ed760; }
 </style>
+<?php if ($tv_spotify_flag && $tv_spotify_ready): ?>
+<!-- Spotify Web Playback SDK. Only loaded when this device wants
+     Spotify (URL flag) AND the venue's config is complete (refresh
+     token + playlist). On other devices, this script tag isn't
+     emitted at all so there's no extra weight. -->
+<script src="https://sdk.scdn.co/spotify-player.js" async></script>
+<?php endif; ?>
 </head>
 <body class="tv splash-on">
 
@@ -2285,8 +2298,17 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     return out;
   }
 
-  function fetchLyrics(songId, title, channel) {
-    var sp  = splitTitle(title, channel);
+  function fetchLyrics(songId, title, channel, opts) {
+    /* opts.artist + opts.track let callers (Spotify SDK, Triple J)
+     * pass already-split metadata, bypassing the YT title parser
+     * which expects "Artist - Track" format. When opts is omitted
+     * we fall back to splitTitle for the YouTube path. */
+    var sp;
+    if (opts && opts.artist && opts.track) {
+      sp = { artist: opts.artist, track: opts.track };
+    } else {
+      sp = splitTitle(title, channel);
+    }
     if (!sp.artist || !sp.track) {
       /* No usable artist/track — skip the call and tell the
        * pre-roll loop it's free to start the video right away. */
@@ -2374,16 +2396,29 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
       clearInterval(lyricsTickInterval);
       lyricsTickInterval = null;
     }
+    /* Reset clock-getter to the default YouTube reader. Spotify /
+     * Triple J starters re-bind it before fetching their lyrics. */
+    lyricsClockGetter = function () {
+      if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return null;
+      try { return ytPlayer.getCurrentTime(); } catch (_) { return null; }
+    };
   }
   function startLyricLoop() {
     if (lyricsTickInterval) clearInterval(lyricsTickInterval);
     lyricsTickInterval = setInterval(updateLyric, 350);
   }
+  /* Clock-source for the lyric ticker. The function returns the
+   * current "song clock" in seconds, or null if unavailable.
+   * Swapped per-source: YT during a guest video, Spotify SDK during
+   * Spotify ambient, Triple J epoch during radio play. */
+  var lyricsClockGetter = function () {
+    if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return null;
+    try { return ytPlayer.getCurrentTime(); } catch (_) { return null; }
+  };
   function updateLyric() {
     if (!lyricsLines || !lyricsLines.length) return;
-    if (!ytPlayer || typeof ytPlayer.getCurrentTime !== "function") return;
-    var t;
-    try { t = ytPlayer.getCurrentTime(); } catch (_) { return; }
+    if (typeof lyricsClockGetter !== "function") return;
+    var t = lyricsClockGetter();
     if (typeof t !== "number" || isNaN(t)) return;
     /* Apply the per-song offset before lookup. Positive offset
      * means the YT video has an intro before the song actually
@@ -2405,6 +2440,68 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
        * reads as a "lyric line" and the glyph just adds visual noise
        * Ben asked us to drop. */
       setTickerLyric(lyricsLines[idx].text);
+    }
+  }
+
+  /* ---- Lyric source: Spotify SDK ---------------------------------
+   * Called from onSpotifySdkStateChanged when the current track URI
+   * changes. Builds a clock-getter that combines the SDK's last-known
+   * position with elapsed wall-clock time since that snapshot, so we
+   * keep ticking even between state-changed events (which only fire
+   * on play/pause/track-change, not continuously). */
+  function startSpotifyLyrics(uri, name, artists) {
+    if (!uri) return;
+    clearLyrics();
+    lyricsForId = uri;
+    lyricsOffsetVid = null;          // Spotify offsets aren't per-uri persisted
+    lyricsOffsetSec = LYRIC_DEFAULT_OFFSET;
+    lyricsClockGetter = function () {
+      if (!SPOTIFY.currentTrack) return null;
+      if (SPOTIFY.currentTrack.paused) return null;
+      var elapsedSec = (Date.now() - SPOTIFY.currentTrack.ts_ms) / 1000;
+      return (SPOTIFY.currentTrack.position_ms / 1000) + elapsedSec;
+    };
+    fetchLyrics(uri, name, "", { artist: artists, track: name });
+  }
+
+  /* ---- Lyric source: Triple J live radio ------------------------
+   * Triple J doesn't expose seek time, but ABC's now-playing API
+   * gives us the wall-clock unix-seconds when the current track
+   * started its rotation. Combined with LRCLIB's timestamps, we can
+   * compute the right line at any moment by simple subtraction. */
+  function startTripleJLyrics(artist, title, startedUnix) {
+    if (!artist || !title || !startedUnix) return;
+    var lyricKey = "tj:" + artist + ":" + title;
+    if (lyricsForId === lyricKey) return;   // dedupe across polls
+    clearLyrics();
+    lyricsForId = lyricKey;
+    lyricsOffsetVid = null;
+    lyricsOffsetSec = LYRIC_DEFAULT_OFFSET;
+    lyricsClockGetter = function () {
+      return (Date.now() / 1000) - startedUnix;
+    };
+    fetchLyrics(lyricKey, title, "", { artist: artist, track: title });
+  }
+
+  /* ---- Ambient card UI helper -----------------------------------
+   * The radio card (#jbx-radio) doubles as the "now ambient" panel.
+   * Spotify mode: tint to Spotify green and fill the chip with the
+   * SDK's current track. Radio mode: revert to default styling and
+   * let pollTripleJNow handle the chip. */
+  function updateAmbientCard() {
+    var card = document.getElementById("jbx-radio");
+    if (!card) return;
+    var titleEl  = document.getElementById("jbx-radio-now-title");
+    var artistEl = document.getElementById("jbx-radio-now-artist");
+    var chip     = document.getElementById("jbx-radio-now");
+    if (SPOTIFY.playing && SPOTIFY.currentTrack) {
+      card.classList.add("is-spotify");
+      if (titleEl)  titleEl.textContent  = SPOTIFY.currentTrack.name || "";
+      if (artistEl) artistEl.textContent = SPOTIFY.currentTrack.artists || "";
+      if (chip)     chip.hidden = false;
+    } else {
+      card.classList.remove("is-spotify");
+      // Radio chip is repopulated by pollTripleJNow on its own cadence.
     }
   }
 
@@ -2437,7 +2534,28 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     healthCheckTimer:    null,       // setInterval — runs while in radio fallback, watches for Spotify resumption
     playbackMonitor:     null,       // setInterval — runs while in Spotify mode, watches for external pause
     HEALTH_INTERVAL_MS:   60000,     // probe device health every 60s while in radio fallback
-    PLAYBACK_INTERVAL_MS: 15000      // probe is_playing every 15s while Spotify is the active source
+    PLAYBACK_INTERVAL_MS: 15000,     // probe is_playing every 15s while Spotify is the active source
+
+    /* Spotify Web Playback SDK fields. The SDK loads from Spotify's
+     * CDN (script tag in <head>) and creates an in-browser Connect
+     * device — same browser tab as YouTube + radio, so they all
+     * share one audio output and ducking is browser-native. */
+    sdkPlayer:        null,    // Spotify.Player instance once initialized
+    sdkDeviceId:      null,    // device_id assigned by the SDK on `ready`
+    sdkReady:         false,   // SDK device currently online and addressable
+    sdkInitialized:   false,   // initSpotifySdk() has run
+    sdkPending:       false,   // SDK script loaded before splash; init when audioStarted flips
+    currentTrackUri:  null,    // last track we triggered a lyric fetch for (dedupe)
+    currentTrack:     null     // { name, artists, position_ms, duration_ms, paused, ts_ms }
+  };
+
+  /* The Spotify SDK script in <head> calls this global when it's
+   * loaded. Init is deferred until audioStarted (user gesture) so
+   * the SDK's audio context isn't blocked by autoplay policy. */
+  window.onSpotifyWebPlaybackSDKReady = function () {
+    if (!SPOTIFY.enabled) return;
+    if (audioStarted) initSpotifySdk();
+    else              SPOTIFY.sdkPending = true;
   };
   var ytPlayer    = null;
   var ytReady     = false;
@@ -2527,14 +2645,132 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (!SPOTIFY.enabled) return Promise.resolve(false);
     if (!SPOTIFY.playing) return Promise.resolve(true);
     SPOTIFY.playing = false;
-    /* Wait for the Spotify API to confirm pause, then add a 600ms
-     * settle delay so Android TV releases audio focus back to the
-     * browser. Without this the YT iframe tries to grab focus
-     * while Spotify still has it; Android freezes both and you get
-     * silence. */
+    /* SDK pause is local & instant — no API roundtrip, no audio-
+     * focus war with a separate app. Falls back to the Connect API
+     * if the SDK isn't initialised (e.g. SDK script blocked by an
+     * ad-blocker, fallback to legacy behaviour). */
+    if (SPOTIFY.sdkPlayer && SPOTIFY.sdkReady) {
+      try { SPOTIFY.sdkPlayer.pause(); } catch (_) {}
+      return Promise.resolve(true);
+    }
     return spotifyCall("pause").then(function () {
       return new Promise(function (resolve) { setTimeout(resolve, 600); });
     }).then(function () { return true; });
+  }
+
+  /* ---- Web Playback SDK helpers ---------------------------------
+   * The SDK creates a Spotify Connect device that lives inside this
+   * browser tab. Audio comes out the same path as YouTube + radio,
+   * so there's no second app to coordinate with. */
+  function initSpotifySdk() {
+    if (SPOTIFY.sdkInitialized) return;
+    if (!window.Spotify || !window.Spotify.Player) return;
+    SPOTIFY.sdkInitialized = true;
+
+    var initialVol = 0.5;  // matches default volume_pct=50 in admin
+    var p = new window.Spotify.Player({
+      name: "KnK Inn TV",
+      getOAuthToken: function (cb) {
+        spotifyCall("token").then(function (j) {
+          if (j && j.ok && j.access_token) cb(j.access_token);
+          else console.warn("[spotify-sdk] token fetch failed", j);
+        });
+      },
+      volume: initialVol
+    });
+    SPOTIFY.sdkPlayer = p;
+
+    p.addListener("ready", function (e) {
+      SPOTIFY.sdkDeviceId = e.device_id;
+      SPOTIFY.sdkReady    = true;
+      console.log("[spotify-sdk] ready", e.device_id);
+      // If we're idle right now, start ambient.
+      if (audioStarted && !currentRow && !radioMuted) {
+        tryStartSpotifySdk();
+      }
+    });
+    p.addListener("not_ready", function () {
+      SPOTIFY.sdkReady = false;
+      console.warn("[spotify-sdk] device offline");
+      if (SPOTIFY.playing && !currentRow) {
+        SPOTIFY.playing = false;
+        startRadioRaw();
+      }
+    });
+    p.addListener("player_state_changed", onSpotifySdkStateChanged);
+
+    p.addListener("initialization_error", function (e) {
+      console.warn("[spotify-sdk] init error", e && e.message);
+    });
+    p.addListener("authentication_error", function (e) {
+      console.warn("[spotify-sdk] auth error", e && e.message);
+    });
+    p.addListener("account_error", function (e) {
+      // Most commonly: account isn't Premium. Fall to radio cleanly.
+      console.warn("[spotify-sdk] account error (Premium required)", e && e.message);
+      SPOTIFY.playing = false;
+      if (!currentRow && !radioMuted) startRadioRaw();
+    });
+    p.addListener("playback_error", function (e) {
+      console.warn("[spotify-sdk] playback error", e && e.message);
+    });
+
+    p.connect();
+  }
+
+  function tryStartSpotifySdk() {
+    if (!SPOTIFY.sdkReady || !SPOTIFY.sdkDeviceId) return;
+    if (currentRow || radioMuted || !audioStarted) return;
+    if (SPOTIFY.playing) return;
+    if (SPOTIFY.starting) return;
+    SPOTIFY.starting = true;
+    spotifyCall("play_on", { device_id: SPOTIFY.sdkDeviceId }).then(function (j) {
+      SPOTIFY.starting = false;
+      if (currentRow || radioMuted) return;
+      if (j && j.ok) {
+        SPOTIFY.playing = true;
+        stopRadioRaw();   // make sure radio's silent
+      } else {
+        console.warn("[spotify-sdk] play_on failed", j);
+        startRadioRaw();
+      }
+    });
+  }
+
+  /* Fired by the SDK whenever track / position / paused changes.
+   * Ground truth for SPOTIFY.playing comes from here. */
+  function onSpotifySdkStateChanged(state) {
+    if (!state) return;
+    var track = state.track_window && state.track_window.current_track;
+    if (!track) return;
+    var artists = (track.artists || []).map(function (a) { return a.name || ""; })
+                                       .filter(Boolean).join(", ");
+    SPOTIFY.currentTrack = {
+      name:        track.name || "",
+      artists:     artists,
+      uri:         track.uri || "",
+      position_ms: state.position || 0,
+      duration_ms: state.duration || 0,
+      paused:      !!state.paused,
+      ts_ms:       Date.now()
+    };
+    SPOTIFY.playing = !state.paused;
+
+    // Update the radio/jukebox card UI with the current source.
+    updateAmbientCard();
+
+    // Drive lyric ticker for new tracks.
+    if (!currentRow && SPOTIFY.playing) {
+      if (SPOTIFY.currentTrackUri !== track.uri) {
+        SPOTIFY.currentTrackUri = track.uri;
+        startSpotifyLyrics(track.uri, track.name, artists);
+      }
+    }
+
+    // If user paused via Spotify on phone, fall to radio.
+    if (state.paused && !currentRow && !radioMuted) {
+      startRadioRaw();
+    }
   }
   function spotifyHealthRecheckLoop() {
     /* Called when we've fallen through to radio because Spotify
@@ -2639,6 +2875,22 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     if (radioMuted) return;             // user said stop
 
     if (SPOTIFY.enabled) {
+      /* Preferred path: Web Playback SDK device in this browser tab.
+       * No second app to fight for audio focus, no health-check
+       * polling needed (SDK fires ready/not_ready/state events).
+       * Falls back to Connect API only if the SDK hasn't loaded
+       * (e.g. ad-blocker stripped sdk.scdn.co). */
+      if (SPOTIFY.sdkReady && SPOTIFY.sdkDeviceId) {
+        tryStartSpotifySdk();
+        return;
+      }
+      /* SDK still loading or not ready — wait for it rather than
+       * starting radio immediately. The `ready` event handler will
+       * call tryStartSpotifySdk itself when the device comes up. */
+      if (SPOTIFY.sdkInitialized && !SPOTIFY.sdkReady) {
+        return;
+      }
+
       /* Idempotency guards — without these, the 5s poll re-fires
        * health+play every cycle. The second play call races with
        * the first and Spotify often returns a "Restriction violated"
@@ -2908,6 +3160,20 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
     startBtn.addEventListener("click", function () {
       audioStarted = true;
       document.body.classList.remove("splash-on");
+
+      /* Spotify Web Playback SDK needs a user gesture before its
+       * audio context can come alive. The SDK script loads async;
+       * if it landed before this click we deferred init — kick it
+       * off now. If it lands AFTER this click, onSpotifyWebPlaybackSDKReady
+       * will see audioStarted=true and init immediately. */
+      if (SPOTIFY.enabled && !SPOTIFY.sdkInitialized) {
+        if (window.Spotify && window.Spotify.Player) {
+          initSpotifySdk();
+        } else if (SPOTIFY.sdkPending) {
+          // SDK not ready yet — initSpotifySdk will fire from the
+          // onSpotifyWebPlaybackSDKReady global once it loads.
+        }
+      }
 
       /* Show the video panel only if a song is already loaded — the
        * radio card and the video panel are mutually exclusive. If a
@@ -3638,6 +3904,16 @@ function knk_tv_darts_headline_inline(string $type, string $format, ?array $sb, 
         titleEl.textContent  = j.title || "";
         artistEl.textContent = j.artist || "";
         chip.hidden = false;
+        /* Drive the lyric ticker for Triple J tracks too — we have
+         * artist + title from ABC and started_unix gives us the
+         * song clock for synced LRCLIB lookup. Only fire when the
+         * radio is actually the active source (no YT, no Spotify
+         * playing). The startTripleJLyrics function dedupes itself
+         * on the (artist,title) key so 60-second re-polls of the
+         * same song don't re-fetch lyrics. */
+        if (!currentRow && !SPOTIFY.playing && j.started_unix) {
+          startTripleJLyrics(j.artist || "", j.title || "", j.started_unix);
+        }
       })
       .catch(function () { chip.hidden = true; });
   }
